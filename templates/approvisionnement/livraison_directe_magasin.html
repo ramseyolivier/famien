@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+{% block titre %}{% if commande %}Modifier la livraison directe #{{ commande.pk }}{% else %}Nouvelle livraison directe{% endif %} — LEPAD{% endblock %}
+{% block lieu %}Livraisons magasins — Livraison directe{% endblock %}
+
+{% block fil_ariane %}{% endblock %}
+
+{% block contenu %}
+<div class="admin-entete"><h1 style="color:var(--accent)">{% if commande %}Modifier la livraison directe #{{ commande.pk }}{% else %}Nouvelle livraison directe{% endif %}</h1></div>
+<p style="font-size:.85rem;color:var(--encre-clair);margin:4px 0 12px">Sans commande préalable.</p>
+
+<form method="post" id="form-livraison-directe">
+  {% csrf_token %}
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:16px 0">
+    <div>
+      <label style="display:block;font-size:.85rem;color:var(--encre-clair);margin-bottom:4px">Dépôt source</label>
+      {% if depot_nom %}
+        <span style="display:inline-block;padding:8px 10px;border:1px solid var(--reglure);border-radius:6px;font-size:.9rem;background:var(--craie);color:var(--encre)">{{ depot_nom }}</span>
+      {% else %}
+        <p style="color:var(--marge)">Aucun dépôt actif trouvé.</p>
+      {% endif %}
+    </div>
+    <div>
+      <label style="display:block;font-size:.85rem;color:var(--encre-clair);margin-bottom:4px">Magasin destinataire *</label>
+      <select name="magasin" required data-combobox style="width:100%;padding:8px 10px;border:1px solid var(--reglure);border-radius:6px;font:inherit">
+        <option value="">— Choisir un magasin —</option>
+        {% for m in magasins %}
+        <option value="{{ m.pk }}"{% if magasin_selectionne == m.pk %} selected{% endif %}>{{ m.nom }}</option>
+        {% endfor %}
+      </select>
+    </div>
+  </div>
+
+  <div style="margin-bottom:16px">
+    <label style="display:block;font-size:.85rem;color:var(--encre-clair);margin-bottom:4px">Observations</label>
+    <input type="text" name="observations" maxlength="500" value="{{ observations_init|default:'' }}" style="width:100%;padding:8px 10px;border:1px solid var(--reglure);border-radius:6px;font:inherit;box-sizing:border-box">
+  </div>
+
+  <div class="etiquette">Articles à envoyer</div>
+  <table class="registre">
+    <thead>
+      <tr>
+        <th>Article</th>
+        <th class="nombre" style="width:110px">Stock dépôt</th>
+        <th class="nombre" style="width:130px">Quantité à envoyer</th>
+        <th style="width:40px"></th>
+      </tr>
+    </thead>
+    <tbody id="lignes-body"></tbody>
+  </table>
+  <button type="button" class="bouton-secondaire" style="margin-top:8px" onclick="ajouterLigne()">+ Ligne</button>
+
+  <div style="margin-top:20px;display:flex;gap:10px">
+    <button type="submit" class="bouton-secondaire"
+            style="background:var(--accent);color:#fff;border-color:var(--accent)">
+      Enregistrer
+    </button>
+    <a href="{% if commande %}{% url 'livraison_directe_detail' commande.pk %}{% else %}{% url 'livraisons_magasin_liste' %}{% endif %}" class="bouton-secondaire">Annuler</a>
+  </div>
+</form>
+
+<div class="pied">
+  <a href="{% url 'hub_approvisionnement' %}#magasins" class="bouton-secondaire" style="min-width:180px;text-align:center">← Retour approvisionnement</a>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  var STOCK_DEPOT = {{ stock_depot_json|safe|default:"{}" }};
+
+  var PRODUITS = [];
+  {% for p in produits %}
+  PRODUITS.push({pk:"{{ p.pk }}",code:"{{ p.code|escapejs }}",designation:"{{ p.designation|escapejs }}"});
+  {% endfor %}
+
+  function buildOptions(selectedPk) {
+    var html = '<option value="">— Choisir un article —</option>';
+    PRODUITS.forEach(function(p) {
+      html += '<option value="' + p.pk + '"' + (String(p.pk) === String(selectedPk) ? ' selected' : '') + '>' + p.code + ' — ' + p.designation + '</option>';
+    });
+    return html;
+  }
+
+  var CTRL = 'padding:10px 8px;border:1.5px solid var(--reglure);border-radius:6px;font:inherit;font-size:.9rem;box-sizing:border-box;width:100%';
+
+  function getStockDispo(pid) {
+    var s = STOCK_DEPOT[String(pid)];
+    return (s !== undefined) ? parseInt(s, 10) : null;
+  }
+
+  window.ajouterLigne = function(pid, qte) {
+    var tbody = document.getElementById('lignes-body');
+    var tr = document.createElement('tr');
+    var stock = pid ? getStockDispo(pid) : null;
+    var stockTxt = (stock !== null) ? stock : '—';
+    var maxAttr = (stock !== null) ? ' max="' + stock + '"' : '';
+    tr.innerHTML =
+      '<td><select name="produit_id" style="' + CTRL + '">' + buildOptions(pid) + '</select></td>' +
+      '<td class="nombre chiffre cell-stock" style="color:var(--encre-clair)">' + stockTxt + '</td>' +
+      '<td class="nombre"><input type="number" name="quantite" min="1"' + maxAttr + ' value="' + (qte || 1) + '" style="' + CTRL + '"></td>' +
+      '<td style="text-align:center;vertical-align:middle"><button type="button" onclick="this.closest(\'tr\').remove()" style="background:none;border:none;color:var(--marge);cursor:pointer;font-size:1rem">✕</button></td>';
+
+    var sel = tr.querySelector('select[name="produit_id"]');
+    var inp = tr.querySelector('input[name="quantite"]');
+    sel.addEventListener('change', function() {
+      var s = getStockDispo(this.value);
+      tr.querySelector('.cell-stock').textContent = (s !== null) ? s : '—';
+      if (s !== null) { inp.max = s; } else { inp.removeAttribute('max'); }
+      signalerDoublons();
+    });
+    tbody.appendChild(tr);
+    if (window.initCombobox) window.initCombobox(sel);
+  };
+
+  function signalerDoublons() {
+    var selects = document.querySelectorAll('#lignes-body select[name="produit_id"]');
+    var vus = {};
+    selects.forEach(function(s) {
+      var v = s.value;
+      if (v) { vus[v] = (vus[v] || 0) + 1; }
+    });
+    selects.forEach(function(s) {
+      var en_double = s.value && vus[s.value] > 1;
+      s.style.borderColor = en_double ? 'var(--marge)' : '';
+    });
+  }
+
+  document.getElementById('form-livraison-directe').addEventListener('submit', function(e) {
+    var selects = document.querySelectorAll('#lignes-body select[name="produit_id"]');
+    var vus = {};
+    for (var i = 0; i < selects.length; i++) {
+      var v = selects[i].value;
+      if (!v) {
+        e.preventDefault();
+        alert('Sélectionnez un article pour chaque ligne ou supprimez les lignes vides.');
+        selects[i].focus();
+        return;
+      }
+      if (vus[v]) {
+        e.preventDefault();
+        alert('L\'article « ' + selects[i].options[selects[i].selectedIndex].text + ' » est sélectionné plusieurs fois.');
+        selects[i].focus();
+        return;
+      }
+      vus[v] = true;
+    }
+  });
+
+  // Pré-remplissage en mode modifier
+  {% if lignes_init_json %}
+  var initLignes = {{ lignes_init_json|safe }};
+  initLignes.forEach(function(l) { ajouterLigne(l.pid, l.qty); });
+  {% else %}
+  ajouterLigne();
+  {% endif %}
+}());
+</script>
+{% endblock %}

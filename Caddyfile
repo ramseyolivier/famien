@@ -1,0 +1,6 @@
+# Caddy obtient et renouvelle le certificat Let's Encrypt tout seul.
+# Remplacez le domaine par le vôtre ; c'est la seule ligne à changer.
+gestion.lepad.ci {
+    encode gzip
+    reverse_proxy web:8000
+}

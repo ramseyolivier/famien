@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reçu {{ v.numero }}</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 11px;
+    background: #f5f5f5;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 24px 16px;
+  }
+
+  .barre-outils {
+    width: 100%;
+    max-width: 300px;
+    display: flex;
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+
+  .btn {
+    flex: 1;
+    padding: 10px 0;
+    border: none;
+    border-radius: 6px;
+    font-size: 14px;
+    font-family: inherit;
+    cursor: pointer;
+  }
+  .btn-primaire { background: #1a56db; color: #fff; font-weight: 700; }
+  .btn-secondaire { background: #e5e7eb; color: #374151; }
+
+  .ticket {
+    width: 100%;
+    max-width: 300px;
+    background: #fff;
+    padding: 10px;
+    box-shadow: 0 2px 12px rgba(0,0,0,.12);
+  }
+
+  .ticket-entete { text-align: center; padding-bottom: 8px; border-bottom: 1px dashed #999; margin-bottom: 8px; }
+  .ticket-entete .enseigne { font-size: 13px; font-weight: bold; letter-spacing: .5px; }
+  .ticket-entete .ecole { font-size: 10px; margin-top: 2px; }
+  .ticket-entete .info { font-size: 10px; color: #555; margin-top: 2px; }
+
+  table { width: 100%; border-collapse: collapse; }
+  td { padding: 2px 1px; vertical-align: top; font-size: 10px; }
+  .col-lib { width: 52%; }
+  .col-qty { width: 10%; text-align: right; }
+  .col-pu  { width: 18%; text-align: right; color: #666; }
+  .col-mt  { width: 20%; text-align: right; }
+
+  .sous-detail { font-size: 9px; color: #777; padding-left: 6px; border-left: 1px solid #ddd; margin-top: 2px; }
+
+  tr.sep td { border-top: 1px dashed #ccc; padding-top: 4px; }
+  tr.total td { border-top: 2px solid #000; padding-top: 4px; font-weight: bold; font-size: 11px; }
+  tr.remise td { color: #666; font-size: 10px; }
+
+  .ticket-pied { border-top: 1px dashed #999; margin-top: 8px; padding-top: 8px; font-size: 10px; text-align: center; color: #555; }
+  .ticket-pied .mode { font-weight: bold; color: #111; margin-bottom: 3px; }
+  .ticket-pied .vendeur { margin-bottom: 3px; }
+  .ticket-pied .merci { margin-top: 6px; font-size: 11px; font-weight: bold; letter-spacing: .5px; }
+
+  .statut-annule {
+    text-align: center;
+    color: #c0392b;
+    font-weight: bold;
+    font-size: 11px;
+    padding: 4px 0;
+    border: 2px solid #c0392b;
+    margin-bottom: 8px;
+  }
+
+  @media print {
+    @page {
+      size: 58mm auto;
+      margin: 0;
+    }
+    body { background: none; padding: 0; font-size: 10px; }
+    .barre-outils { display: none; }
+    .ticket {
+      box-shadow: none;
+      padding: 2mm;
+      max-width: 100%;
+      width: 54mm;
+    }
+    .ticket-entete .enseigne { font-size: 12px; }
+    .ticket-entete .ecole,
+    .ticket-entete .info { font-size: 9px; }
+    td { font-size: 9px; padding: 1px 1px; }
+    tr.total td { font-size: 10px; }
+    .sous-detail { font-size: 8px; }
+    .ticket-pied { font-size: 9px; }
+    .ticket-pied .merci { font-size: 10px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="barre-outils">
+  <button class="btn btn-primaire" onclick="window.print()">Imprimer / PDF</button>
+  <button class="btn btn-secondaire" onclick="window.close()">Fermer</button>
+</div>
+
+<div class="ticket">
+
+  {% if v.statut == 'ANNULEE' %}
+  <div class="statut-annule">★ VENTE ANNULÉE ★</div>
+  {% endif %}
+
+  <div class="ticket-entete">
+    <div class="enseigne">Coopérative {{ v.ecole.nom }}</div>
+    {% if v.ecole.commune %}<div class="info">{{ v.ecole.commune }}</div>{% endif %}
+    <div class="info" style="margin-top:4px">{{ v.horodatage|date:"d/m/Y à H:i" }}</div>
+    <div class="info">N° <strong>{{ v.numero }}</strong></div>
+  </div>
+
+  <table>
+    <tbody>
+    {% for l in v.lignes.all %}
+      <tr>
+        <td class="col-lib">
+          {{ l.libelle }}
+          {% if l.kit %}
+          <div class="sous-detail">
+            {% for kl in l.kit.lignes.all %}{{ kl.quantite }}×{{ kl.produit.code }}{% if not forloop.last %} · {% endif %}{% endfor %}
+          </div>
+          {% endif %}
+        </td>
+        <td class="col-qty">{{ l.quantite }}×</td>
+        <td class="col-pu">{{ l.prix_unitaire|floatformat:0 }}</td>
+        <td class="col-mt">{{ l.montant|floatformat:0 }}</td>
+      </tr>
+    {% endfor %}
+    {% if v.remise %}
+      <tr class="remise sep">
+        <td colspan="3">Remise conv.</td>
+        <td class="col-mt">−{{ v.remise|floatformat:0 }}</td>
+      </tr>
+    {% endif %}
+      <tr class="total">
+        <td colspan="3">TOTAL</td>
+        <td class="col-mt">{{ v.montant_total|floatformat:0 }}&nbsp;F</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div style="border-top:1px dashed #999;margin-top:8px;padding-top:6px;font-size:10px">
+    <div style="font-weight:bold;margin-bottom:2px">COMPOSITION PHYSIQUE REMISE :</div>
+    {% for l in v.lignes_produit.all %}{% if l.quantite_servie %}<div>{{ l.produit.code }} — {{ l.produit.designation }} : <strong>{{ l.quantite_servie }}</strong></div>{% endif %}{% endfor %}
+  </div>
+
+  {% if v.reste_a_livrer %}
+  <div style="border-top:1px dashed #999;margin-top:8px;padding-top:6px">
+    <div style="font-weight:bold;font-size:10px;margin-bottom:3px">RESTE DÛ :</div>
+    {% for l in v.reste_a_livrer %}
+    <div style="font-size:10px">{{ l.produit.code }} — {{ l.produit.designation }} : <strong>{{ l.quantite_manquante }}</strong></div>
+    {% endfor %}
+    {% if v.telephone_client %}
+    <div style="font-size:10px;margin-top:3px">Tél. : {{ v.telephone_client }}</div>
+    {% endif %}
+    <div style="font-size:9px;font-style:italic;margin-top:5px;border-top:1px dashed #ccc;padding-top:4px">
+      La somme des articles en reste dû ne peut être remboursée.
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="ticket-pied">
+    <div class="mode">{{ v.get_mode_paiement_display }}</div>
+    {% if v.montant_recu %}
+    <div style="margin-top:4px;font-size:10px">
+      <span>Reçu : <strong>{{ v.montant_recu|floatformat:0 }} F</strong></span>
+      &nbsp;·&nbsp;
+      <span>Monnaie : <strong>{{ v.monnaie_rendue|floatformat:0 }} F</strong></span>
+    </div>
+    {% endif %}
+    <div class="vendeur">{{ v.vendeuse.get_full_name|default:v.vendeuse.username }}</div>
+    <div class="merci">Merci de votre confiance</div>
+  </div>
+
+</div>
+
+<script>window.print();</script>
+</body>
+</html>

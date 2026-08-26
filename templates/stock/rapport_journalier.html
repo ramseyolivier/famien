@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% block titre %}Rapport journalier — LEPAD{% endblock %}
+{% block lieu %}Stock — Rapport journalier{% endblock %}
+
+{% block contenu %}
+<div class="admin-entete">
+  <h1>Rapport journalier d'activités</h1>
+</div>
+
+{# ── Filtres ── #}
+<form method="get" class="finance-filtres">
+  <div class="filtre-champ filtre-champ--date">
+    <label>Du</label>
+    <input type="date" name="debut" value="{{ filtres.debut }}" onchange="this.form.submit()">
+  </div>
+  <div class="filtre-champ filtre-champ--date">
+    <label>Au</label>
+    <input type="date" name="fin" value="{{ filtres.fin }}" onchange="this.form.submit()">
+  </div>
+
+  {% if communes_filtre %}
+  <div class="filtre-champ filtre-champ--large">
+    <label>Commune</label>
+    <select name="commune" onchange="this.form.submit()">
+      <option value="">Toutes les communes</option>
+      {% for c in communes_filtre %}
+      <option value="{{ c.pk }}" {% if filtres.commune == c.pk|stringformat:"s" %}selected{% endif %}>{{ c.nom }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% endif %}
+
+  {% if sites_filtre %}
+  <div class="filtre-champ filtre-champ--large">
+    <label>Site</label>
+    <select name="site" onchange="this.form.submit()">
+      <option value="">Tous les sites</option>
+      {% for s in sites_filtre %}
+      <option value="{{ s.pk }}" {% if filtres.site == s.pk|stringformat:"s" %}selected{% endif %}>{{ s.nom }} ({{ s.get_type_display }})</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% endif %}
+
+  <div class="filtre-champ filtre-champ--large">
+    <label>Produit</label>
+    <select name="produit" onchange="this.form.submit()">
+      <option value="">Tous les produits</option>
+      {% for p in produits_filtre %}
+      <option value="{{ p.pk }}" {% if filtres.produit == p.pk|stringformat:"s" %}selected{% endif %}>{{ p.designation }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <input type="hidden" name="tri"  value="{{ filtres.tri }}">
+  <input type="hidden" name="sens" value="{{ filtres.sens }}">
+
+  <a href="{% url 'rapport_journalier' %}" class="bouton-secondaire" title="Réinitialiser" style="align-self:flex-end;min-width:0;padding:8px 12px">↺</a>
+  <a href="{% url 'rapport_journalier_export' %}?debut={{ filtres.debut }}&fin={{ filtres.fin }}&site={{ filtres.site }}&commune={{ filtres.commune }}&produit={{ filtres.produit }}"
+     class="bouton-secondaire" title="Télécharger en Excel" style="align-self:flex-end;min-width:0;padding:8px 12px;margin-left:auto">⬇</a>
+</form>
+
+{# ── Tableau ── #}
+{% if lignes %}
+<div style="overflow-x:auto;margin-top:8px">
+<table class="registre" style="min-width:800px">
+  <thead>
+    <tr>
+      {% if afficher_site %}<th>{% include "stock/_th_tri.html" with champ="site" label="Site" filtres=filtres %}</th>{% endif %}
+      <th>{% include "stock/_th_tri.html" with champ="produit" label="Produit" filtres=filtres %}</th>
+      <th class="nombre">{% include "stock/_th_tri.html" with champ="initiale" label="Initial" filtres=filtres %}</th>
+      <th class="nombre">{% include "stock/_th_tri.html" with champ="recue" label="Reçu" filtres=filtres %}</th>
+      <th class="nombre">{% include "stock/_th_tri.html" with champ="transfert" label="Transféré" filtres=filtres %}</th>
+      {% if afficher_vendue %}<th class="nombre">{% include "stock/_th_tri.html" with champ="vendue" label="Vendu" filtres=filtres %}</th>{% endif %}
+      {% if afficher_livree %}<th class="nombre">{% include "stock/_th_tri.html" with champ="livree" label="Livré" filtres=filtres %}</th>{% endif %}
+      <th class="nombre">{% include "stock/_th_tri.html" with champ="ajuste" label="Ajusté" filtres=filtres %}</th>
+      <th class="nombre">{% include "stock/_th_tri.html" with champ="cloture" label="Final" filtres=filtres %}</th>
+      {% if afficher_reservee %}<th class="nombre">{% include "stock/_th_tri.html" with champ="reservee" label="Réservé" filtres=filtres %}</th>{% endif %}
+    </tr>
+  </thead>
+  <tbody>
+  {% for l in lignes %}
+    <tr>
+      {% if afficher_site %}<td style="font-size:.82rem;color:var(--encre-clair)">{{ l.site.nom }}</td>{% endif %}
+      <td>{{ l.produit.designation }}</td>
+      <td class="nombre chiffre">{{ l.initiale }}</td>
+      <td class="nombre chiffre" style="color:{% if l.recue %}var(--valide){% else %}var(--encre-pale){% endif %}">
+        {% if l.recue %}+{{ l.recue }}{% else %}—{% endif %}
+      </td>
+      <td class="nombre chiffre" style="color:{% if l.transfert > 0 %}var(--valide){% elif l.transfert < 0 %}var(--marge){% else %}var(--encre-pale){% endif %}">
+        {% if l.transfert > 0 %}+{{ l.transfert }}
+        {% elif l.transfert < 0 %}{{ l.transfert }}
+        {% else %}—{% endif %}
+      </td>
+      {% if afficher_vendue %}
+      <td class="nombre chiffre" style="color:{% if l.vendue %}var(--marge){% else %}var(--encre-pale){% endif %}">
+        {% if l.vendue %}-{{ l.vendue }}{% else %}—{% endif %}
+      </td>
+      {% endif %}
+      {% if afficher_livree %}
+      <td class="nombre chiffre" style="color:{% if l.livree %}var(--marge){% else %}var(--encre-pale){% endif %}">
+        {% if l.livree %}-{{ l.livree }}{% else %}—{% endif %}
+      </td>
+      {% endif %}
+      <td class="nombre chiffre" style="color:{% if l.ajuste > 0 %}var(--valide){% elif l.ajuste < 0 %}var(--marge){% else %}var(--encre-pale){% endif %}">
+        {% if l.ajuste > 0 %}+{{ l.ajuste }}{% elif l.ajuste < 0 %}{{ l.ajuste }}{% else %}—{% endif %}
+      </td>
+      <td class="nombre chiffre" style="font-weight:700">{{ l.cloture }}</td>
+      {% if afficher_reservee %}
+      <td class="nombre chiffre" style="color:{% if l.reservee %}var(--or){% else %}var(--encre-pale){% endif %}">
+        {% if l.reservee %}{{ l.reservee }}{% else %}—{% endif %}
+      </td>
+      {% endif %}
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<p class="vide-liste">Aucune activité enregistrée sur cette période.</p>
+{% endif %}
+
+<div class="pied">
+  <a href="{% url 'hub_stock' %}" class="bouton-secondaire" style="min-width:180px;text-align:center">← Retour stock</a>
+</div>
+{% endblock %}

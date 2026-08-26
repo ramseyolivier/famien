@@ -1,0 +1,413 @@
+{% load static %}<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0d1b30">
+<link rel="icon" type="image/svg+xml" href="{% static 'favicon.svg' %}">
+<title>{% block titre %}LEPAD{% endblock %}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=Raleway:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{% static 'css/lepad.css' %}?v=8">
+<script src="{% static 'js/combobox.js' %}?v=3" defer></script>
+<script src="{% static 'js/filtres.js' %}?v=1" defer></script>
+</head>
+<script>
+(function(){
+  var p = window.location.pathname;
+  var c = p === '/vente/' ? 'page-vente'
+        : p.startsWith('/ventes/') ? 'page-ventes'
+        : p.startsWith('/livraison') ? 'page-livraison'
+        : p.startsWith('/historique') ? 'page-historique'
+        : p.startsWith('/facture') ? 'page-historique'
+        : p.startsWith('/recu') ? 'page-vente'
+        : p.startsWith('/clotures') ? 'page-historique'
+        : p.startsWith('/stock') ? 'page-stock'
+        : p === '/approvisionnement/fournisseurs/stockreserver/' ? 'page-appro'
+        : p.startsWith('/approvisionnement/fournisseurs') ? 'page-appro-depot'
+        : p.startsWith('/approvisionnement') ? 'page-appro'
+        : p.startsWith('/transferts') ? 'page-transferts'
+        : p.startsWith('/inventaires') ? 'page-inventaires'
+        : p.startsWith('/operations') ? 'page-operations'
+        : p.startsWith('/achats') ? 'page-achats'
+        : p.startsWith('/depenses') ? 'page-depenses'
+        : p.startsWith('/nonconformites') ? 'page-nc'
+        : p.startsWith('/administration') ? 'page-admin'
+        : '';
+  if (c) document.documentElement.classList.add(c);
+})();
+</script>
+<body>
+{% if user.is_authenticated %}
+<header class="bandeau">
+  <div class="bandeau-marque">
+    <button class="hamburger" id="hamburger" aria-label="Menu" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+    <span class="bandeau-logo">LEPAD</span>
+    <span class="bandeau-contexte">{% block lieu %}Groupe LEPAD{% endblock %}</span>
+  </div>
+
+  <nav class="bandeau-nav">
+    {% if user.peut_vendre %}<a href="{% url 'vente' %}" class="nav-pill nav-vendre">Caisse</a>{% endif %}
+    {% if user.profil != 'GEST_MAGASIN' %}<a href="{% url 'hub_ventes' %}" class="nav-pill">Ventes</a>{% endif %}
+    {% if user.peut_voir_ventes %}<a href="{% url 'hub_finances' %}" class="nav-pill">Finances</a>{% endif %}
+    <a href="{% url 'hub_stock' %}" class="nav-pill">Stock</a>
+    {% if user.profil != 'COMMERCIAL' %}<a href="{% url 'hub_approvisionnement' %}" class="nav-pill">Appro</a>{% endif %}
+    {% if user.profil == 'DG' or user.profil == 'MANAGER' or user.is_superuser %}<a href="{% url 'admin_accueil' %}" class="nav-pill nav-pill-admin">Admin</a>{% endif %}
+    {% if user.is_superuser %}<a href="/admin/" class="nav-pill nav-admin" title="Administration Django">⚙</a>{% endif %}
+  </nav>
+
+  <div class="bandeau-outils">
+    <span class="bandeau-qui">{{ user.get_full_name|default:user.username }}</span>
+    <a href="{% url 'notifications_liste' %}" class="notif-cloche" aria-label="Notifications">
+      🔔{% if nb_notifs %}<span class="notif-badge">{{ nb_notifs }}</span>{% endif %}
+    </a>
+    <a href="{% url 'deconnexion' %}" class="bouton-deconnexion">Déco.</a>
+  </div>
+</header>
+
+<!-- Overlay -->
+<div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+<!-- Sidebar gauche -->
+<aside class="sidebar" id="sidebar">
+  <div class="sidebar-entete">
+    <span class="sidebar-logo">LEPAD</span>
+    <button class="sidebar-fermer" id="sidebar-fermer" aria-label="Fermer">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+  </div>
+
+  <div class="sidebar-corps">
+
+    {% if user.peut_vendre %}
+    <div class="sidebar-section">
+      <div class="sidebar-section-titre">Vente</div>
+      <a href="{% url 'vente' %}" class="sidebar-lien sidebar-lien-principal">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+        Nouvelle vente
+      </a>
+    </div>
+    {% endif %}
+
+    {% if user.profil != 'GEST_MAGASIN' %}
+    <div class="sidebar-section">
+      <div class="sidebar-section-titre">Ventes</div>
+      <a href="{% url 'hub_ventes' %}" class="sidebar-lien">Vue d'ensemble</a>
+      <a href="{% url 'historique_ventes' %}" class="sidebar-lien">Historique</a>
+      {% if user.peut_voir_ventes %}
+      <a href="{% url 'historique_annulations' %}" class="sidebar-lien">Annulations</a>
+      {% if user.profil == 'CHEF_EQUIPE' or user.profil == 'SUPERVISEUR' or user.profil == 'DG' or user.profil == 'MANAGER' or user.is_superuser %}
+      <a href="{% url 'versements_liste' %}" class="sidebar-lien">Versements</a>
+      {% endif %}
+      {% endif %}
+    </div>
+    {% endif %}
+
+    {% if user.peut_voir_ventes %}
+    <div class="sidebar-section">
+      <div class="sidebar-section-titre">Finances</div>
+      <a href="{% url 'hub_finances' %}" class="sidebar-lien">Vue d'ensemble</a>
+      <a href="{% url 'finances_entrees' %}" class="sidebar-lien">Entrées</a>
+      <a href="{% url 'finances_sorties' %}" class="sidebar-lien">Sorties</a>
+      <a href="{% url 'finances_bilan' %}" class="sidebar-lien">Bilan</a>
+    </div>
+    {% endif %}
+
+    <div class="sidebar-section">
+      <div class="sidebar-section-titre">Stock</div>
+      <a href="{% url 'hub_stock' %}" class="sidebar-lien">Vue d'ensemble</a>
+      <a href="{% url 'stock_articles' %}" class="sidebar-lien">Articles</a>
+      <a href="{% url 'stock_kits' %}" class="sidebar-lien">Kits</a>
+      <a href="{% url 'transferts_liste' %}" class="sidebar-lien">Transferts</a>
+      <a href="{% url 'inventaires_liste' %}" class="sidebar-lien">Inventaires</a>
+      <a href="{% url 'nc_liste' %}" class="sidebar-lien">Non-conformités</a>
+    </div>
+
+    {% if user.profil != 'COMMERCIAL' %}
+    <div class="sidebar-section">
+      <div class="sidebar-section-titre">Approvisionnement</div>
+      {% if user.profil == 'DG' or user.profil == 'MANAGER' or user.is_superuser %}
+      <div class="sidebar-sous-titre">Dépôt général</div>
+      <a href="{% url 'commandes_liste' %}" class="sidebar-lien sidebar-lien-sous">Commandes fournisseurs</a>
+      <a href="{% url 'receptions_liste' %}" class="sidebar-lien sidebar-lien-sous">Réceptions fournisseur</a>
+      <a href="{% url 'livraisons_magasin_liste' %}" class="sidebar-lien sidebar-lien-sous">Livraisons magasins</a>
+      <a href="{% url 'stock_reserve_depot' %}" class="sidebar-lien sidebar-lien-sous">Stock réservé dépôt</a>
+      {% endif %}
+      {% if user.profil == 'GEST_MAGASIN' or user.profil == 'SUPERVISEUR' or user.profil == 'MANAGER' or user.profil == 'DG' or user.is_superuser %}
+      <div class="sidebar-sous-titre">Magasins</div>
+      <a href="{% url 'commandes_magasin_liste' %}" class="sidebar-lien sidebar-lien-sous">Commandes magasin</a>
+      <a href="{% url 'receptions_magasin_liste' %}" class="sidebar-lien sidebar-lien-sous">Réceptions magasin</a>
+      {% if user.profil == 'DG' or user.profil == 'MANAGER' or user.is_superuser %}
+      <a href="{% url 'stock_reserve' %}" class="sidebar-lien sidebar-lien-sous">Stock réservé magasin</a>
+      {% endif %}
+      {% if user.profil == 'GEST_MAGASIN' %}
+      <a href="{% url 'stock_reserve' %}" class="sidebar-lien sidebar-lien-sous">Stock réservé</a>
+      {% endif %}
+      {% endif %}
+      <div class="sidebar-sous-titre">École</div>
+      <a href="{% url 'commandes_ecole_liste' %}" class="sidebar-lien sidebar-lien-sous">Commandes école</a>
+      {% if user.profil == 'CHEF_EQUIPE' or user.profil == 'DG' or user.profil == 'MANAGER' or user.profil == 'SUPERVISEUR' or user.is_superuser %}
+      <a href="{% url 'receptions_ecole_liste' %}" class="sidebar-lien sidebar-lien-sous">Réceptions école</a>
+      {% endif %}
+      {% if user.profil == 'GEST_MAGASIN' or user.profil == 'DG' or user.profil == 'MANAGER' or user.profil == 'SUPERVISEUR' or user.is_superuser %}
+      <a href="{% url 'livraisons_liste' %}" class="sidebar-lien sidebar-lien-sous">Livraisons écoles</a>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    {% if user.profil == 'DG' or user.profil == 'MANAGER' or user.is_superuser %}
+    <div class="sidebar-section">
+      <div class="sidebar-section-titre">Administration</div>
+      <a href="{% url 'admin_accueil' %}" class="sidebar-lien">Vue d'ensemble</a>
+      <div class="sidebar-sous-titre">Produits</div>
+      <a href="{% url 'admin_produits' %}" class="sidebar-lien sidebar-lien-sous">Produits</a>
+      <a href="{% url 'admin_categories' %}" class="sidebar-lien sidebar-lien-sous">Catégories</a>
+      <a href="{% url 'admin_marques' %}" class="sidebar-lien sidebar-lien-sous">Marques</a>
+      <a href="{% url 'admin_kits' %}" class="sidebar-lien sidebar-lien-sous">Kits</a>
+      <a href="{% url 'parametres_seuils' %}" class="sidebar-lien sidebar-lien-sous">Seuils & limites</a>
+      <div class="sidebar-sous-titre">Sites</div>
+      <a href="{% url 'admin_ecoles' %}" class="sidebar-lien sidebar-lien-sous">Écoles</a>
+      <a href="{% url 'admin_magasins' %}" class="sidebar-lien sidebar-lien-sous">Magasins</a>
+      <a href="{% url 'admin_communes' %}" class="sidebar-lien sidebar-lien-sous">Communes</a>
+      <div class="sidebar-sous-titre">Accès</div>
+      <a href="{% url 'admin_utilisateurs' %}" class="sidebar-lien sidebar-lien-sous">Utilisateurs</a>
+      <a href="{% url 'admin_utilisateurs_connexions' %}" class="sidebar-lien sidebar-lien-sous">Connexions</a>
+    </div>
+    {% endif %}
+
+    <div class="sidebar-pied">
+      <span class="sidebar-qui">{{ user.get_full_name|default:user.username }}</span>
+      <a href="{% url 'deconnexion' %}" class="sidebar-deconnexion">Déconnexion</a>
+    </div>
+
+  </div>
+</aside>
+{% endif %}
+
+{% if user.is_authenticated %}
+<div class="page-illustration" aria-hidden="true">
+
+  <div class="illus illus-ventes">
+    <svg xmlns="http://www.w3.org/2000/svg" width="96" height="126" viewBox="0 0 96 126" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M10 6 H86 V100 L80 108 L74 100 L68 108 L62 100 L56 108 L50 100 L44 108 L38 100 L32 108 L26 100 L20 108 L14 100 L10 108 Z"/>
+      <line x1="24" y1="26" x2="72" y2="26"/>
+      <line x1="24" y1="43" x2="72" y2="43"/>
+      <line x1="24" y1="57" x2="56" y2="57"/>
+      <line x1="24" y1="71" x2="72" y2="71"/>
+      <line x1="24" y1="85" x2="56" y2="85"/>
+      <line x1="24" y1="94" x2="72" y2="94"/>
+      <line x1="24" y1="97" x2="72" y2="97"/>
+    </svg>
+  </div>
+
+  <div class="illus illus-livraison">
+    <svg xmlns="http://www.w3.org/2000/svg" width="128" height="86" viewBox="0 0 128 86" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="6" y="12" width="68" height="50" rx="4"/>
+      <path d="M74 36 H100 L118 52 V62 H74 V36Z"/>
+      <circle cx="26" cy="72" r="11"/>
+      <circle cx="96" cy="72" r="11"/>
+      <line x1="37" y1="72" x2="85" y2="72"/>
+      <line x1="20" y1="32" x2="60" y2="32"/>
+      <line x1="20" y1="46" x2="60" y2="46"/>
+    </svg>
+  </div>
+
+  <div class="illus illus-stock">
+    <svg xmlns="http://www.w3.org/2000/svg" width="118" height="126" viewBox="0 0 118 126" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="28" y="6" width="62" height="50" rx="4"/>
+      <line x1="28" y1="24" x2="90" y2="24"/>
+      <line x1="54" y1="6" x2="54" y2="24"/>
+      <rect x="14" y="62" width="72" height="56" rx="4"/>
+      <line x1="14" y1="82" x2="86" y2="82"/>
+      <line x1="44" y1="62" x2="44" y2="82"/>
+    </svg>
+  </div>
+
+  <div class="illus illus-operations">
+    <svg xmlns="http://www.w3.org/2000/svg" width="98" height="128" viewBox="0 0 98 128" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="10" y="16" width="78" height="106" rx="5"/>
+      <rect x="28" y="6" width="42" height="22" rx="4"/>
+      <line x1="24" y1="50" x2="74" y2="50"/>
+      <line x1="24" y1="65" x2="74" y2="65"/>
+      <line x1="24" y1="80" x2="54" y2="80"/>
+      <circle cx="49" cy="104" r="14"/>
+      <polyline points="41,104 47,111 62,94"/>
+    </svg>
+  </div>
+
+  <div class="illus illus-admin">
+    <svg xmlns="http://www.w3.org/2000/svg" width="116" height="116" viewBox="0 0 116 116" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round">
+      <line x1="16" y1="10" x2="16" y2="96"/>
+      <line x1="16" y1="96" x2="104" y2="96"/>
+      <rect x="24" y="60" width="16" height="36" rx="2"/>
+      <rect x="48" y="42" width="16" height="54" rx="2"/>
+      <rect x="72" y="24" width="16" height="72" rx="2"/>
+      <polyline points="32,53 56,35 80,18" stroke-dasharray="5 3"/>
+      <circle cx="32" cy="53" r="4" fill="currentColor"/>
+      <circle cx="56" cy="35" r="4" fill="currentColor"/>
+      <circle cx="80" cy="18" r="4" fill="currentColor"/>
+    </svg>
+  </div>
+
+</div>
+{% endif %}
+
+<div class="enveloppe">
+  {% if messages %}{% for m in messages %}
+    <div class="message {{ m.tags }}">{{ m }}</div>
+  {% endfor %}{% endif %}
+
+  {% block fil_ariane %}{% endblock %}
+  {% block contenu %}{% endblock %}
+</div>
+{% if user.is_authenticated %}
+{% block nav_hist %}
+<div id="nav-hist" style="display:flex;gap:6px">
+  <button type="button" class="bouton-secondaire" onclick="history.back()" title="Précédent" style="padding:9px 12px">&lt;</button>
+  <button type="button" class="bouton-secondaire" onclick="history.forward()" title="Suivant" style="padding:9px 12px">&gt;</button>
+</div>
+{% endblock %}
+{% endif %}
+{% if user.is_authenticated %}
+{% endif %}
+<script src="{% static 'js/filtre.js' %}"></script>
+<script>
+(function(){
+  var btn = document.getElementById('hamburger');
+  var sidebar = document.getElementById('sidebar');
+  var overlay = document.getElementById('sidebar-overlay');
+  var fermer = document.getElementById('sidebar-fermer');
+  if (!btn || !sidebar) return;
+  function ouvrir() {
+    sidebar.classList.add('ouvert');
+    overlay.classList.add('actif');
+    btn.setAttribute('aria-expanded', 'true');
+  }
+  function fermerSidebar() {
+    sidebar.classList.remove('ouvert');
+    overlay.classList.remove('actif');
+    btn.setAttribute('aria-expanded', 'false');
+  }
+  btn.addEventListener('click', function() {
+    sidebar.classList.contains('ouvert') ? fermerSidebar() : ouvrir();
+  });
+  if (fermer) fermer.addEventListener('click', fermerSidebar);
+  overlay.addEventListener('click', fermerSidebar);
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') fermerSidebar();
+  });
+})();
+</script>
+<script>
+(function(){
+  var hist = document.getElementById('nav-hist');
+  if (!hist) return;
+  var enveloppe = document.querySelector('.enveloppe');
+  var pied = document.querySelector('.pied');
+  if (!pied) {
+    pied = document.createElement('div');
+    pied.className = 'pied';
+    if (enveloppe) enveloppe.appendChild(pied);
+  }
+  pied.style.display = 'flex';
+  pied.style.justifyContent = 'space-between';
+  pied.style.alignItems = 'center';
+  pied.style.marginTop = '24px';
+  hist.style.marginLeft = 'auto';
+  pied.appendChild(hist);
+})();
+</script>
+{% if user.is_authenticated %}
+<script>
+(function(){
+  var dernier = {{ nb_notifs|default:0 }};
+
+  function jouerSon() {
+    try {
+      var ctx = new (window.AudioContext || window.webkitAudioContext)();
+      var osc = ctx.createOscillator();
+      var gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(880, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(660, ctx.currentTime + 0.15);
+      gain.gain.setValueAtTime(0.3, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.4);
+    } catch(e) {}
+  }
+
+  function mettreAJourBadge(nb) {
+    var badge = document.querySelector('.notif-badge');
+    var cloche = document.querySelector('.notif-cloche');
+    if (!cloche) return;
+    if (nb > 0) {
+      if (!badge) {
+        badge = document.createElement('span');
+        badge.className = 'notif-badge';
+        cloche.appendChild(badge);
+      }
+      badge.textContent = nb;
+    } else if (badge) {
+      badge.remove();
+    }
+  }
+
+  function verifier() {
+    fetch('/notifications/count/')
+      .then(function(r){ return r.json(); })
+      .then(function(data){
+        var nb = data.nb || 0;
+        if (nb > dernier) jouerSon();
+        dernier = nb;
+        mettreAJourBadge(nb);
+      })
+      .catch(function(){});
+  }
+
+  setInterval(verifier, 30000);
+})();
+</script>
+{% endif %}
+{% block scripts %}{% endblock %}
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  document.querySelectorAll("input[required], select[required], textarea[required]").forEach(function (el) {
+    var label = null;
+    // 1. label[for=id]
+    if (el.id) label = document.querySelector('label[for="' + el.id + '"]');
+    // 2. label parent
+    if (!label) { var p = el.closest("label"); if (p) label = p; }
+    // 3. label sibling inside .champ
+    if (!label) { var champ = el.closest(".champ"); if (champ) label = champ.querySelector("label"); }
+    // 4. preceding .etiquette sibling (même niveau ou niveau parent)
+    if (!label) {
+      var node = el.parentElement;
+      while (node && !label) {
+        var prev = node.previousElementSibling;
+        while (prev) {
+          if (prev.classList && prev.classList.contains("etiquette")) { label = prev; break; }
+          prev = prev.previousElementSibling;
+        }
+        node = node.parentElement;
+      }
+    }
+    if (label && !label.dataset.asterisk) {
+      label.dataset.asterisk = "1";
+      var star = document.createElement("span");
+      star.textContent = " *";
+      star.style.color = "var(--marge)";
+      star.style.fontWeight = "700";
+      star.setAttribute("aria-hidden", "true");
+      label.appendChild(star);
+    }
+  });
+});
+</script>
+</body>
+</html>

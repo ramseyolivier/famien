@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% block titre %}Pilotage commandes magasin — LEPAD{% endblock %}
+{% block lieu %}Approvisionnement — Pilotage{% endblock %}
+
+{% block contenu %}
+<div class="admin-entete">
+  <h1 style="color:var(--accent)">Déficits consolidés dépôt</h1>
+  {% if articles %}
+  <button type="button" id="btn-nouvelle-commande" class="bouton-secondaire"
+          style="background:var(--valide);color:#fff;border-color:var(--valide);min-height:44px">
+    + Commande consolidée
+  </button>
+  {% endif %}
+</div>
+
+<p style="font-size:.88rem;color:var(--encre-clair);margin:-4px 0 20px">
+  Articles dont le stock disponible au dépôt (stock − livraisons en cours) ne couvre pas
+  la demande des commandes validées. Chaque ligne représente un besoin à approvisionner.
+</p>
+
+{# ── Filtres ─────────────────────────────────────────────────────────────── #}
+<form method="get" class="finance-filtres" id="form-pilotage">
+  <div class="filtre-champ filtre-champ--large">
+    <label>Article</label>
+    <select name="produit" onchange="this.form.submit()">
+      <option value="">Tous</option>
+      {% for p in produits_filtre %}
+      <option value="{{ p.pk }}" {% if filtres.produit == p.pk|stringformat:"s" %}selected{% endif %}>{{ p.code }} — {{ p.designation }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="filtre-champ filtre-champ--large">
+    <label>Magasin</label>
+    <select name="magasin" onchange="this.form.submit()">
+      <option value="">Tous</option>
+      {% for m in magasins %}
+      <option value="{{ m.pk }}" {% if filtres.magasin == m.pk|stringformat:"s" %}selected{% endif %}>{{ m.nom }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div style="display:flex;align-items:flex-end;gap:8px;padding-bottom:2px">
+    <a href="{% url 'pilotage_commandes_depot' %}" class="bouton-secondaire" title="Réinitialiser" style="min-width:0;padding:8px 12px">↺</a>
+    <a href="{% url 'pilotage_export' %}{% if request.GET.urlencode %}?{{ request.GET.urlencode }}{% endif %}"
+       class="bouton-secondaire" title="Exporter Excel" style="min-width:0;padding:8px 12px">⬇</a>
+  </div>
+</form>
+
+{# ── Tableau ─────────────────────────────────────────────────────────────── #}
+{% if articles %}
+<div style="margin-top:8px;font-size:.8rem;color:var(--encre-clair);margin-bottom:6px">
+  {{ articles|length }} article{{ articles|length|pluralize }} en déficit
+</div>
+
+<div style="overflow-x:auto">
+<table class="registre" id="table-pilotage">
+  <thead>
+    <tr>
+      <th data-tri="0" style="cursor:pointer;user-select:none">Désignation <span class="tri-icone">↕</span></th>
+      <th class="nombre" data-tri="1" style="cursor:pointer;user-select:none" title="Quantité commandée moins ce déjà réceptionné au magasin">À livrer <span class="tri-icone">↕</span></th>
+      <th class="nombre" data-tri="2" style="cursor:pointer;user-select:none" title="Stock dépôt − livraisons en cours">Stock disponible <span class="tri-icone">↕</span></th>
+      <th class="nombre" data-tri="3" style="cursor:pointer;user-select:none" title="Quantité à commander au fournisseur">Déficit <span class="tri-icone">↕</span></th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for a in articles %}
+    <tr style="background:var(--marge-clair)" data-pk="{{ a.produit.pk }}" data-deficit="{{ a.deficit }}">
+      <td>{{ a.produit.designation }}</td>
+      <td class="nombre chiffre">{{ a.total_demande }}</td>
+      <td class="nombre chiffre" style="color:{% if a.stock_dispo == 0 %}var(--marge){% else %}var(--encre-clair){% endif %}">{{ a.stock_dispo }}</td>
+      <td class="nombre chiffre"><strong style="color:var(--marge)">{{ a.deficit }}</strong></td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<p class="vide-liste" style="margin-top:20px">
+  Aucun déficit — le stock disponible couvre toutes les commandes validées.
+</p>
+{% endif %}
+
+<div class="pied">
+  <a href="{% url 'hub_approvisionnement' %}#magasins" class="bouton-secondaire" style="min-width:180px;text-align:center">← Approvisionnement</a>
+</div>
+
+<script>
+(function(){
+  var btnNv = document.getElementById('btn-nouvelle-commande');
+  if (btnNv) {
+    btnNv.addEventListener('click', function() {
+      var params = new URLSearchParams();
+      document.querySelectorAll('#table-pilotage tbody tr').forEach(function(tr) {
+        var pk = tr.dataset.pk;
+        var deficit = parseInt(tr.dataset.deficit, 10);
+        if (pk && deficit > 0) params.set('p_' + pk, deficit);
+      });
+      window.location.href = "{% url 'commande_nouvelle' %}?" + params.toString();
+    });
+  }
+}());
+
+(function(){
+  var table = document.getElementById('table-pilotage');
+  if (!table) return;
+  var tbody = table.querySelector('tbody');
+  var dir = {};
+  table.querySelectorAll('th[data-tri]').forEach(function(th) {
+    th.addEventListener('click', function() {
+      var col = parseInt(th.dataset.tri);
+      var asc = dir[col] !== 'asc';
+      dir = {};
+      dir[col] = asc ? 'asc' : 'desc';
+      table.querySelectorAll('th[data-tri] .tri-icone').forEach(function(ic) { ic.textContent = '↕'; });
+      th.querySelector('.tri-icone').textContent = asc ? '↑' : '↓';
+      var rows = Array.from(tbody.querySelectorAll('tr'));
+      rows.sort(function(a, b) {
+        var av = a.cells[col] ? a.cells[col].textContent.trim() : '';
+        var bv = b.cells[col] ? b.cells[col].textContent.trim() : '';
+        var an = parseFloat(av.replace(/\s/g, '').replace(',', '.'));
+        var bn = parseFloat(bv.replace(/\s/g, '').replace(',', '.'));
+        if (!isNaN(an) && !isNaN(bn)) return asc ? an - bn : bn - an;
+        return asc ? av.localeCompare(bv, 'fr') : bv.localeCompare(av, 'fr');
+      });
+      rows.forEach(function(r) { tbody.appendChild(r); });
+    });
+  });
+})();
+</script>
+{% endblock %}

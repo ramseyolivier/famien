@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block titre %}Transfert TRF-{{ transfert.pk }} — LEPAD{% endblock %}
+{% block lieu %}Transferts{% endblock %}
+
+{% block contenu %}
+<div class="admin-entete">
+  <h1>Transfert TRF-{{ transfert.pk }}</h1>
+  {% if transfert.statut == "ACCEPTE" %}
+    <span class="badge badge-actif" style="font-size:1rem;padding:6px 14px">Accepté</span>
+  {% elif transfert.statut == "REJETE" %}
+    <span class="badge" style="background:var(--marge);color:#fff;font-size:1rem;padding:6px 14px">Rejeté</span>
+  {% else %}
+    <span class="badge" style="background:var(--or-clair);color:var(--or);font-size:1rem;padding:6px 14px">En attente</span>
+  {% endif %}
+</div>
+
+<div class="indicateurs" style="margin:16px 0">
+  <div class="indicateur">
+    <div class="valeur" style="font-size:1rem">{{ transfert.site_origine.nom }}</div>
+    <div class="libelle">Expéditeur</div>
+  </div>
+  <div class="indicateur">
+    <div class="valeur" style="font-size:1.4rem">→</div>
+    <div class="libelle">&nbsp;</div>
+  </div>
+  <div class="indicateur">
+    <div class="valeur" style="font-size:1rem">{{ transfert.site_destination.nom }}</div>
+    <div class="libelle">Destinataire</div>
+  </div>
+</div>
+
+<p style="font-size:.85rem;color:var(--encre-clair)">
+  Envoyé le {{ transfert.cree_le|date:"d/m/Y à H:i" }} par {{ transfert.cree_par.get_full_name|default:transfert.cree_par.username }}
+</p>
+{% if transfert.traite_par %}
+<p style="font-size:.85rem;color:{% if transfert.statut == 'ACCEPTE' %}var(--valide){% else %}var(--marge){% endif %}">
+  {{ transfert.get_statut_display }} le {{ transfert.traite_le|date:"d/m/Y à H:i" }} par {{ transfert.traite_par.get_full_name|default:transfert.traite_par.username }}
+</p>
+{% endif %}
+{% if transfert.observations %}
+<p style="font-style:italic;color:var(--encre-clair);margin-top:8px">{{ transfert.observations }}</p>
+{% endif %}
+
+<div class="etiquette" style="margin-top:20px">Articles transférés</div>
+<table class="registre">
+  <thead>
+    <tr>
+      <th>Code</th>
+      <th>Désignation</th>
+      <th class="nombre">Quantité</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for l in lignes %}
+    <tr>
+      <td><code style="font-family:monospace;font-weight:700;color:var(--accent)">{{ l.produit.code }}</code></td>
+      <td>{{ l.produit.designation }}</td>
+      <td class="nombre chiffre">{{ l.quantite }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+{% if peut_traiter %}
+<div class="etiquette" style="margin-top:24px">Action requise</div>
+<p style="font-size:.88rem;color:var(--encre-clair);margin-bottom:12px">
+  Ce transfert vous est destiné. Acceptez pour créditer votre stock, ou rejetez pour le renvoyer à l'expéditeur.
+</p>
+<div style="display:flex;gap:12px">
+  <form method="post" action="{% url 'transfert_accepter' transfert.pk %}">
+    {% csrf_token %}
+    <button type="submit" class="bouton-secondaire"
+            style="background:var(--valide);color:#fff;border-color:var(--valide);min-height:44px"
+            onclick="return confirm('Accepter ce transfert ? Votre stock sera crédité.')">
+      Accepter
+    </button>
+  </form>
+  <form method="post" action="{% url 'transfert_rejeter' transfert.pk %}">
+    {% csrf_token %}
+    <button type="submit" class="bouton-secondaire"
+            style="background:var(--marge);color:#fff;border-color:var(--marge);min-height:44px"
+            onclick="return confirm('Rejeter ce transfert ? Le stock sera recrédité à l\'expéditeur.')">
+      Rejeter
+    </button>
+  </form>
+</div>
+{% endif %}
+
+<div class="pied">
+  <a href="{% url 'transferts_liste' %}" class="bouton-secondaire">← Retour à la liste</a>
+</div>
+{% endblock %}

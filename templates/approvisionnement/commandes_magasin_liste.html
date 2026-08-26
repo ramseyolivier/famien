@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block titre %}Commandes magasin — LEPAD{% endblock %}
+{% block lieu %}Approvisionnement — Commandes magasin{% endblock %}
+
+{% block contenu %}
+<div class="admin-entete">
+  <h1 style="color:var(--accent)">Commandes magasin</h1>
+  {% if peut_creer %}
+  <a href="{% url 'commande_magasin_nouvelle' %}" class="bouton-secondaire"
+     style="background:var(--accent);color:#fff;border-color:var(--accent);min-height:44px">
+    + Nouvelle commande
+  </a>
+  {% endif %}
+</div>
+
+<form method="get" class="finance-filtres" data-live-filter>
+  <div class="filtre-champ filtre-champ--large">
+    <label>Commande</label>
+    <select name="commande">
+      <option value="">Toutes</option>
+      {% for c in commandes_filtre %}
+      <option value="{{ c.pk }}" {% if filtre_commande == c.pk|stringformat:"s" %}selected{% endif %}>Commande #{{ c.numero }} — {{ c.magasin.nom }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% if afficher_filtre_magasin %}
+  <div class="filtre-champ filtre-champ--large">
+    <label>Magasin</label>
+    <select name="magasin">
+      <option value="">Tous</option>
+      {% for m in magasins %}
+      <option value="{{ m.pk }}" {% if filtre_magasin == m.pk|stringformat:"s" %}selected{% endif %}>{{ m.nom }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% endif %}
+  <div class="filtre-champ">
+    <label>Statut</label>
+    <select name="statut" data-no-combobox>
+      <option value="">Tous</option>
+      <option value="ATTENTE"  {% if filtre_statut == "ATTENTE"  %}selected{% endif %}>Validation attendue</option>
+      <option value="EN_COURS" {% if filtre_statut == "EN_COURS" %}selected{% endif %}>En cours</option>
+      <option value="TERMINE"  {% if filtre_statut == "TERMINE"  %}selected{% endif %}>Terminé</option>
+    </select>
+  </div>
+  <div class="filtre-champ filtre-champ--date">
+    <label for="cm-debut">Du</label>
+    <input type="date" id="cm-debut" name="debut" value="{{ filtre_debut }}">
+  </div>
+  <div class="filtre-champ filtre-champ--date">
+    <label for="cm-fin">Au</label>
+    <input type="date" id="cm-fin" name="fin" value="{{ filtre_fin }}">
+  </div>
+  <a href="{% url 'commandes_magasin_liste' %}" class="bouton-secondaire" title="Réinitialiser" style="align-self:flex-end;min-width:0;padding:8px 12px">↺</a>
+  <a href="{% url 'export_commandes_magasin' %}{% if filtre_commande or filtre_magasin or filtre_statut or filtre_debut or filtre_fin %}?{% if filtre_commande %}commande={{ filtre_commande }}&{% endif %}{% if filtre_magasin %}magasin={{ filtre_magasin }}&{% endif %}{% if filtre_statut %}statut={{ filtre_statut }}&{% endif %}{% if filtre_debut %}debut={{ filtre_debut }}&{% endif %}{% if filtre_fin %}fin={{ filtre_fin }}{% endif %}{% endif %}" class="bouton-secondaire" style="margin-left:auto;min-width:0;padding:8px 12px" title="Exporter en Excel">⬇</a>
+</form>
+
+{% if commandes %}
+<table class="registre">
+  <thead>
+    <tr>
+      <th>Commande</th>
+      <th>Statut</th>
+      <th>Date</th>
+      <th>Créé par</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for c in commandes %}
+    <tr data-statut="{{ c.statut }}" data-date="{{ c.cree_le|date:'Y-m-d' }}">
+      <td><a href="{% url 'commande_magasin_detail' c.pk %}" style="text-decoration:none">Commande #{{ c.numero }} — {{ c.magasin.nom }}</a></td>
+      <td>
+        {% if c.statut == "BROUILLON" or c.statut == "SOUMISE" %}
+          <span class="badge" style="background:var(--or-clair);color:var(--or)">Validation attendue</span>
+        {% elif c.statut == "VALIDEE" or c.statut == "LIVREE" %}
+          <span class="badge" style="background:var(--encre);color:#fff">En cours</span>
+        {% elif c.statut == "RECUE" or c.statut == "REJETEE" %}
+          <span class="badge" style="background:var(--valide);color:#fff">Terminé</span>
+        {% endif %}
+      </td>
+      <td style="font-size:.85rem;white-space:nowrap">{{ c.cree_le|date:"d/m/Y" }}</td>
+      <td style="font-size:.85rem">{{ c.cree_par.get_full_name|default:c.cree_par.username }}</td>
+      <td style="white-space:nowrap">
+        <a href="{% url 'commande_magasin_detail' c.pk %}" class="bouton-secondaire" style="font-size:.8rem;padding:5px 10px">Détail</a>
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="vide-liste">Aucune commande magasin.</p>
+{% endif %}
+
+<div class="pied">
+  <a href="{% url 'hub_approvisionnement' %}#magasins" class="bouton-secondaire" style="min-width:180px;text-align:center">← Retour approvisionnement</a>
+</div>
+{% endblock %}

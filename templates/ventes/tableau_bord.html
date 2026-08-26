@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block titre %}Pilotage{% endblock %}
+{% block lieu %}Pilotage — {{ perimetre }}{% endblock %}
+
+{% block contenu %}
+<div class="etiquette">Aujourd'hui</div>
+<div class="indicateurs">
+  <div class="indicateur">
+    <div class="valeur chiffre">{{ ca_jour|floatformat:0 }}</div>
+    <div class="libelle">F CFA encaissés</div>
+  </div>
+  <div class="indicateur">
+    <div class="valeur chiffre">{{ nb_ventes_jour }}</div>
+    <div class="libelle">ventes</div>
+  </div>
+  <div class="indicateur">
+    <div class="valeur chiffre">{{ valeur_stock }}</div>
+    <div class="libelle">articles en stock</div>
+  </div>
+  <div class="indicateur">
+    <div class="valeur chiffre">{{ ca_total|floatformat:0 }}</div>
+    <div class="libelle">F CFA cumulés</div>
+  </div>
+</div>
+
+<div class="etiquette">Chiffre d'affaires du jour par école</div>
+<table class="registre">
+  <thead><tr><th>École</th><th class="nombre">Ventes</th><th class="nombre">F CFA</th></tr></thead>
+  <tbody>
+  {% for l in par_ecole %}
+    <tr><td>{{ l.ecole__nom }}</td><td class="nombre">{{ l.n }}</td><td class="nombre">{{ l.ca|floatformat:0 }}</td></tr>
+  {% empty %}
+    <tr><td colspan="3" style="color:var(--encre-clair)">Aucune vente enregistrée aujourd'hui sur votre périmètre.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+<div class="etiquette">Références sous le stock de sécurité</div>
+<table class="registre">
+  <thead><tr><th>Référence</th><th>Site</th><th class="nombre">En stock</th><th class="nombre">Seuil</th></tr></thead>
+  <tbody>
+  {% for a in alertes %}
+    <tr>
+      <td>{{ a.produit.code }} — {{ a.produit.designation }}</td>
+      <td>{{ a.site.nom }}</td>
+      <td class="nombre" {% if a.en_rupture %}style="color:var(--marge);font-weight:700"{% endif %}>{{ a.quantite }}</td>
+      <td class="nombre">{{ a.stock_securite }}</td>
+    </tr>
+  {% empty %}
+    <tr><td colspan="4" style="color:var(--encre-clair)">Aucune référence sous son seuil. Rien à commander.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

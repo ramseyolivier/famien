@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block titre %}Dépense #{{ depense.pk }} — LEPAD{% endblock %}
+{% block lieu %}Dépenses{% endblock %}
+{% block contenu %}
+<div class="admin-entete">
+  <h1 style="color:var(--marge)">Dépense #{{ depense.pk }}</h1>
+</div>
+
+<p style="font-size:.88rem;margin:-8px 0 16px">
+  Créé le <strong>{{ depense.cree_le|date:"d/m/Y à H:i" }}</strong> par <strong>{{ depense.cree_par.get_full_name|default:depense.cree_par.username }}</strong>
+  {% if depense.valide_par %} · Validé par <strong>{{ depense.valide_par.get_full_name|default:depense.valide_par.username }}</strong> le <strong>{{ depense.valide_le|date:"d/m/Y" }}</strong>{% endif %}
+  {% if depense.statut == "CONFIRME" and depense.confirme_par %} · Confirmé par <strong>{{ depense.confirme_par.get_full_name|default:depense.confirme_par.username }}</strong> le <strong>{{ depense.confirme_le|date:"d/m/Y" }}</strong>{% endif %}
+</p>
+
+<div class="fiche" style="margin:0 0 20px">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px">
+    <div>
+      <div class="etiquette" style="margin:0 0 4px;font-size:1.1rem;color:#1a6fc4">{% if depense.site %}{{ depense.site.nom }}{% elif depense.cree_par.commune %}{{ depense.cree_par.commune.nom }}{% else %}{{ depense.cree_par.get_full_name }}{% endif %}</div>
+      <div style="font-size:2rem;font-weight:800;color:var(--marge);letter-spacing:-.5px">
+        {{ depense.montant|floatformat:0 }} <span style="font-size:.9rem;font-weight:400;color:var(--encre-clair)">F CFA</span>
+      </div>
+      {% if depense.statut == "CONFIRME" and depense.montant_confirme is not None %}
+      <div style="font-size:.95rem;color:var(--valide);margin-top:4px">
+        Montant réellement dépensé : <strong>{{ depense.montant_confirme|floatformat:0 }} F CFA</strong>
+      </div>
+      {% endif %}
+      <div style="margin-top:8px;display:flex;flex-direction:column;gap:4px">
+        <div style="font-size:.88rem"><span style="color:var(--encre-clair)">Date de la dépense :</span> <strong>{{ depense.date_depense|date:"d/m/Y" }}</strong></div>
+        <div style="font-size:.95rem"><span style="color:var(--encre-clair)">Motif :</span> <strong>{{ depense.motif }}</strong></div>
+        {% if depense.piece_justificative %}<div style="font-size:.85rem;color:var(--encre-clair)">Justificatif : {{ depense.piece_justificative }}</div>{% endif %}
+      </div>
+    </div>
+    <div style="text-align:right">
+      {% if depense.statut == "VALIDE" %}<span class="badge badge-actif" style="font-size:.95rem;padding:6px 14px">Validé</span>
+      {% elif depense.statut == "CONFIRME" %}<span class="badge badge-actif" style="font-size:.95rem;padding:6px 14px">Confirmé</span>
+      {% elif depense.statut == "SOUMIS" %}<span class="badge" style="background:var(--or-clair);color:var(--or);font-size:.95rem;padding:6px 14px">En attente</span>
+      {% elif depense.statut == "REJETE" %}<span class="badge" style="background:var(--marge);color:#fff;font-size:.95rem;padding:6px 14px">Rejeté</span>
+      {% else %}<span class="badge" style="background:var(--craie);color:var(--encre-clair);font-size:.95rem;padding:6px 14px">Brouillon</span>{% endif %}
+    </div>
+  </div>
+</div>
+
+
+<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+  {% if depense.statut == "SOUMIS" and peut_valider %}
+  <form method="post" action="{% url 'depense_valider' depense.pk %}" style="display:inline">
+    {% csrf_token %}
+    <button type="submit" class="bouton-secondaire" style="background:var(--valide);color:#fff;border-color:var(--valide)">✓ Valider</button>
+  </form>
+  {% endif %}
+  {% if depense.statut == "SOUMIS" and peut_valider %}
+  <form method="post" action="{% url 'depense_rejeter' depense.pk %}" style="display:inline"
+        onsubmit="return confirm('Rejeter cette dépense ?')">
+    {% csrf_token %}
+    <input type="hidden" name="motif" value="Rejeté par le DG/Manager.">
+    <button type="submit" class="bouton-secondaire" style="background:var(--marge);color:#fff;border-color:var(--marge)">Rejeter</button>
+  </form>
+  {% endif %}
+  {% if request.user.profil == 'MANAGER' or request.user.profil == 'DG' or request.user.is_superuser %}
+  <form method="post" action="{% url 'depense_supprimer' depense.pk %}" style="display:inline"
+        onsubmit="return confirm('Supprimer définitivement cette dépense ?')">
+    {% csrf_token %}
+    <button type="submit" class="bouton-secondaire" style="color:var(--marge);border-color:var(--marge)">Supprimer</button>
+  </form>
+  {% endif %}
+  {% if depense.statut == "BROUILLON" %}
+  <form method="post" action="{% url 'depense_soumettre' depense.pk %}" style="display:inline">
+    {% csrf_token %}
+    <button type="submit" class="bouton-secondaire" style="background:var(--or);color:#fff;border-color:var(--or)">Soumettre pour validation</button>
+  </form>
+  {% endif %}
+  {% if depense.statut == "VALIDE" and request.user == depense.cree_par %}
+  <a href="{% url 'depense_confirmer' depense.pk %}" class="bouton-secondaire" style="background:var(--valide);color:#fff;border-color:var(--valide)">&#10003; Confirmer la dépense</a>
+  {% endif %}
+</div>
+
+<div class="pied"><a href="{% url 'finances_entrees_sorties' %}" class="bouton-secondaire">← E/S</a></div>
+{% endblock %}

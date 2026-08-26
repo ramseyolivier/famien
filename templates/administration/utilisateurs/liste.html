@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block titre %}Utilisateurs — Administration{% endblock %}
+{% block lieu %}Administration › Utilisateurs{% endblock %}
+
+{% block contenu %}
+<div class="admin-entete">
+  <h1>Comptes utilisateurs</h1>
+  <a href="{% url 'admin_utilisateur_nouveau' %}" class="bouton-secondaire">+ Nouvel utilisateur</a>
+</div>
+
+{% if utilisateurs %}
+<div class="barre-filtre">
+  <div class="champ-recherche">
+    <input type="search" id="recherche" placeholder="Rechercher par nom, identifiant…" autocomplete="off">
+  </div>
+  <select id="filtre-profil"><option value="">Tous les profils</option></select>
+  <select id="filtre-statut"><option value="">Tous statuts</option></select>
+  <span class="compteur-resultats" id="compteur-resultats"></span>
+</div>
+
+<table class="registre" id="table-utilisateurs" style="margin-top:8px">
+  <thead>
+    <tr>
+      <th>Nom</th>
+      <th>Identifiant</th>
+      <th>Profil / Rôle</th>
+      <th>Périmètre</th>
+      <th>Statut</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for u in utilisateurs %}
+    <tr>
+      <td><strong>{{ u.get_full_name|default:"—" }}</strong></td>
+      <td style="font-family:monospace;color:var(--encre-clair)">{{ u.username }}</td>
+      <td>
+        {% if u.profil == 'DG' %}<span class="badge badge-dg">Directeur Général</span>
+        {% elif u.profil == 'MANAGER' %}<span class="badge badge-manager">Manager</span>
+        {% elif u.profil == 'SUPERVISEUR' %}<span class="badge badge-superviseur">Superviseur</span>
+        {% elif u.profil == 'GEST_MAGASIN' %}<span class="badge badge-gest">Gest. magasin</span>
+        {% elif u.profil == 'CHEF_EQUIPE' %}<span class="badge badge-chef">Chef d'équipe</span>
+        {% else %}<span class="badge badge-commercial">Commercial</span>{% endif %}
+      </td>
+      <td>
+        {% if u.site %}{{ u.site.nom }}
+        {% elif u.commune %}{{ u.commune }}
+        {% else %}<span style="color:var(--encre-pale)">—</span>{% endif %}
+      </td>
+      <td>
+        {% if u.is_active %}<span class="badge badge-actif">Actif</span>
+        {% else %}<span class="badge badge-inactif">Inactif</span>{% endif %}
+      </td>
+      <td style="text-align:right;white-space:nowrap">
+        <a href="{% url 'admin_utilisateur_modifier' u.pk %}" class="icone-action" title="Modifier">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        </a>
+        <a href="{% url 'admin_utilisateur_mdp' u.pk %}" class="icone-action" title="Mot de passe">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        </a>
+        <form method="post" action="{% url 'admin_utilisateur_activer' u.pk %}" style="display:inline">
+          {% csrf_token %}
+          <button type="submit" class="icone-action {% if u.is_active %}icone-danger{% endif %}" title="{% if u.is_active %}Désactiver{% else %}Activer{% endif %}">
+            {% if u.is_active %}
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="8" y1="8" x2="16" y2="16"/><line x1="16" y1="8" x2="8" y2="16"/></svg>
+            {% else %}
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            {% endif %}
+          </button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+<p class="aucun-resultat" id="aucun-resultat">Aucun utilisateur ne correspond à votre recherche.</p>
+{% else %}
+<p class="vide-liste">Aucun utilisateur. <a href="{% url 'admin_utilisateur_nouveau' %}">Créer le premier</a>.</p>
+{% endif %}
+
+<div class="pied"><a href="{% url 'admin_accueil' %}#acces" class="bouton-secondaire">← Retour administration</a></div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+initFiltre({
+  tableId: 'table-utilisateurs',
+  inputId: 'recherche',
+  selects: [
+    { selectId: 'filtre-profil',  colonne: 2 },
+    { selectId: 'filtre-statut',  colonne: 4 },
+  ],
+});
+</script>
+{% endblock %}

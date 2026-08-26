@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% load l10n %}
+{% block titre %}{% if mode_edition %}Modifier la dépense #{{ depense.pk }}{% else %}Nouvelle dépense{% endif %} — LEPAD{% endblock %}
+{% block lieu %}Dépenses — {% if mode_edition %}Modifier{% else %}Nouvelle{% endif %}{% endblock %}
+{% block contenu %}
+<div class="admin-entete"><h1>{% if mode_edition %}Modifier la dépense #{{ depense.pk }}{% else %}Nouvelle dépense{% endif %}</h1></div>
+<form method="post">
+{% csrf_token %}
+<input type="hidden" name="categorie" value="{% if mode_edition %}{{ depense.categorie_id }}{% else %}{{ categorie_defaut.pk }}{% endif %}">
+<div style="display:flex;flex-direction:column;gap:12px;margin:16px 0">
+  <div>
+    <label style="display:block;font-size:.85rem;color:var(--encre-clair);margin-bottom:4px">Site *</label>
+    {% if site_unique %}
+    <input type="hidden" name="site" value="{{ site_unique.pk }}">
+    <span style="display:inline-block;padding:8px 10px;border:1px solid var(--reglure);border-radius:6px;font-size:.9rem;background:var(--craie);color:var(--encre)">{{ site_unique }}</span>
+    {% else %}
+    <select name="site" style="width:100%;padding:10px;border:1px solid var(--reglure);border-radius:6px;font:inherit">
+      <option value="">— Choisir un site —</option>
+      {% if est_superviseur %}
+      <option value="__sup__"{% if mode_edition and not depense.site_id %} selected{% endif %}>Supervision {{ libelle_superviseur }}</option>
+      {% endif %}
+      {% for s in sites %}<option value="{{ s.pk }}"{% if mode_edition and s.pk == depense.site_id %} selected{% endif %}>{{ s }}</option>{% endfor %}
+    </select>
+    {% endif %}
+  </div>
+  <div>
+    <label style="display:block;font-size:.85rem;color:var(--encre-clair);margin-bottom:4px">Montant (F CFA) *</label>
+    <input type="number" name="montant" min="0" required value="{% if mode_edition %}{% localize off %}{{ montant_initial }}{% endlocalize %}{% endif %}" style="width:200px;padding:10px;border:1px solid var(--reglure);border-radius:6px;font:inherit;text-align:right">
+  </div>
+  <div>
+    <label style="display:block;font-size:.85rem;color:var(--encre-clair);margin-bottom:4px">Date de la dépense *</label>
+    <input type="date" name="date_depense" required value="{% if mode_edition %}{{ depense.date_depense|date:'Y-m-d' }}{% endif %}" style="padding:10px;border:1px solid var(--reglure);border-radius:6px;font:inherit">
+  </div>
+</div>
+<div>
+  <label style="display:block;font-size:.85rem;color:var(--encre-clair);margin-bottom:4px">Motif *</label>
+  <input type="text" name="motif" required maxlength="500" value="{% if mode_edition %}{{ depense.motif }}{% endif %}" style="width:100%;padding:10px;border:1px solid var(--reglure);border-radius:6px;font:inherit">
+</div>
+<div style="margin-top:12px">
+  <label style="display:block;font-size:.85rem;color:var(--encre-clair);margin-bottom:4px">Pièce justificative</label>
+  <input type="text" name="piece_justificative" maxlength="500" value="{% if mode_edition %}{{ depense.piece_justificative }}{% endif %}" placeholder="Référence, numéro de ticket..." style="width:100%;padding:10px;border:1px solid var(--reglure);border-radius:6px;font:inherit">
+</div>
+<div style="margin-top:20px;display:flex;gap:10px">
+  <button type="submit" class="bouton-secondaire" style="background:var(--valide);color:#fff;border-color:var(--valide)">
+    {% if mode_edition %}Enregistrer{% else %}Soumettre{% endif %}
+  </button>
+  <a href="{% if mode_edition %}{% url 'depense_detail' depense.pk %}{% else %}{% url 'finances_entrees_sorties' %}{% endif %}" class="bouton-secondaire">Annuler</a>
+</div>
+</form>
+{% endblock %}

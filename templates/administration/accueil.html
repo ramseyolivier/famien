@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block titre %}Pilotage — LEPAD{% endblock %}
+{% block lieu %}Pilotage{% endblock %}
+
+{% block contenu %}
+<div class="etiquette" style="margin-top:18px">Aujourd'hui</div>
+<div class="indicateurs">
+  <div class="indicateur">
+    <div class="valeur chiffre">{{ ca_jour|floatformat:0 }}</div>
+    <div class="libelle">F CFA encaissés</div>
+  </div>
+  <div class="indicateur">
+    <div class="valeur chiffre">{{ nb_ventes_jour }}</div>
+    <div class="libelle">ventes du jour</div>
+  </div>
+  <div class="indicateur">
+    <div class="valeur chiffre">{{ valeur_stock }}</div>
+    <div class="libelle">articles en stock</div>
+  </div>
+  <div class="indicateur valide">
+    <div class="valeur chiffre">{{ ca_total|floatformat:0 }}</div>
+    <div class="libelle">F CFA cumulés</div>
+  </div>
+</div>
+
+
+<div class="admin-section admin-section--produits" id="produits">
+  <div class="etiquette">Kits &amp; Produits</div>
+  <div class="indicateurs" style="margin-bottom:12px">
+    <a href="{% url 'admin_categories' %}" class="indicateur">
+      <div class="valeur chiffre">{{ nb_categories }}</div>
+      <div class="libelle">Catégories</div>
+    </a>
+    <a href="{% url 'admin_marques' %}" class="indicateur">
+      <div class="valeur chiffre">{{ nb_marques }}</div>
+      <div class="libelle">Marques</div>
+    </a>
+    <a href="{% url 'admin_produits' %}" class="indicateur">
+      <div class="valeur chiffre">{{ nb_produits }}</div>
+      <div class="libelle">Produits</div>
+    </a>
+    <a href="{% url 'admin_kits' %}" class="indicateur">
+      <div class="valeur chiffre">{{ nb_kits }}</div>
+      <div class="libelle">Kits</div>
+    </a>
+  </div>
+  <div class="admin-raccourcis">
+    <a href="{% url 'admin_categorie_nouvelle' %}" class="bouton-secondaire">+ Nouvelle catégorie</a>
+    <a href="{% url 'admin_marque_nouvelle' %}" class="bouton-secondaire">+ Nouvelle marque</a>
+    <a href="{% url 'admin_produit_nouveau' %}" class="bouton-secondaire">+ Nouveau produit</a>
+    <a href="{% url 'admin_kit_nouveau' %}" class="bouton-secondaire">+ Nouveau kit</a>
+    <a href="{% url 'parametres_seuils' %}" class="bouton-secondaire">⚙ Seuils &amp; limites</a>
+  </div>
+</div>
+
+<div class="admin-section admin-section--zone" id="zone">
+  <div class="etiquette">Zone</div>
+  <div class="indicateurs" style="margin-bottom:12px">
+    <a href="{% url 'admin_communes' %}" class="indicateur">
+      <div class="valeur chiffre">{{ nb_communes }}</div>
+      <div class="libelle">Communes</div>
+    </a>
+    <a href="{% url 'admin_magasins' %}" class="indicateur">
+      <div class="valeur chiffre">{{ nb_magasins }}</div>
+      <div class="libelle">Magasins</div>
+    </a>
+    <a href="{% url 'admin_ecoles' %}" class="indicateur">
+      <div class="valeur chiffre">{{ nb_ecoles }}</div>
+      <div class="libelle">Écoles</div>
+    </a>
+    <a href="{% url 'admin_classes' %}" class="indicateur">
+      <div class="valeur chiffre">{{ nb_classes }}</div>
+      <div class="libelle">Classes</div>
+    </a>
+  </div>
+  <div class="admin-raccourcis">
+    <a href="{% url 'admin_commune_nouvelle' %}" class="bouton-secondaire">+ Nouvelle commune</a>
+    <a href="{% url 'admin_magasin_nouveau' %}" class="bouton-secondaire">+ Nouveau magasin</a>
+    <a href="{% url 'admin_ecole_nouvelle' %}" class="bouton-secondaire">+ Nouvelle école</a>
+    <a href="{% url 'admin_classe_nouveau' %}" class="bouton-secondaire">+ Nouvelle classe</a>
+  </div>
+</div>
+
+<div class="admin-section admin-section--acces" id="acces">
+  <div class="etiquette">Accès</div>
+  <div class="indicateurs" style="margin-bottom:12px">
+    <a href="{% url 'admin_utilisateurs' %}" class="indicateur">
+      <div class="valeur chiffre">{{ nb_utilisateurs }}</div>
+      <div class="libelle">Utilisateurs</div>
+    </a>
+    <a href="{% url 'admin_utilisateurs_connexions' %}" class="indicateur">
+      <div class="valeur" style="font-size:1.1rem;line-height:1.3">→</div>
+      <div class="libelle">Dernière connexion</div>
+    </a>
+  </div>
+  <div class="admin-raccourcis">
+    <a href="{% url 'admin_utilisateur_nouveau' %}" class="bouton-secondaire">+ Nouvel utilisateur</a>
+  </div>
+</div>
+{% endblock %}

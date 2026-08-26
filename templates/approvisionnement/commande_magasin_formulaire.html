@@ -1,0 +1,186 @@
+{% extends "base.html" %}
+{% block titre %}{% if commande %}Modifier CM #{{ commande.numero }}{% else %}Nouvelle commande magasin{% endif %} — LEPAD{% endblock %}
+{% block lieu %}Approvisionnement magasin{% endblock %}
+
+
+{% block contenu %}
+<div class="admin-entete">
+  <h1 style="color:var(--accent)">{% if commande %}Modifier la commande CM #{{ commande.numero }}{% else %}Nouvelle commande magasin{% endif %}</h1>
+</div>
+
+{% if prefill_from_deficit %}
+<div style="background:#e8f4fd;border:1px solid #b3d7f0;border-radius:6px;padding:10px 14px;margin-bottom:12px;font-size:.85rem;color:#1a5f8a">
+  Pré-rempli depuis les déficits consolidés école — vérifiez les quantités avant de créer.
+</div>
+{% endif %}
+
+<p style="font-size:.85rem;color:var(--encre-clair);margin-bottom:16px">
+  La colonne <em>Dépôt central</em> est affichée à titre informatif. Vous pouvez commander
+  quelle que soit la disponibilité au dépôt.
+</p>
+
+<form method="post" id="form-commande">
+{% csrf_token %}
+
+<input type="hidden" name="magasin" value="{{ magasin.pk }}">
+<div style="margin:16px 0 12px">
+  <label style="display:block;font-size:.85rem;color:var(--encre-clair);margin-bottom:4px">Magasin</label>
+  <span style="display:inline-block;padding:8px 10px;border:1px solid var(--reglure);border-radius:6px;font-size:.9rem;background:var(--craie);color:var(--encre)">{{ magasin.nom }}</span>
+</div>
+<div style="margin-bottom:16px">
+  <label style="display:block;font-size:.85rem;color:var(--encre-clair);margin-bottom:4px">Observations</label>
+  <input type="text" name="observations" maxlength="500"
+         value="{% if commande %}{{ commande.observations }}{% else %}{{ observations_init }}{% endif %}"
+         style="width:100%;padding:8px 10px;border:1px solid var(--reglure);border-radius:6px;font:inherit;box-sizing:border-box">
+</div>
+
+<div class="etiquette">Articles à commander</div>
+
+<div class="table-scroll">
+<table class="registre" style="min-width:680px">
+  <thead>
+    <tr>
+      <th style="min-width:280px">Produit</th>
+      <th class="nombre" style="width:100px">Dépôt central</th>
+      <th class="nombre" style="width:110px">Qté proposée</th>
+      <th class="nombre" style="width:130px">Qté commandée</th>
+      <th style="width:40px"></th>
+    </tr>
+  </thead>
+  <tbody id="lignes-body"></tbody>
+</table>
+</div>
+<button type="button" class="bouton-secondaire" style="margin-top:8px" onclick="ajouterLigne()">+ Ligne</button>
+
+<div style="margin-top:20px;display:flex;gap:10px">
+  <button type="submit" class="bouton-secondaire"
+          style="background:var(--accent);color:#fff;border-color:var(--accent)">
+    {% if commande %}Enregistrer les modifications{% else %}Créer la commande{% endif %}
+  </button>
+  {% if commande %}
+  <a href="{% url 'commande_magasin_detail' commande.pk %}" class="bouton-secondaire">Annuler</a>
+  {% else %}
+  <a href="{% url 'commandes_magasin_liste' %}" class="bouton-secondaire">Annuler</a>
+  {% endif %}
+</div>
+</form>
+
+<div class="pied">
+  <a href="{% url 'hub_approvisionnement' %}#magasins" class="bouton-secondaire" style="min-width:180px;text-align:center">← Retour approvisionnement</a>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  var STOCK_DEPOT    = {{ stock_depot_json|safe|default:"{}" }};
+  var STOCK_MAGASIN  = {{ stock_magasin_json|safe|default:"{}" }};
+  var STOCK_MAX      = {{ stock_max_json|safe|default:"{}" }};
+  var STOCK_RESERVE  = {{ stock_reserve_json|safe|default:"{}" }};
+  var LIGNES        = {{ lignes_existantes_json|safe|default:"[]" }};
+
+  var PRODUITS = [];
+  {% for p in produits %}
+  PRODUITS.push({pk:"{{ p.pk }}",code:"{{ p.code|escapejs }}",designation:"{{ p.designation|escapejs }}"});
+  {% endfor %}
+
+  function buildOptions(selectedPk) {
+    var html = '<option value="">— Choisir un produit —</option>';
+    PRODUITS.forEach(function(p) {
+      html += '<option value="' + p.pk + '"' + (String(p.pk) === String(selectedPk) ? ' selected' : '') + '>' + p.code + ' — ' + p.designation + '</option>';
+    });
+    return html;
+  }
+
+  var CTRL = 'padding:10px 8px;border:1.5px solid var(--reglure);border-radius:6px;font:inherit;font-size:.9rem;box-sizing:border-box;width:100%';
+
+  function getPropose(pid) {
+    if (!pid) return null;
+    var max = parseInt(STOCK_MAX[pid], 10);
+    if (!max || max <= 0) return null;
+    var actuel = parseInt(STOCK_MAGASIN[pid] || 0, 10);
+    var reserve = parseInt(STOCK_RESERVE[pid] || 0, 10);
+    return Math.max(0, max - (actuel - reserve));
+  }
+
+  function majInfos(select) {
+    var tr = select.closest('tr');
+    var pid = select.value;
+
+    var cellDepot = tr.querySelector('.cell-depot');
+    if (cellDepot) {
+      var dStock = (pid && STOCK_DEPOT[pid] !== undefined) ? parseInt(STOCK_DEPOT[pid], 10) : null;
+      cellDepot.textContent = dStock !== null ? dStock : '—';
+      cellDepot.style.color = (dStock !== null && dStock === 0) ? 'var(--marge)' : 'var(--encre-clair)';
+      cellDepot.title = 'Stock disponible au dépôt (informatif — la commande n\'est pas bloquée)';
+    }
+
+    var cellPropose = tr.querySelector('.cell-propose');
+    var inputQte    = tr.querySelector('input[name="quantite"]');
+    var propose     = getPropose(pid);
+
+    if (cellPropose) {
+      if (propose !== null) {
+        cellPropose.textContent = propose;
+        cellPropose.style.color = propose === 0 ? 'var(--marge)' : '';
+        cellPropose.style.fontWeight = propose === 0 ? '700' : '';
+      } else {
+        cellPropose.textContent = '—';
+        cellPropose.style.color = '';
+        cellPropose.style.fontWeight = '';
+      }
+    }
+
+    // Pas de max sur l'input — la commande n'est pas plafonnée par le stock dépôt
+  }
+
+  window.ajouterLigne = function(pid, qty) {
+    var tbody = document.getElementById('lignes-body');
+    var tr = document.createElement('tr');
+    tr.innerHTML =
+      '<td><select name="produit_id" style="' + CTRL + '">' + buildOptions(pid) + '</select></td>' +
+      '<td class="nombre chiffre cell-depot" style="color:var(--encre-clair)">—</td>' +
+      '<td class="nombre chiffre cell-propose">—</td>' +
+      '<td class="nombre"><input type="number" name="quantite" min="1" value="' + (qty !== undefined ? qty : 1) + '" style="' + CTRL + '"></td>' +
+      '<td style="text-align:center;vertical-align:middle"><button type="button" onclick="this.closest(\'tr\').remove()" style="background:none;border:none;color:var(--marge);cursor:pointer;font-size:1rem">✕</button></td>';
+
+    var sel = tr.querySelector('select');
+    var inp = tr.querySelector('input[name="quantite"]');
+
+    sel.addEventListener('change', function () { majInfos(this); });
+
+    tbody.appendChild(tr);
+    if (window.initCombobox) window.initCombobox(sel);
+
+    majInfos(sel);
+    if (qty !== undefined) inp.value = qty;
+  };
+
+  if (LIGNES.length) {
+    LIGNES.forEach(function(l) { ajouterLigne(l.pid, l.qty); });
+  } else {
+    ajouterLigne();
+  }
+
+  document.getElementById('form-commande').addEventListener('submit', function(e) {
+    var selects = document.querySelectorAll('#lignes-body select[name="produit_id"]');
+    var vus = {};
+    for (var i = 0; i < selects.length; i++) {
+      var v = selects[i].value;
+      if (!v) {
+        e.preventDefault();
+        alert('Sélectionnez un produit pour chaque ligne ou supprimez les lignes vides.');
+        selects[i].focus();
+        return;
+      }
+      if (vus[v]) {
+        e.preventDefault();
+        alert('Le produit « ' + selects[i].options[selects[i].selectedIndex].text + ' » est sélectionné plusieurs fois.');
+        return;
+      }
+      vus[v] = true;
+    }
+  });
+}());
+</script>
+{% endblock %}

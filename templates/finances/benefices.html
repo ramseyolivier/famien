@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+{% block titre %}Bénéfices — LEPAD{% endblock %}
+{% block lieu %}Finances — Bénéfices{% endblock %}
+
+{% block contenu %}
+<div class="admin-entete">
+  <h1>Bénéfices</h1>
+</div>
+
+{% if nb_sans_cout %}
+<div class="message warning" style="margin-bottom:16px">
+  {{ nb_sans_cout }} produit{{ nb_sans_cout|pluralize }} vendu{{ nb_sans_cout|pluralize }} sans coût d'achat renseigné — le coût marchandises est sous-estimé.
+</div>
+{% endif %}
+
+<!-- Filtres -->
+<form method="get" class="finance-filtres">
+  <div class="filtre-champ filtre-champ--date">
+    <label>Du</label>
+    <input type="date" name="debut" value="{{ filtres.debut }}" onchange="this.form.submit()">
+  </div>
+  <div class="filtre-champ filtre-champ--date">
+    <label>Au</label>
+    <input type="date" name="fin" value="{{ filtres.fin }}" onchange="this.form.submit()">
+  </div>
+  {% if communes_dispo.count > 1 %}
+  <div class="filtre-champ filtre-champ--large">
+    <label>Commune</label>
+    <select name="commune" data-no-combobox onchange="this.form.submit()">
+      <option value="">Toutes</option>
+      {% for c in communes_dispo %}
+      <option value="{{ c.pk }}" {% if filtres.commune == c.pk|stringformat:"s" %}selected{% endif %}>{{ c.nom }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% endif %}
+  <div class="filtre-champ filtre-champ--large">
+    <label>Site</label>
+    <select name="site" data-no-combobox onchange="this.form.submit()">
+      <option value="">Tous</option>
+      {% for s in sites_dispo %}
+      <option value="{{ s.pk }}" {% if filtres.site == s.pk|stringformat:"s" %}selected{% endif %}>{{ s.nom }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div style="display:flex;align-items:flex-end;padding-bottom:2px">
+    <a href="{% url 'finances_benefices' %}?debut={{ filtres.debut }}&fin={{ filtres.fin }}" class="bouton-secondaire" title="Réinitialiser commune et site" style="min-width:0;padding:8px 12px">↺</a>
+  </div>
+  <a href="{% url 'finances_benefices_export' %}?debut={{ filtres.debut }}&fin={{ filtres.fin }}&commune={{ filtres.commune }}&site={{ filtres.site }}"
+     class="bouton-secondaire" title="Télécharger en Excel" style="align-self:flex-end;min-width:0;padding:8px 12px;margin-left:auto">⬇</a>
+</form>
+
+<!-- Indicateurs globaux -->
+<div class="indicateurs" style="margin-top:20px;margin-bottom:24px">
+  <div class="indicateur valide">
+    <div class="valeur chiffre">{{ total_recettes|floatformat:0 }}</div>
+    <div class="libelle">Recettes</div>
+  </div>
+  <div class="indicateur" style="border-top-color:#1a6fc4">
+    <div class="valeur chiffre" style="color:#1a6fc4">{{ total_cogs|floatformat:0 }}</div>
+    <div class="libelle">Coût marchandises</div>
+  </div>
+  <div class="indicateur alerte">
+    <div class="valeur chiffre">{{ total_dep_ecoles|floatformat:0 }}</div>
+    <div class="libelle">Dépenses écoles</div>
+  </div>
+  {% if total_dep_hors %}
+  <div class="indicateur alerte">
+    <div class="valeur chiffre">{{ total_dep_hors|floatformat:0 }}</div>
+    <div class="libelle">Dépenses hors écoles</div>
+  </div>
+  {% endif %}
+  <div class="indicateur" style="border-top-color:{% if total_benefice < 0 %}#e00000{% elif total_benefice > 0 %}var(--valide){% else %}var(--reglure){% endif %}">
+    <div class="valeur chiffre" style="color:{% if total_benefice < 0 %}#e00000{% elif total_benefice > 0 %}var(--valide){% endif %}">{{ total_benefice|floatformat:0 }}</div>
+    <div class="libelle">Bénéfice net{% if total_marge is not None %} · {{ total_marge }}%{% endif %}</div>
+  </div>
+</div>
+
+<!-- ── Bloc 1 : Bénéfices par école ────────────────────── -->
+<div class="etiquette" style="margin-top:20px;margin-bottom:8px">Bénéfices par école</div>
+
+{% if lignes_ecoles %}
+<div style="overflow-x:auto">
+<table class="registre" style="min-width:700px">
+  <thead>
+    <tr>
+      <th>École</th>
+      <th style="font-size:.78rem;color:var(--encre-pale)">Commune</th>
+      <th class="nombre">Recettes</th>
+      <th class="nombre">Coût marchand.</th>
+      <th class="nombre">Dépenses</th>
+      <th class="nombre">Bénéfice</th>
+      <th class="nombre">Marge</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for l in lignes_ecoles %}
+    <tr>
+      <td>{{ l.nom }}</td>
+      <td style="font-size:.82rem;color:var(--encre-clair)">{{ l.commune }}</td>
+      <td class="nombre chiffre" style="color:{% if l.recettes %}var(--valide){% else %}var(--encre-pale){% endif %}">
+        {% if l.recettes %}{{ l.recettes|floatformat:0 }}{% else %}—{% endif %}
+      </td>
+      <td class="nombre chiffre" style="color:{% if l.cogs %}var(--marge){% else %}var(--encre-pale){% endif %}">
+        {% if l.cogs %}{{ l.cogs|floatformat:0 }}{% else %}—{% endif %}
+      </td>
+      <td class="nombre chiffre" style="color:{% if l.depenses %}var(--marge){% else %}var(--encre-pale){% endif %}">
+        {% if l.depenses %}{{ l.depenses|floatformat:0 }}{% else %}—{% endif %}
+      </td>
+      <td class="nombre chiffre" style="font-weight:700;color:{% if l.contrib < 0 %}var(--marge){% elif l.contrib > 0 %}var(--valide){% else %}var(--encre-pale){% endif %}">
+        {{ l.contrib|floatformat:0 }}
+      </td>
+      <td class="nombre chiffre" style="color:{% if l.marge is not None and l.marge < 0 %}var(--marge){% else %}var(--encre-clair){% endif %}">
+        {% if l.marge is not None %}{{ l.marge }}%{% else %}—{% endif %}
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+  <tfoot>
+    <tr style="border-top:2px solid var(--reglure)">
+      <td colspan="2" style="font-weight:700">Sous-total écoles</td>
+      <td class="nombre chiffre" style="font-weight:700;color:var(--valide)">{{ total_recettes|floatformat:0 }}</td>
+      <td class="nombre chiffre" style="font-weight:700;color:var(--marge)">{{ total_cogs|floatformat:0 }}</td>
+      <td class="nombre chiffre" style="font-weight:700;color:var(--marge)">{{ total_dep_ecoles|floatformat:0 }}</td>
+      <td class="nombre chiffre" style="font-weight:700">{{ total_contrib|floatformat:0 }}</td>
+      <td></td>
+    </tr>
+  </tfoot>
+</table>
+</div>
+{% else %}
+<p class="vide-liste">Aucune vente sur cette période.</p>
+{% endif %}
+
+<!-- ── Bloc 2 : Dépenses hors écoles ───────────────────── -->
+{% if lignes_hors %}
+<div class="etiquette" style="margin-top:28px;margin-bottom:8px">Dépenses hors écoles</div>
+<div style="overflow-x:auto">
+<table class="registre" style="min-width:400px">
+  <thead>
+    <tr>
+      <th>Site</th>
+      <th style="font-size:.78rem;color:var(--encre-pale)">Commune</th>
+      <th class="nombre">Dépenses</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for l in lignes_hors %}
+    <tr>
+      <td>{{ l.nom }}</td>
+      <td style="font-size:.82rem;color:var(--encre-clair)">{{ l.commune|default:"—" }}</td>
+      <td class="nombre chiffre" style="color:var(--marge);font-weight:700">{{ l.montant|floatformat:0 }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+  <tfoot>
+    <tr style="border-top:2px solid var(--reglure)">
+      <td colspan="2" style="font-weight:700">Sous-total hors écoles</td>
+      <td class="nombre chiffre" style="font-weight:700;color:var(--marge)">{{ total_dep_hors|floatformat:0 }}</td>
+    </tr>
+  </tfoot>
+</table>
+</div>
+{% endif %}
+
+<!-- ── Bénéfice net global ──────────────────────────────── -->
+<div style="margin-top:24px;padding:16px 20px;background:var(--fond-alt,#f7f7f5);border-radius:8px;border:1px solid var(--reglure);display:flex;align-items:center;gap:24px;flex-wrap:wrap">
+  <span style="font-weight:700;font-size:1rem;flex:1">Bénéfice net global</span>
+  <span class="chiffre" style="font-size:1.4rem;font-weight:700;color:{% if total_benefice < 0 %}var(--marge){% else %}var(--valide){% endif %}">
+    {{ total_benefice|floatformat:0 }} F
+    {% if total_marge is not None %}<span style="font-size:.9rem;font-weight:400;color:var(--encre-clair)">· {{ total_marge }}%</span>{% endif %}
+  </span>
+</div>
+
+<div class="pied">
+  <a href="{% url 'hub_finances' %}" class="bouton-secondaire">← Finances</a>
+</div>
+{% endblock %}

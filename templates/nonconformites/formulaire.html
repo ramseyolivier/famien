@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block titre %}Déclarer une non-conformité — LEPAD{% endblock %}
+{% block lieu %}Non-conformités{% endblock %}
+
+{% block contenu %}
+<div class="admin-entete">
+  <h1 style="color:var(--marge)">Déclarer une non-conformité</h1>
+</div>
+
+{% if messages %}
+{% for m in messages %}
+<div style="background:#fee2e2;padding:10px 14px;border-radius:6px;border-left:4px solid var(--marge);margin-bottom:12px;font-size:.9rem">{{ m }}</div>
+{% endfor %}
+{% endif %}
+
+<div style="max-width:640px">
+  <form method="post" enctype="multipart/form-data">
+    {% csrf_token %}
+
+    {% if user_site %}
+    <div style="margin-bottom:16px">
+      <label style="display:block;font-size:.85rem;color:var(--encre-clair);margin-bottom:4px">Site</label>
+      <span style="display:inline-block;padding:8px 12px;border:1px solid var(--reglure);border-radius:6px;font-size:.9rem;background:var(--craie)">{{ user_site.nom }}</span>
+    </div>
+    {% endif %}
+
+    <div style="margin-bottom:16px">
+      <label style="display:block;font-size:.85rem;color:var(--encre-clair);margin-bottom:4px">Type <span style="color:var(--marge)">*</span></label>
+      <select name="type" required style="width:100%;padding:10px 12px;border:1.5px solid var(--reglure);border-radius:6px;font:inherit;font-size:.95rem;box-sizing:border-box">
+        <option value="">— Choisir —</option>
+        {% for code, libelle in types %}
+        <option value="{{ code }}">{{ libelle }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div style="margin-bottom:16px">
+      <label style="display:block;font-size:.85rem;color:var(--encre-clair);margin-bottom:4px">Objet <span style="color:var(--marge)">*</span></label>
+      <input type="text" name="titre" required maxlength="200"
+        placeholder="Résumé en une phrase…"
+        style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid var(--reglure);border-radius:6px;font:inherit;font-size:.95rem">
+    </div>
+
+    <div style="margin-bottom:16px">
+      <label style="display:block;font-size:.85rem;color:var(--encre-clair);margin-bottom:4px">Description <span style="color:var(--marge)">*</span></label>
+      <textarea name="description" rows="6" required
+        placeholder="Décrire les faits constatés, les produits concernés, les quantités…"
+        style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid var(--reglure);border-radius:6px;font-family:inherit;font-size:.95rem;resize:vertical"></textarea>
+    </div>
+
+    <div style="margin-bottom:16px">
+      <label style="display:block;font-size:.85rem;color:var(--encre-clair);margin-bottom:4px">Référence document (facultatif)</label>
+      <input type="text" name="reference_document" maxlength="100"
+        placeholder="N° réception, bon de livraison…"
+        style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid var(--reglure);border-radius:6px;font:inherit;font-size:.95rem">
+    </div>
+
+    <div style="margin-bottom:20px">
+      <label style="display:block;font-size:.85rem;color:var(--encre-clair);margin-bottom:4px">Photo / pièce jointe (facultatif)</label>
+      <input type="file" name="image" accept="image/*"
+        style="width:100%;box-sizing:border-box;padding:8px 10px;border:1.5px solid var(--reglure);border-radius:6px;font:inherit;font-size:.9rem;background:var(--craie)">
+    </div>
+
+    <div style="display:flex;gap:10px">
+      <button type="submit" class="bouton" style="background:var(--marge);border-color:var(--marge)">Enregistrer</button>
+      <a href="{% url 'nc_liste' %}" class="bouton-secondaire">Annuler</a>
+    </div>
+  </form>
+</div>
+
+<div class="pied">
+  <a href="{% url 'hub_stock' %}#nonconformites" class="bouton-secondaire" style="min-width:180px;text-align:center">← Retour stock</a>
+</div>
+{% endblock %}

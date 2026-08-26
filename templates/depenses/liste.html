@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block titre %}Dépenses — LEPAD{% endblock %}
+{% block lieu %}Dépenses{% endblock %}
+{% block contenu %}
+<div class="admin-entete">
+  <h1>Dépenses</h1>
+  <a href="{% url 'depense_nouvelle' %}" class="bouton-secondaire">+ Nouvelle dépense</a>
+</div>
+{% if depenses %}
+<table class="registre">
+  <thead><tr><th>#</th><th>Site</th><th>Catégorie</th><th class="nombre">Montant</th><th>Statut</th><th>Date</th><th></th></tr></thead>
+  <tbody>
+  {% for dep in depenses %}
+    <tr>
+      <td><a href="{% url 'depense_detail' dep.pk %}">{{ dep.pk }}</a></td>
+      <td>{% if dep.site %}{{ dep.site.nom }}{% else %}<em style="color:var(--encre-clair)">Supervision {% if dep.cree_par.commune %}{{ dep.cree_par.commune.nom }}{% else %}{{ dep.cree_par.get_full_name }}{% endif %}</em>{% endif %}</td>
+      <td style="font-size:.85rem">{{ dep.categorie }}</td>
+      <td class="nombre chiffre">{{ dep.montant|floatformat:0 }}</td>
+      <td>
+        {% if dep.statut == "VALIDE" %}<span class="badge badge-actif">Validé</span>
+        {% elif dep.statut == "CONFIRME" %}<span class="badge badge-actif">Confirmé</span>
+        {% elif dep.statut == "REJETE" %}<span class="badge" style="background:var(--marge);color:#fff">Rejeté</span>
+        {% elif dep.statut == "SOUMIS" %}<span class="badge" style="background:var(--or-clair);color:var(--or)">Soumis</span>
+        {% else %}<span class="badge" style="background:var(--craie);color:var(--encre-clair)">Brouillon</span>{% endif %}
+      </td>
+      <td style="font-size:.85rem;color:var(--encre-clair)">{{ dep.date_depense|date:"d/m/Y" }}</td>
+      <td><a href="{% url 'depense_detail' dep.pk %}" class="bouton-secondaire">Détail</a></td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="vide-liste">Aucune dépense sur votre périmètre.</p>
+{% endif %}
+{% endblock %}

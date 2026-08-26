@@ -1,0 +1,52 @@
+# Environnement de travail sur votre ordinateur.
+# Ni domaine, ni HTTPS, ni Caddy : uniquement la base et l'application.
+#
+#   docker compose -f docker-compose.local.yml up --build
+#
+# L'application répond ensuite sur http://localhost:8001
+
+services:
+  base:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: famien
+      POSTGRES_USER: famien
+      POSTGRES_PASSWORD: motdepasse_local
+    ports:
+      - "5433:5432"
+    volumes:
+      - donnees_famien:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U famien -d famien"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  web:
+    build: .
+    restart: unless-stopped
+    environment:
+      DEBUG: "True"
+      SECRET_KEY: cle-de-developpement-famien-sans-importance
+      ALLOWED_HOSTS: "localhost,127.0.0.1"
+      DB_NAME: famien
+      DB_USER: famien
+      DB_PASSWORD: motdepasse_local
+      DB_HOST: base
+      DB_PORT: "5432"
+    ports:
+      - "8001:8000"
+    depends_on:
+      base:
+        condition: service_healthy
+    volumes:
+      # Le code de votre machine est monté dans le conteneur : une modification
+      # est prise en compte au rechargement de la page, sans reconstruire.
+      - .:/app
+    command: >
+      sh -c "python manage.py migrate --noinput &&
+             python manage.py runserver 0.0.0.0:8000"
+
+volumes:
+  donnees_famien:

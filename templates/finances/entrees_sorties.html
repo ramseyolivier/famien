@@ -1,0 +1,234 @@
+{% extends "base.html" %}
+{% block titre %}Finances — Entrées / Sorties — LEPAD{% endblock %}
+{% block lieu %}Finances — Entrées / Sorties{% endblock %}
+
+{% block contenu %}
+<div class="admin-entete">
+  <h1>Finances · Entrées / Sorties</h1>
+</div>
+
+<!-- Filtres -->
+<form method="get" class="finance-filtres">
+  <div class="filtre-champ filtre-champ--date">
+    <label>Du</label>
+    <input type="date" name="debut" value="{{ filtres.debut }}" onchange="this.form.submit()">
+  </div>
+  <div class="filtre-champ filtre-champ--date">
+    <label>Au</label>
+    <input type="date" name="fin" value="{{ filtres.fin }}" onchange="this.form.submit()">
+  </div>
+  {% if multi_communes %}
+  <div class="filtre-champ filtre-champ--large">
+    <label>Commune</label>
+    <select name="commune" data-no-combobox onchange="this.form.submit()">
+      <option value="">Toutes</option>
+      {% for c in communes %}
+      <option value="{{ c.pk }}"{% if filtres.commune == c.pk|stringformat:"s" %} selected{% endif %}>{{ c.nom }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% endif %}
+  <div class="filtre-champ filtre-champ--large">
+    <label>Site</label>
+    <select name="site" data-no-combobox onchange="this.form.submit()">
+      <option value="">Tous</option>
+      {% if peut_voir_dep_sup %}
+      <option value="__sup__"{% if filtres.site == "__sup__" %} selected{% endif %}>
+        Supervision{% if libelle_sup %} {{ libelle_sup }}{% elif request.user.commune %} {{ request.user.commune.nom }}{% else %} — toutes communes{% endif %}
+      </option>
+      {% endif %}
+      {% for s in sites_dispo %}
+      <option value="{{ s.pk }}"{% if filtres.site == s.pk|stringformat:"s" %} selected{% endif %}>{{ s.nom }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="filtre-champ">
+    <label>Mode</label>
+    <select name="mode" data-no-combobox onchange="this.form.submit()">
+      <option value="">Tous</option>
+      {% for code, libelle in modes_paiement %}
+      <option value="{{ code }}"{% if filtres.mode == code %} selected{% endif %}>{{ libelle }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div style="display:flex;align-items:flex-end;gap:6px;padding-bottom:2px">
+    <a href="{% url 'finances_entrees_sorties' %}" class="bouton-secondaire" title="Réinitialiser" style="min-width:0;padding:8px 12px">↺</a>
+    <a href="{% url 'finances_entrees_sorties_export' %}?debut={{ filtres.debut }}&fin={{ filtres.fin }}&commune={{ filtres.commune }}&site={{ filtres.site }}&mode={{ filtres.mode }}" class="bouton-secondaire" title="Télécharger" style="min-width:0;padding:8px 12px">⬇</a>
+  </div>
+</form>
+
+<!-- Indicateurs -->
+<div class="indicateurs" style="margin-top:20px;margin-bottom:28px">
+  <div class="indicateur valide">
+    <div class="valeur chiffre">{{ total_entrees|floatformat:0 }}</div>
+    <div class="libelle">Entrées — ventes</div>
+  </div>
+  <div class="indicateur alerte">
+    <div class="valeur chiffre">{{ total_sorties_val|floatformat:0 }}</div>
+    <div class="libelle">Sorties — dépenses validées</div>
+  </div>
+  <div class="indicateur {% if solde < 0 %}manque{% elif solde > 0 %}valide{% endif %}">
+    <div class="valeur chiffre">{{ solde|floatformat:0 }}</div>
+    <div class="libelle">Solde net</div>
+  </div>
+</div>
+
+<!-- ── Tableau Entrées ───────────────────────────────────── -->
+<div class="etiquette" style="margin-bottom:8px">
+  Entrées{% if finances|length == 200 %} — 200 premières{% endif %}
+</div>
+
+<div style="overflow-x:auto">
+<table class="registre" style="min-width:700px">
+  <thead>
+    <tr>
+      <th>Date</th>
+      <th>École</th>
+      <th>N° vente</th>
+      <th>Articles vendus</th>
+      <th class="nombre">Espèces</th>
+      <th class="nombre">Mobile</th>
+      <th class="nombre">Autre</th>
+      <th class="nombre">Total payé</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for v in finances %}
+    <tr>
+      <td class="chiffre" style="white-space:nowrap">{{ v.horodatage|date:"d/m/Y H:i" }}</td>
+      <td>{{ v.ecole.nom }}</td>
+      <td><a href="{% url 'facture_vente' v.uuid %}" style="color:var(--encre)">{{ v.numero }}</a></td>
+      <td style="font-size:.82rem">{% for l in v.lignes.all %}{{ l.quantite }}× {{ l.libelle }}{% if not forloop.last %}, {% endif %}{% endfor %}</td>
+      <td class="nombre chiffre">{% if v.m_esp %}<strong>{{ v.m_esp|floatformat:0 }}</strong>{% else %}<span style="color:var(--encre-pale)">—</span>{% endif %}</td>
+      <td class="nombre chiffre">{% if v.m_mob %}<strong>{{ v.m_mob|floatformat:0 }}</strong>{% else %}<span style="color:var(--encre-pale)">—</span>{% endif %}</td>
+      <td class="nombre chiffre">{% if v.m_aut %}<strong>{{ v.m_aut|floatformat:0 }}</strong>{% else %}<span style="color:var(--encre-pale)">—</span>{% endif %}</td>
+      <td class="nombre chiffre" style="font-weight:700">{{ v.montant_total|floatformat:0 }}</td>
+    </tr>
+  {% empty %}
+    <tr><td colspan="8" style="color:var(--encre-clair);text-align:center;padding:20px">Aucune entrée pour cette période.</td></tr>
+  {% endfor %}
+  </tbody>
+  {% if finances %}
+  <tfoot>
+    <tr style="background:var(--craie);font-weight:700">
+      <td colspan="4">Total</td>
+      <td class="nombre chiffre">{{ totaux.esp|floatformat:0 }}</td>
+      <td class="nombre chiffre">{{ totaux.mob|floatformat:0 }}</td>
+      <td class="nombre chiffre">{{ totaux.aut|floatformat:0 }}</td>
+      <td class="nombre chiffre">{{ totaux.total|floatformat:0 }}</td>
+    </tr>
+  </tfoot>
+  {% endif %}
+</table>
+</div>
+
+<!-- ── Tableau Sorties ───────────────────────────────────── -->
+{% if request.user.profil == 'SUPERVISEUR' or request.user.profil == 'MANAGER' or request.user.profil == 'DG' or request.user.is_superuser %}
+<div style="margin-top:36px;margin-bottom:8px;display:flex;align-items:center;gap:12px">
+  <a href="{% url 'depense_nouvelle' %}" class="bouton-secondaire" style="background:#1a6fc4;color:#fff;border-color:#1a6fc4;min-width:0">+ Nouvelle sortie</a>
+</div>
+{% endif %}
+<div class="etiquette" style="margin-bottom:8px">
+  Sorties{% if depenses|length == 200 %} — 200 premières{% endif %}
+</div>
+
+<div style="overflow-x:auto">
+<table class="registre" style="min-width:600px">
+  <thead>
+    <tr>
+      <th>Date</th>
+      <th>Site</th>
+      <th>Motif</th>
+      <th>Statut</th>
+      <th class="nombre">Montant</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for dep in depenses %}
+    <tr>
+      <td class="chiffre" style="white-space:nowrap">{{ dep.date_depense|date:"d/m/Y" }}</td>
+      <td>{% if dep.site %}{{ dep.site.nom }}{% elif dep.cree_par.commune %}{{ dep.cree_par.commune.nom }}{% else %}{{ dep.cree_par.get_full_name }}{% endif %}</td>
+      <td style="font-size:.85rem">{{ dep.motif|truncatechars:60 }}</td>
+      <td>
+        {% if dep.statut == "VALIDE" %}<span class="badge" style="background:var(--or-clair);color:var(--or)">Validé</span>
+        {% elif dep.statut == "CONFIRME" %}<span class="badge badge-actif">Confirmé</span>
+        {% elif dep.statut == "SOUMIS" %}<span class="badge" style="background:var(--or-clair);color:var(--or)">En attente</span>
+        {% elif dep.statut == "REJETE" %}<span class="badge" style="background:var(--marge);color:#fff">Rejeté</span>
+        {% else %}<span class="badge" style="background:var(--craie);color:var(--encre-clair)">Brouillon</span>{% endif %}
+      </td>
+      <td class="nombre chiffre" style="font-weight:700">{% if dep.statut == "CONFIRME" and dep.montant_confirme is not None %}{{ dep.montant_confirme|floatformat:0 }}{% else %}{{ dep.montant|floatformat:0 }}{% endif %}</td>
+      <td style="text-align:right">
+        <a href="{% url 'depense_detail' dep.pk %}" class="bouton-secondaire" style="font-size:.82rem;padding:4px 10px;min-height:0">Détail →</a>
+      </td>
+    </tr>
+  {% empty %}
+    <tr><td colspan="7" style="color:var(--encre-clair);text-align:center;padding:20px">Aucune dépense pour cette période.</td></tr>
+  {% endfor %}
+  </tbody>
+  {% if depenses %}
+  <tfoot>
+    <tr style="background:var(--craie);font-weight:700">
+      <td colspan="4">Total confirmé(s)</td>
+      <td class="nombre chiffre">{{ total_sorties|floatformat:0 }}</td>
+      <td></td>
+    </tr>
+  </tfoot>
+  {% endif %}
+</table>
+</div>
+
+<div class="pied">
+  <a href="{% url 'hub_finances' %}" class="bouton-secondaire">← Finances</a>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  var PAR_PAGE = 5;
+
+  function paginer(table) {
+    var lignes = Array.from(table.querySelectorAll("tbody tr")).filter(function (tr) {
+      return !tr.querySelector("td[colspan]");
+    });
+    if (lignes.length <= PAR_PAGE) return;
+
+    var nbPages = Math.ceil(lignes.length / PAR_PAGE);
+
+    var nav = document.createElement("div");
+    nav.style.cssText = "display:flex;gap:6px;justify-content:center;margin:10px 0 18px";
+
+    function afficher(page) {
+      lignes.forEach(function (tr, i) {
+        tr.style.display = (i >= (page - 1) * PAR_PAGE && i < page * PAR_PAGE) ? "" : "none";
+      });
+      Array.from(nav.children).forEach(function (btn, i) {
+        var actif = (i + 1) === page;
+        btn.style.background = actif ? "var(--encre)" : "var(--craie)";
+        btn.style.color = actif ? "#fff" : "var(--encre)";
+        btn.style.borderColor = actif ? "var(--encre)" : "var(--reglure)";
+      });
+    }
+
+    for (var p = 1; p <= nbPages; p++) {
+      (function (page) {
+        var btn = document.createElement("button");
+        btn.type = "button";
+        btn.textContent = page;
+        btn.style.cssText = "width:28px;height:28px;border-radius:50%;border:1.5px solid var(--reglure);background:var(--craie);color:var(--encre);font-size:.78rem;font-weight:700;cursor:pointer;line-height:1;padding:0";
+        btn.addEventListener("click", function () { afficher(page); });
+        nav.appendChild(btn);
+      })(p);
+    }
+
+    table.parentNode.insertBefore(nav, table.nextSibling);
+    afficher(1);
+  }
+
+  document.addEventListener("DOMContentLoaded", function () {
+    document.querySelectorAll("table.registre").forEach(paginer);
+  });
+})();
+</script>
+{% endblock %}

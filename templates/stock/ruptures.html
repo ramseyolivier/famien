@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block titre %}Ruptures de stock — LEPAD{% endblock %}
+{% block lieu %}Stock — Ruptures{% endblock %}
+
+{% block contenu %}
+<div class="admin-entete">
+  <h1 style="background:#ef4444;color:#fff;padding:6px 18px;border-radius:6px;display:inline-block">Références en rupture de stock</h1>
+</div>
+
+<form method="get" class="finance-filtres" data-live-filter style="background:#fee2e2;border-radius:8px;padding:12px 16px">
+  {% if communes %}
+  <div class="filtre-champ filtre-champ--large">
+    <label>Commune</label>
+    <select name="commune">
+      <option value="">Toutes</option>
+      {% for c in communes %}
+      <option value="{{ c.pk }}" {% if filtre_commune == c.pk|stringformat:"s" %}selected{% endif %}>{{ c.nom }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% endif %}
+  {% if request.user.acces_national or request.user.is_superuser %}
+  <div class="filtre-champ">
+    <label>Type de site</label>
+    <select name="type_site" data-no-combobox>
+      <option value="">Tous</option>
+      {% for code, libelle in types_site %}
+      <option value="{{ code }}" {% if filtre_type == code %}selected{% endif %}>{{ libelle }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% endif %}
+  <div class="filtre-champ filtre-champ--large">
+    <label>Produit</label>
+    <select name="produit">
+      <option value="">Tous</option>
+      {% for p in produits_filtre %}
+      <option value="{{ p.produit_id }}" {% if filtre_produit == p.produit_id|stringformat:"s" %}selected{% endif %}>{{ p.produit__code }} — {{ p.produit__designation }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <a href="{% url 'stock_ruptures' %}" class="bouton-secondaire" title="Réinitialiser" style="align-self:flex-end;min-width:0;padding:8px 12px">↺</a>
+  <a href="{% url 'export_ruptures' %}" class="bouton-secondaire" title="Exporter en Excel" style="align-self:flex-end;min-width:0;padding:8px 12px;margin-left:auto">⬇</a>
+</form>
+
+{% if lignes %}
+<p style="font-size:.85rem;color:var(--encre-clair);margin:8px 0 12px">{{ nb_total }} référence{{ nb_total|pluralize }} en rupture</p>
+<table class="registre">
+  <thead style="background:#fee2e2">
+    <tr>
+      <th style="color:var(--marge)">Commune</th>
+      <th style="color:var(--marge)">Type de site</th>
+      <th style="color:var(--marge)">Site</th>
+      <th style="color:var(--marge)">Produit</th>
+      <th class="nombre" style="color:var(--marge)">En stock</th>
+      <th class="nombre" style="color:var(--marge)">Seuil</th>
+      <th class="nombre" style="color:var(--marge)">Depuis quand</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for l in lignes %}
+    {% with s=l.solde %}
+    <tr data-commune="{{ s.site.commune_id|default:'' }}"
+        data-type_site="{{ s.site.type }}"
+        data-produit="{{ s.produit_id }}">
+      <td style="font-size:.85rem;color:var(--encre-clair)">{{ s.site.commune.nom|default:"—" }}</td>
+      <td style="font-size:.85rem;color:var(--encre-clair)">{{ s.site.get_type_display }}</td>
+      <td style="font-size:.88rem">{{ s.site.nom }}</td>
+      <td>{{ s.produit.code }} — {{ s.produit.designation }}</td>
+      <td class="nombre chiffre" style="color:var(--marge);font-weight:700">0 ⚠</td>
+      <td class="nombre">{{ s.stock_securite }}</td>
+      <td class="nombre chiffre">
+        {% if l.jours is not None %}
+          <span style="{% if l.jours >= 7 %}color:var(--marge);font-weight:700{% elif l.jours >= 3 %}color:var(--or){% endif %}">
+            {{ l.jours }} j
+          </span>
+        {% else %}—{% endif %}
+      </td>
+    </tr>
+    {% endwith %}
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="vide-liste" style="margin-top:20px;color:var(--valide)">Aucune rupture de stock.</p>
+{% endif %}
+
+<div class="pied">
+  <a href="{% url 'hub_stock' %}" class="bouton-secondaire" style="min-width:180px;text-align:center">← Retour stock</a>
+</div>
+{% endblock %}

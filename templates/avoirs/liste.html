@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block titre %}Restes dûs — LEPAD{% endblock %}
+{% block lieu %}Ventes — Restes dûs{% endblock %}
+
+{% block contenu %}
+<div class="admin-entete">
+  <h1>Restes dûs</h1>
+</div>
+
+<form method="get" class="finance-filtres">
+  {% if request.user.acces_national %}
+  <div class="filtre-champ filtre-champ--large">
+    <label>Commune</label>
+    <select name="commune" onchange="var s=this.form.querySelector('[name=site]');if(s)s.value='';this.form.submit()">
+      <option value="">Toutes</option>
+      {% for c in communes %}
+      <option value="{{ c.pk }}" {% if filtres.commune == c.pk|stringformat:"s" %}selected{% endif %}>{{ c.nom }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% endif %}
+
+  {% if request.user.acces_national or request.user.profil == 'SUPERVISEUR' %}
+  <div class="filtre-champ filtre-champ--large">
+    <label>Site</label>
+    <select name="site" onchange="this.form.submit()">
+      <option value="">Tous les sites</option>
+      {% for s in sites_dispo %}
+      <option value="{{ s.pk }}" {% if filtres.site == s.pk|stringformat:"s" %}selected{% endif %}>{{ s.nom }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% endif %}
+
+  <div class="filtre-champ">
+    <label>Du</label>
+    <input type="date" name="debut" value="{{ filtres.debut }}" onchange="this.form.submit()">
+  </div>
+  <div class="filtre-champ">
+    <label>Au</label>
+    <input type="date" name="fin" value="{{ filtres.fin }}" onchange="this.form.submit()">
+  </div>
+
+  <div class="filtre-champ">
+    <label>Téléphone</label>
+    <input type="text" name="telephone" value="{{ filtres.telephone }}" placeholder="0X XX XX XX XX"
+           style="height:38px;padding:0 12px;border:1.5px solid var(--reglure);border-radius:var(--rayon);font:inherit;font-size:.88rem;background:#fff;width:100%;box-sizing:border-box"
+           onchange="this.form.submit()">
+  </div>
+
+  <div class="filtre-champ filtre-champ--large">
+    <label>Article dû</label>
+    <select name="produit" onchange="this.form.submit()">
+      <option value="">Tous les articles</option>
+      {% for p in produits_avoirs %}
+      <option value="{{ p.pk }}" {% if filtres.produit == p.pk|stringformat:"s" %}selected{% endif %}>{{ p.code }} — {{ p.designation }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <a href="{% url 'avoirs_liste' %}" class="bouton-secondaire" title="Réinitialiser" style="align-self:flex-end;min-width:0;padding:8px 12px">↺</a>
+</form>
+
+{% if not ventes %}
+<p class="vide-liste">Aucun reste dû en cours.</p>
+{% else %}
+<div style="overflow-x:auto">
+<table class="registre" style="min-width:650px">
+  <thead>
+    <tr>
+      <th>Date</th>
+      <th>N° Facture</th>
+      <th>École</th>
+      <th>Téléphone</th>
+      <th style="text-align:center">Article dû</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for v in ventes %}
+    {% with lignes_avoir=v.reste_a_livrer %}
+    <tr>
+      <td class="chiffre" style="white-space:nowrap;font-size:.85rem">{{ v.horodatage|date:"d/m/Y H:i" }}</td>
+      <td><a href="{% url 'avoir_document' v.uuid %}" style="color:var(--encre);font-weight:700">{{ v.numero }}</a></td>
+      <td style="font-size:.85rem">{{ v.ecole.nom }}</td>
+      <td style="font-size:.85rem">
+        {% if v.telephone_client %}
+          <a href="tel:{{ v.telephone_client }}" style="color:var(--encre)">{{ v.telephone_client }}</a>
+        {% else %}<span style="color:var(--encre-pale)">—</span>{% endif %}
+      </td>
+      <td style="font-size:.85rem;color:var(--encre-clair);text-align:center">
+        {% for l in lignes_avoir %}{{ l.quantite_manquante }}× {{ l.produit.code }}{% if not forloop.last %}, {% endif %}{% endfor %}
+      </td>
+      <td style="text-align:right;white-space:nowrap">
+        <a href="{% url 'avoir_document' v.uuid %}" class="bouton-secondaire" style="font-size:.82rem;padding:4px 10px;min-height:0">Détail →</a>
+      </td>
+    </tr>
+    {% endwith %}
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
+
+<div class="pied">
+  <a href="{% url 'hub_ventes' %}" class="bouton-secondaire">← Ventes</a>
+</div>
+{% endblock %}

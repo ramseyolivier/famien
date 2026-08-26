@@ -1,0 +1,184 @@
+{% extends "base.html" %}
+{% block titre %}Stock — Articles{% endblock %}
+{% block lieu %}Stock articles — {{ perimetre }}{% endblock %}
+
+{% block contenu %}
+<div class="admin-entete">
+  <h1 style="color:var(--accent)">Stock articles</h1>
+</div>
+
+<form method="get" class="finance-filtres" id="form-articles">
+  {# ── Catégorie ── #}
+  <div class="filtre-champ">
+    <label>Catégorie</label>
+    <select name="categorie" onchange="this.form.submit()">
+      <option value="">Toutes</option>
+      {% for c in categories %}
+      <option value="{{ c.pk }}" {% if filtres.categorie == c.pk|stringformat:"s" %}selected{% endif %}>{{ c.nom }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  {# ── Produit ── #}
+  <div class="filtre-champ filtre-champ--large">
+    <label>Produit</label>
+    <select name="produit" onchange="this.form.submit()">
+      <option value="">Tous les articles</option>
+      {% for p in produits %}
+      <option value="{{ p.pk }}" {% if filtres.produit == p.pk|stringformat:"s" %}selected{% endif %}>{{ p.code }} — {{ p.designation }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  {# ── Commune (DG / Manager uniquement) ── #}
+  {% if request.user.acces_national %}
+  <div class="filtre-champ filtre-champ--large">
+    <label>Commune</label>
+    <select name="commune" onchange="var s=this.form.querySelector('[name=site]');if(s)s.value='';this.form.submit()">
+      <option value="">Toutes</option>
+      {% for c in communes %}
+      <option value="{{ c.pk }}" {% if filtres.commune == c.pk|stringformat:"s" %}selected{% endif %}>{{ c.nom }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% endif %}
+
+  {# ── Site (DG / Manager / Superviseur) ── #}
+  {% if request.user.acces_national or request.user.profil == 'SUPERVISEUR' %}
+  <div class="filtre-champ filtre-champ--large">
+    <label>Site</label>
+    <select name="site" onchange="this.form.submit()">
+      <option value="">Tous les sites</option>
+      {% for s in sites %}
+      <option value="{{ s.pk }}" {% if filtres.site == s.pk|stringformat:"s" %}selected{% endif %}>{{ s.nom }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% endif %}
+
+  {# ── État ── #}
+  <div class="filtre-champ">
+    <label>État</label>
+    <select name="etat" data-no-combobox onchange="this.form.submit()">
+      <option value="">Tous</option>
+      <option value="rupture" {% if filtres.etat == "rupture" %}selected{% endif %}>Rupture</option>
+      <option value="alerte"  {% if filtres.etat == "alerte"  %}selected{% endif %}>Alerte</option>
+      <option value="surstock"{% if filtres.etat == "surstock"%}selected{% endif %}>Surstock</option>
+      <option value="ok"      {% if filtres.etat == "ok"      %}selected{% endif %}>OK</option>
+    </select>
+  </div>
+
+  <a href="{% url 'stock_articles' %}" class="bouton-secondaire" title="Réinitialiser" style="align-self:flex-end;min-width:0;padding:8px 12px">↺</a>
+  <a href="{% url 'export_stock' %}{% if filtres.site %}?site={{ filtres.site }}{% endif %}" class="bouton-secondaire" title="Exporter en Excel" style="align-self:flex-end;min-width:0;padding:8px 12px;margin-left:auto">⬇</a>
+</form>
+
+{% if soldes %}
+<table class="registre" id="table-stock" style="margin-top:8px">
+  <thead>
+    <tr>
+      <th data-tri="0" style="cursor:pointer;user-select:none">Code <span class="tri-icone">↕</span></th>
+      <th data-tri="1" style="cursor:pointer;user-select:none">Désignation <span class="tri-icone">↕</span></th>
+      <th data-tri="2" style="cursor:pointer;user-select:none">Catégorie <span class="tri-icone">↕</span></th>
+      <th data-tri="3" style="cursor:pointer;user-select:none">Site <span class="tri-icone">↕</span></th>
+      <th class="nombre" data-tri="4" style="cursor:pointer;user-select:none">Quantité <span class="tri-icone">↕</span></th>
+      {% if peut_voir_valeur %}<th class="nombre" data-tri="5" style="cursor:pointer;user-select:none">Valeur stock <span class="tri-icone">↕</span></th>{% endif %}
+      {% if peut_voir_du %}<th class="nombre" style="color:var(--marge)" data-tri="{% if peut_voir_valeur %}6{% else %}5{% endif %}" style="cursor:pointer;user-select:none">Dû <span class="tri-icone">↕</span></th>{% endif %}
+      <th class="nombre" data-tri="{% if peut_voir_valeur %}{% if peut_voir_du %}7{% else %}6{% endif %}{% else %}{% if peut_voir_du %}6{% else %}5{% endif %}{% endif %}" style="cursor:pointer;user-select:none">Seuil <span class="tri-icone">↕</span></th>
+      <th class="nombre" data-tri="{% if peut_voir_valeur %}{% if peut_voir_du %}8{% else %}7{% endif %}{% else %}{% if peut_voir_du %}7{% else %}6{% endif %}{% endif %}" style="cursor:pointer;user-select:none">Maxi <span class="tri-icone">↕</span></th>
+      <th data-tri="{% if peut_voir_valeur %}{% if peut_voir_du %}9{% else %}8{% endif %}{% else %}{% if peut_voir_du %}8{% else %}7{% endif %}{% endif %}" style="cursor:pointer;user-select:none">État <span class="tri-icone">↕</span></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for s in soldes %}
+    <tr {% if s.en_rupture %}style="background:var(--marge-clair)"{% elif s.sous_seuil %}style="background:var(--or-clair)"{% elif s.en_surstock %}style="background:#ede9fe"{% endif %}>
+      <td><code style="font-family:monospace;font-weight:700;color:var(--accent)">{{ s.produit.code }}</code></td>
+      <td>{{ s.produit.designation }}</td>
+      <td style="font-size:.82rem;color:var(--encre-clair)">{{ s.produit.categorie|default:"—" }}</td>
+      <td style="font-size:.88rem">{{ s.site.nom }}</td>
+      <td class="nombre chiffre {% if s.en_rupture %}rupture{% endif %}">
+        <strong {% if s.en_rupture %}style="color:var(--marge)"{% elif s.sous_seuil %}style="color:var(--or)"{% elif s.en_surstock %}style="color:#7c3aed"{% endif %}>{{ s.quantite }}</strong>
+      </td>
+      {% if peut_voir_valeur %}<td class="nombre chiffre" style="font-size:.85rem;color:var(--encre-clair)">{{ s.valeur_stock|floatformat:0 }}</td>{% endif %}
+      {% if peut_voir_du %}<td class="nombre chiffre" style="color:{% if s.quantite_avoir %}var(--marge){% else %}var(--encre-pale){% endif %};font-size:.85rem">
+        {% if s.quantite_avoir %}{{ s.quantite_avoir }}{% else %}—{% endif %}
+      </td>{% endif %}
+      <td class="nombre" style="color:var(--encre-clair);font-size:.85rem">{{ s.stock_securite }}</td>
+      <td class="nombre" style="color:var(--encre-pale);font-size:.85rem">{% if s.stock_maximum %}{{ s.stock_maximum }}{% else %}—{% endif %}</td>
+      <td>
+        {% if s.en_rupture %}<span class="badge" style="background:var(--marge);color:#fff">Rupture</span>
+        {% elif s.sous_seuil %}<span class="badge" style="background:var(--or);color:#fff">Alerte</span>
+        {% elif s.en_surstock %}<span class="badge" style="background:#7c3aed;color:#fff">Surstock</span>
+        {% else %}<span class="badge badge-actif">OK</span>{% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+  <tfoot>
+    <tr style="background:var(--craie)">
+      <td colspan="4" style="font-weight:700;font-size:.88rem;color:var(--encre-clair);padding:10px">
+        {{ soldes|length }} article{{ soldes|length|pluralize }} affiché{{ soldes|length|pluralize }}
+      </td>
+      <td class="nombre chiffre" style="font-weight:800;font-size:1rem;color:var(--encre)">{{ total_articles }}</td>
+      {% if peut_voir_valeur %}
+      <td class="nombre chiffre" style="font-weight:800;font-size:1rem;color:var(--encre)">{{ total_valeur|floatformat:0 }}</td>
+      {% if peut_voir_du %}
+      <td colspan="3" style="font-size:.82rem;color:var(--encre-clair);padding:10px">F CFA valeur totale</td>
+      {% else %}
+      <td colspan="2" style="font-size:.82rem;color:var(--encre-clair);padding:10px">F CFA valeur totale</td>
+      {% endif %}
+      {% else %}
+      {% if peut_voir_du %}
+      <td colspan="4" style="font-size:.82rem;color:var(--encre-clair);padding:10px">unité{{ total_articles|pluralize }} au total</td>
+      {% else %}
+      <td colspan="3" style="font-size:.82rem;color:var(--encre-clair);padding:10px">unité{{ total_articles|pluralize }} au total</td>
+      {% endif %}
+      {% endif %}
+    </tr>
+  </tfoot>
+</table>
+{% else %}
+<p class="vide-liste" style="margin-top:20px">Aucun solde de stock sur votre périmètre.</p>
+{% endif %}
+
+{% if peut_voir_du %}
+<div style="margin-top:24px">
+  <a href="{% url 'stock_kits' %}" class="bouton-secondaire" style="background:var(--accent);color:#fff;border-color:var(--accent)">→ Voir le stock en kits</a>
+</div>
+{% endif %}
+
+<script>
+(function(){
+  var table = document.getElementById('table-stock');
+  if (!table) return;
+  var tbody = table.querySelector('tbody');
+  var dir = {};
+
+  table.querySelectorAll('th[data-tri]').forEach(function(th) {
+    th.addEventListener('click', function() {
+      var col = parseInt(th.dataset.tri);
+      var asc = dir[col] !== 'asc';
+      dir = {};
+      dir[col] = asc ? 'asc' : 'desc';
+
+      table.querySelectorAll('th[data-tri] .tri-icone').forEach(function(ic) { ic.textContent = '↕'; });
+      th.querySelector('.tri-icone').textContent = asc ? '↑' : '↓';
+
+      var rows = Array.from(tbody.querySelectorAll('tr'));
+      rows.sort(function(a, b) {
+        var av = a.cells[col] ? a.cells[col].textContent.trim() : '';
+        var bv = b.cells[col] ? b.cells[col].textContent.trim() : '';
+        var an = parseFloat(av.replace(/\s/g, '').replace(',', '.'));
+        var bn = parseFloat(bv.replace(/\s/g, '').replace(',', '.'));
+        if (!isNaN(an) && !isNaN(bn)) return asc ? an - bn : bn - an;
+        return asc ? av.localeCompare(bv, 'fr') : bv.localeCompare(av, 'fr');
+      });
+      rows.forEach(function(r) { tbody.appendChild(r); });
+    });
+  });
+})();
+</script>
+
+<div class="pied">
+  <a href="{% url 'hub_stock' %}" class="bouton-secondaire" style="min-width:180px;text-align:center">← Retour stock</a>
+</div>
+{% endblock %}

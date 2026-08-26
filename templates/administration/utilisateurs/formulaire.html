@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+{% block titre %}{{ titre }} — Administration{% endblock %}
+{% block lieu %}Administration › Utilisateurs{% endblock %}
+
+{% block contenu %}
+<div class="admin-entete">
+  <h1>{{ titre }}</h1>
+</div>
+
+{% if instance %}
+<p style="font-size:.85rem;color:var(--encre-clair);margin-bottom:16px">
+  Compte créé le {{ instance.date_joined|date:"d/m/Y" }}.
+  Dernière connexion : {{ instance.last_login|date:"d/m/Y à H:i"|default:"jamais" }}.
+</p>
+{% endif %}
+
+<form method="post" class="formulaire">
+  {% csrf_token %}
+
+  <div class="etiquette">Identité</div>
+  {% for champ in form %}
+    {% if champ.html_name in "username,first_name,last_name" %}
+    <div class="champ">
+      <label for="{{ champ.id_for_label }}">{{ champ.label }}</label>
+      {{ champ }}
+      {% if champ.errors %}<p class="erreur-champ">{{ champ.errors|join:" " }}</p>{% endif %}
+    </div>
+    {% endif %}
+  {% endfor %}
+
+  {% if not instance %}
+  <div class="etiquette">Mot de passe</div>
+  {% for champ in form %}
+    {% if champ.html_name in "mot_de_passe,confirmation" %}
+    <div class="champ">
+      <label for="{{ champ.id_for_label }}">{{ champ.label }}</label>
+      {{ champ }}
+      {% if champ.help_text %}<p class="aide-champ">{{ champ.help_text }}</p>{% endif %}
+      {% if champ.errors %}<p class="erreur-champ">{{ champ.errors|join:" " }}</p>{% endif %}
+    </div>
+    {% endif %}
+  {% endfor %}
+  {% endif %}
+
+  <div class="etiquette">Rôle et périmètre</div>
+  {% for champ in form %}
+    {% if champ.html_name == "profil" %}
+    <div class="champ">
+      <label for="{{ champ.id_for_label }}">{{ champ.label }}</label>
+      {{ champ }}
+      {% if champ.errors %}<p class="erreur-champ">{{ champ.errors|join:" " }}</p>{% endif %}
+    </div>
+    {% endif %}
+  {% endfor %}
+
+  <div id="div-commune" class="champ">
+    {% for champ in form %}
+      {% if champ.html_name == "commune" %}
+      <label for="{{ champ.id_for_label }}">{{ champ.label }}</label>
+      {{ champ }}
+      {% if champ.errors %}<p class="erreur-champ">{{ champ.errors|join:" " }}</p>{% endif %}
+      {% endif %}
+    {% endfor %}
+  </div>
+
+  <div id="div-site" class="champ">
+    {% for champ in form %}
+      {% if champ.html_name == "site" %}
+      <label for="{{ champ.id_for_label }}">{{ champ.label }}</label>
+      {{ champ }}
+      {% if champ.help_text %}<p class="aide-champ">{{ champ.help_text }}</p>{% endif %}
+      {% if champ.errors %}<p class="erreur-champ">{{ champ.errors|join:" " }}</p>{% endif %}
+      {% endif %}
+    {% endfor %}
+  </div>
+
+  <div class="etiquette">Accès</div>
+  {% for champ in form %}
+    {% if champ.html_name == "is_active" %}
+    <div class="champ champ-checkbox">
+      {{ champ }} <label for="{{ champ.id_for_label }}">{{ champ.label }}</label>
+      {% if champ.errors %}<p class="erreur-champ">{{ champ.errors|join:" " }}</p>{% endif %}
+    </div>
+    {% endif %}
+  {% endfor %}
+
+  {% if form.non_field_errors %}
+  <div class="message error">{{ form.non_field_errors|join:" " }}</div>
+  {% endif %}
+
+  <div class="actions-formulaire">
+    <button type="submit" class="bouton-primaire">Enregistrer</button>
+    <a href="{% url 'admin_utilisateurs' %}" class="bouton-secondaire">Annuler</a>
+    {% if instance %}
+    <a href="{% url 'admin_utilisateur_mdp' instance.pk %}" class="bouton-secondaire">Changer le mot de passe</a>
+    {% endif %}
+  </div>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const PREFIXE_PROFIL = {
+  'DG': 'DGE', 'MANAGER': 'MGR', 'SUPERVISEUR': 'SUP',
+  'GEST_MAGASIN': 'GST', 'CHEF_EQUIPE': 'CHF', 'COMMERCIAL': 'COM',
+};
+const PROFILS_SANS_PERIMETRE = ['DG', 'MANAGER'];
+const PROFILS_SANS_SITE      = ['DG', 'MANAGER', 'SUPERVISEUR'];
+const TYPE_SITE_PAR_PROFIL   = {
+  'GEST_MAGASIN': 'MAGASIN',
+  'CHEF_EQUIPE':  'ECOLE',
+  'COMMERCIAL':   'ECOLE',
+};
+const SITES_PAR_COMMUNE = {{ sites_json|safe }};
+
+const selProfil  = document.getElementById('id_profil');
+const selCommune = document.getElementById('id_commune');
+const selSite    = document.getElementById('id_site');
+const divCommune = document.getElementById('div-commune');
+const divSite    = document.getElementById('div-site');
+
+function majVisibilite() {
+  const profil = selProfil.value;
+  divCommune.style.display = PROFILS_SANS_PERIMETRE.includes(profil) ? 'none' : '';
+  divSite.style.display    = PROFILS_SANS_SITE.includes(profil)      ? 'none' : '';
+  if (PROFILS_SANS_SITE.includes(profil)) selSite.value = '';
+  majSites();
+}
+
+function majSites() {
+  const profil    = selProfil.value;
+  const communeId = selCommune.value;
+  const typeFiltrer = TYPE_SITE_PAR_PROFIL[profil] || null;
+  let sites = communeId ? (SITES_PAR_COMMUNE[communeId] || []) : [];
+  if (typeFiltrer) sites = sites.filter(function(s) { return s.type === typeFiltrer; });
+  const valActuelle = selSite.value;
+  selSite.innerHTML = '<option value="">— Choisir —</option>';
+  sites.forEach(function(s) {
+    const o = document.createElement('option');
+    o.value = s.id;
+    o.textContent = s.nom;
+    if (String(s.id) === valActuelle) o.selected = true;
+    selSite.appendChild(o);
+  });
+}
+
+const inpPrenom = document.getElementById('id_first_name');
+const PREFIXES_VALUES = new Set(Object.values(PREFIXE_PROFIL));
+
+function retirerPrefixePrenom(prenom) {
+  for (const p of PREFIXES_VALUES) {
+    if (prenom.toUpperCase().startsWith(p + '-')) return prenom.slice(p.length + 1);
+  }
+  return prenom;
+}
+
+function majPrefixePrenom() {
+  if (!inpPrenom) return;
+  const prefix = PREFIXE_PROFIL[selProfil.value] || '';
+  const base   = retirerPrefixePrenom(inpPrenom.value);
+  inpPrenom.value = prefix ? `${prefix}-${base}` : base;
+}
+
+if (selProfil)  selProfil.addEventListener('change', function() { majVisibilite(); majPrefixePrenom(); });
+if (selCommune) selCommune.addEventListener('change', majSites);
+
+majVisibilite();
+majSites();
+</script>
+{% endblock %}

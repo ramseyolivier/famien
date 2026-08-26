@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block titre %}Page introuvable — LEPAD{% endblock %}
+{% block lieu %}404{% endblock %}
+{% block contenu %}
+<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:48px 24px;text-align:center;min-height:60vh">
+
+  <!-- Illustration SVG style cahier d'écolier -->
+  <svg width="280" height="220" viewBox="0 0 280 220" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <!-- Lignes de cahier en fond -->
+    <line x1="20" y1="60"  x2="260" y2="60"  stroke="var(--reglure)" stroke-width="1"/>
+    <line x1="20" y1="80"  x2="260" y2="80"  stroke="var(--reglure)" stroke-width="1"/>
+    <line x1="20" y1="100" x2="260" y2="100" stroke="var(--reglure)" stroke-width="1"/>
+    <line x1="20" y1="120" x2="260" y2="120" stroke="var(--reglure)" stroke-width="1"/>
+    <line x1="20" y1="140" x2="260" y2="140" stroke="var(--reglure)" stroke-width="1"/>
+    <line x1="20" y1="160" x2="260" y2="160" stroke="var(--reglure)" stroke-width="1"/>
+    <line x1="20" y1="180" x2="260" y2="180" stroke="var(--reglure)" stroke-width="1"/>
+    <!-- Marge verticale rouge -->
+    <line x1="52" y1="40" x2="52" y2="200" stroke="var(--marge)" stroke-width="1.5"/>
+
+    <!-- Loupe -->
+    <circle cx="140" cy="105" r="48" stroke="var(--encre)" stroke-width="3" fill="var(--craie)"/>
+    <circle cx="140" cy="105" r="38" stroke="var(--reglure)" stroke-width="1.5" fill="none"/>
+    <!-- Manche de la loupe -->
+    <line x1="178" y1="143" x2="208" y2="173" stroke="var(--encre)" stroke-width="5" stroke-linecap="round"/>
+
+    <!-- Point d'interrogation stylisé à l'intérieur -->
+    <text x="140" y="118" font-family="Georgia, serif" font-size="48" font-weight="bold"
+          fill="var(--encre)" text-anchor="middle" opacity="0.15">?</text>
+
+    <!-- "404" écrit à la main en travers -->
+    <text x="140" y="122" font-family="Georgia, serif" font-size="36" font-weight="bold"
+          fill="var(--encre)" text-anchor="middle" letter-spacing="-2">404</text>
+
+    <!-- Petites étoiles / éclats -->
+    <g stroke="var(--or)" stroke-width="1.5" stroke-linecap="round">
+      <line x1="82"  y1="58"  x2="82"  y2="50"/>
+      <line x1="78"  y1="62"  x2="72"  y2="58"/>
+      <line x1="86"  y1="62"  x2="92"  y2="58"/>
+
+      <line x1="200" y1="68"  x2="200" y2="60"/>
+      <line x1="196" y1="72"  x2="190" y2="68"/>
+      <line x1="204" y1="72"  x2="210" y2="68"/>
+    </g>
+  </svg>
+
+  <!-- Message -->
+  <h1 style="font-family:Georgia,serif;font-size:1.6rem;color:var(--encre);margin:24px 0 32px">
+    Page introuvable
+  </h1>
+
+  <div style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center">
+    <a href="{% url 'accueil' %}" class="bouton-primaire" style="min-width:160px;text-align:center;text-decoration:none">
+      ← Accueil
+    </a>
+    <button onclick="history.back()" class="bouton-secondaire" style="min-width:160px">
+      Page précédente
+    </button>
+  </div>
+</div>
+{% endblock %}

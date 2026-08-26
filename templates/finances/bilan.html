@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block titre %}Finances bilan — LEPAD{% endblock %}
+{% block lieu %}Finances — Bilan{% endblock %}
+
+{% block contenu %}
+<div class="admin-entete">
+  <h1>Finances · Entrées / Sorties</h1>
+</div>
+
+<form method="get" class="finance-filtres">
+  <div class="filtre-champ">
+    <label for="fb-debut">Du</label>
+    <input type="date" id="fb-debut" name="debut" value="{{ filtres.debut }}">
+  </div>
+  <div class="filtre-champ">
+    <label for="fb-fin">Au</label>
+    <input type="date" id="fb-fin" name="fin" value="{{ filtres.fin }}">
+  </div>
+  <button type="submit" class="bouton-secondaire" style="align-self:flex-end">Filtrer</button>
+  {% if filtres.debut or filtres.fin %}
+  <a href="{% url 'finances_bilan' %}" class="bouton-secondaire" title="Réinitialiser" style="align-self:flex-end;min-width:0;padding:8px 12px">↺</a>
+  {% endif %}
+</form>
+
+<div class="hub-stats" style="margin-top:24px">
+  <div class="indicateur valide">
+    <div class="valeur chiffre">{{ total_entrees|floatformat:0 }}</div>
+    <div class="libelle">Entrées — ventes (F)</div>
+  </div>
+  <div class="indicateur">
+    <div class="valeur chiffre">{{ total_sorties|floatformat:0 }}</div>
+    <div class="libelle">Sorties — dépenses validées (F)</div>
+  </div>
+  <div class="indicateur {% if solde >= 0 %}valide{% else %}alerte{% endif %}">
+    <div class="valeur chiffre">{{ solde|floatformat:0 }}</div>
+    <div class="libelle">Solde net (F)</div>
+  </div>
+</div>
+
+<div style="margin-top:24px;display:flex;gap:16px;flex-wrap:wrap">
+  <a href="{% url 'finances_entrees' %}{% if filtres.debut or filtres.fin %}?debut={{ filtres.debut }}&fin={{ filtres.fin }}{% endif %}" class="bouton-secondaire">
+    Détail des entrées →
+  </a>
+  <a href="{% url 'finances_sorties' %}{% if filtres.debut or filtres.fin %}?debut={{ filtres.debut }}&fin={{ filtres.fin }}{% endif %}" class="bouton-secondaire">
+    Détail des sorties →
+  </a>
+</div>
+
+<div style="margin-top:20px">
+  <a href="{% url 'hub_finances' %}" class="bouton-secondaire">← Retour aux finances</a>
+</div>
+{% endblock %}

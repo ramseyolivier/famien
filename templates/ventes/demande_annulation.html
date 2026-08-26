@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block titre %}Demande d'annulation — {{ v.numero }}{% endblock %}
+{% block lieu %}Vente {{ v.numero }} — Demande d'annulation{% endblock %}
+
+{% block contenu %}
+<div style="margin-top:16px">
+
+  <div class="fiche" style="padding:20px 24px">
+    <div class="etiquette" style="margin:0 0 4px">Vente concernée</div>
+    <h2 style="margin:0 0 4px;font-size:1.3rem;font-weight:800;color:var(--accent)">{{ v.numero }}</h2>
+    <p style="margin:0;font-size:.88rem;color:var(--encre-clair)">
+      {{ v.ecole.nom }} · {{ v.montant_total|floatformat:0 }} F CFA · {{ v.horodatage|date:"d/m/Y à H:i" }}
+    </p>
+  </div>
+
+  <div style="margin-top:20px;padding:14px 18px;background:var(--marge-clair);border-left:4px solid var(--marge);border-radius:var(--rayon)">
+    <strong style="color:var(--marge)">Attention</strong>
+    <p style="margin:6px 0 0;font-size:.88rem;color:var(--encre)">
+      Cette demande sera traitée par le chef d'équipe. L'annulation n'est pas immédiate.
+    </p>
+  </div>
+
+  <form method="post" style="margin-top:24px">
+    {% csrf_token %}
+
+    {% if messages %}
+    {% for m in messages %}
+    <div class="message warning" style="margin-top:10px">{{ m }}</div>
+    {% endfor %}
+    {% endif %}
+
+    <div style="margin-top:20px;display:flex;gap:10px;flex-wrap:wrap">
+      <button type="submit" class="bouton-secondaire"
+        style="background:var(--marge);color:#fff;border-color:var(--marge);min-height:44px">
+        Envoyer la demande
+      </button>
+      <a href="{% url 'facture_vente' v.uuid %}" class="bouton-secondaire">Annuler</a>
+    </div>
+  </form>
+
+</div>
+{% endblock %}

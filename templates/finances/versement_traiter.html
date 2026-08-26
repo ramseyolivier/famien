@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block titre %}Versement à approuver{% endblock %}
+{% block lieu %}Finances — Versements{% endblock %}
+
+{% block contenu %}
+<div class="admin-entete">
+  <h1>Versement à approuver</h1>
+  <span class="badge" style="background:var(--or-clair);color:var(--or);font-size:1rem;padding:6px 14px">En attente</span>
+</div>
+
+<div class="indicateurs" style="margin:16px 0">
+  <div class="indicateur">
+    <div class="valeur" style="font-size:1rem">{{ v.verseur.get_full_name }}</div>
+    <div class="libelle">{{ v.verseur.get_profil_display }}</div>
+  </div>
+  <div class="indicateur">
+    <div class="valeur" style="font-size:1.4rem">→</div>
+    <div class="libelle">&nbsp;</div>
+  </div>
+  <div class="indicateur valide">
+    <div class="valeur chiffre" style="font-size:1.4rem">{{ v.montant|floatformat:0 }}</div>
+    <div class="libelle">F CFA</div>
+  </div>
+</div>
+
+<p style="font-size:.85rem;color:var(--encre-clair)">
+  Déclaré le {{ v.cree_le|date:"d/m/Y à H:i" }} · {{ v.get_mode_display }}{% if v.reference %} · Réf. {{ v.reference }}{% endif %}
+</p>
+{% if v.note %}
+<p style="font-style:italic;color:var(--encre-clair);margin-top:6px">{{ v.note }}</p>
+{% endif %}
+
+<div class="etiquette" style="margin-top:24px">Action requise</div>
+<p style="font-size:.88rem;color:var(--encre-clair);margin-bottom:16px">
+  {{ v.verseur.get_full_name }} déclare vous avoir versé {{ v.montant|floatformat:0 }} F CFA. Confirmez si vous avez bien reçu cet argent, ou rejetez si ce n'est pas le cas.
+</p>
+
+<form method="post">
+  {% csrf_token %}
+  <div style="margin-bottom:16px;max-width:420px">
+    <label style="display:block;font-size:.85rem;color:var(--encre-clair);margin-bottom:4px">Motif de rejet <span style="font-size:.8rem">(obligatoire si rejet)</span></label>
+    <textarea name="motif_rejet" rows="2"
+              style="width:100%;padding:8px 10px;border:1.5px solid var(--reglure);border-radius:var(--rayon);font:inherit;resize:vertical"></textarea>
+  </div>
+  <div style="display:flex;gap:12px">
+    <button type="submit" name="action" value="confirmer" class="bouton-secondaire"
+            style="background:var(--valide);color:#fff;border-color:var(--valide);min-height:44px"
+            onclick="return confirm('Confirmer la réception de {{ v.montant|floatformat:0 }} F CFA ?')">
+      Confirmer
+    </button>
+    <button type="submit" name="action" value="rejeter" class="bouton-secondaire"
+            style="background:var(--marge);color:#fff;border-color:var(--marge);min-height:44px"
+            onclick="return confirm('Rejeter ce versement ?')">
+      Rejeter
+    </button>
+  </div>
+</form>
+
+<div class="pied">
+  <a href="{% url 'versements_liste' %}" class="bouton-secondaire">← Retour versements</a>
+</div>
+{% endblock %}

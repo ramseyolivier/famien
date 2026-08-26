@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block titre %}Nouvel ajustement — LEPAD{% endblock %}
+{% block lieu %}Stock — Ajustement{% endblock %}
+{% block contenu %}
+<div class="admin-entete"><h1>Ajustement de stock</h1></div>
+<p style="color:var(--encre-clair)">Utilisez des quantités positives pour des entrées, négatives pour des sorties (pertes, casse, corrections).</p>
+<form method="post">
+{% csrf_token %}
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:16px 0">
+  <div>
+    <label style="display:block;font-size:.85rem;color:var(--encre-clair);margin-bottom:4px">Site *</label>
+    {% if site_unique %}
+    <input type="hidden" name="site" value="{{ site_unique.pk }}">
+    <span class="badge" style="background:var(--reglure);color:var(--encre);padding:8px 10px;font-size:.95rem;display:inline-block">{{ site_unique }}</span>
+    {% else %}
+    <select name="site" required style="width:100%;padding:8px 10px;border:1px solid var(--reglure);border-radius:6px;font:inherit">
+      <option value="">— Choisir —</option>
+      {% for s in sites %}<option value="{{ s.pk }}">{{ s }}</option>{% endfor %}
+    </select>
+    {% endif %}
+  </div>
+  <div>
+    <label style="display:block;font-size:.85rem;color:var(--encre-clair);margin-bottom:4px">Motif *</label>
+    <input type="text" name="motif" required maxlength="255" placeholder="Perte, casse, correction d'écart..."
+      style="width:100%;padding:8px 10px;border:1px solid var(--reglure);border-radius:6px;font:inherit">
+  </div>
+</div>
+<div class="etiquette">Références à ajuster</div>
+<table class="registre" id="lignes">
+  <thead><tr><th>Produit</th><th class="nombre">Quantité (+ entrée / − sortie)</th><th></th></tr></thead>
+  <tbody id="lignes-body">
+    <tr class="ligne-aju">
+      <td>
+        <select name="produit_id" style="width:100%;padding:6px;border:1px solid var(--reglure);border-radius:4px;font:inherit;font-size:.9rem">
+          <option value="">— Choisir —</option>
+          {% for p in produits %}<option value="{{ p.pk }}">{{ p.code }} — {{ p.designation }}</option>{% endfor %}
+        </select>
+      </td>
+      <td><input type="number" name="quantite" value="0" style="width:100px;padding:6px;border:1px solid var(--reglure);border-radius:4px;font:inherit;text-align:right"></td>
+      <td><button type="button" onclick="this.closest('tr').remove()" style="background:none;border:none;color:var(--marge);cursor:pointer">✕</button></td>
+    </tr>
+  </tbody>
+</table>
+<button type="button" class="bouton-secondaire" style="margin-top:8px" onclick="ajouterLigne()">+ Ligne</button>
+<div style="margin-top:20px;display:flex;gap:10px">
+  <button type="submit" class="bouton-secondaire" style="background:var(--accent);color:#fff;border-color:var(--accent)">Créer l'ajustement</button>
+  <a href="{% url 'ajustements_liste' %}" class="bouton-secondaire">Annuler</a>
+</div>
+</form>
+{% endblock %}
+{% block scripts %}
+<script>
+function ajouterLigne() {
+  const tbody = document.getElementById('lignes-body');
+  const tpl = tbody.querySelector('.ligne-aju').cloneNode(true);
+  tpl.querySelector('select').value = '';
+  tpl.querySelector('input').value = 0;
+  tbody.appendChild(tpl);
+}
+</script>
+{% endblock %}

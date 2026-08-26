@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block titre %}Modifier la commande #{{ commande.pk }} — LEPAD{% endblock %}
+{% block lieu %}Achats — Modifier une commande{% endblock %}
+{% block contenu %}
+<div class="admin-entete"><h1 style="color:var(--valide)">Modifier la commande #{{ commande.pk }}</h1></div>
+<p style="font-size:.85rem;color:var(--encre-clair)">Site : <strong>{{ commande.site_destination.nom }}</strong></p>
+<form method="post">
+{% csrf_token %}
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:16px 0">
+  <div>
+    <label style="display:block;font-size:.85rem;color:var(--encre-clair);margin-bottom:4px">Fournisseur *</label>
+    <select name="fournisseur" required style="width:100%;padding:8px 10px;border:1px solid var(--reglure);border-radius:6px;font:inherit">
+      <option value="">— Choisir —</option>
+      {% for f in fournisseurs %}<option value="{{ f.pk }}"{% if f.pk == commande.fournisseur_id %} selected{% endif %}>{{ f.raison_sociale }}</option>{% endfor %}
+    </select>
+  </div>
+  <div>
+    <label style="display:block;font-size:.85rem;color:var(--encre-clair);margin-bottom:4px">Observations</label>
+    <input type="text" name="observations" maxlength="500" value="{{ commande.observations }}" style="width:100%;padding:8px 10px;border:1px solid var(--reglure);border-radius:6px;font:inherit">
+  </div>
+</div>
+<div class="etiquette">Articles</div>
+{{ produits_data|json_script:"produits-data" }}
+{{ lignes_initiales|json_script:"lignes-initiales" }}
+<table class="registre">
+  <thead><tr><th>Produit</th><th class="nombre">Quantité</th><th></th></tr></thead>
+  <tbody id="lignes-body"></tbody>
+</table>
+<button type="button" class="bouton-secondaire" style="margin-top:8px" onclick="ajouterLigne()">+ Ligne</button>
+<div style="margin-top:20px;display:flex;gap:10px">
+  <button type="submit" class="bouton-secondaire" style="background:var(--accent);color:#fff;border-color:var(--accent)">Enregistrer</button>
+  <a href="{% url 'commande_detail' commande.pk %}" class="bouton-secondaire">Annuler</a>
+</div>
+</form>
+
+<div class="pied">
+  <a href="{% url 'hub_approvisionnement' %}#depot" class="bouton-secondaire" style="min-width:180px;text-align:center">← Retour approvisionnement</a>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+(function () {
+  var PRODUITS = JSON.parse(document.getElementById('produits-data').textContent);
+  var INITIALES = JSON.parse(document.getElementById('lignes-initiales').textContent);
+
+  function buildOptions(selectedPk) {
+    var html = '<option value="">— Choisir —</option>';
+    PRODUITS.forEach(function(p) {
+      var sel = (p.pk === selectedPk) ? ' selected' : '';
+      html += '<option value="' + p.pk + '"' + sel + '>' + p.code + ' — ' + p.designation + '</option>';
+    });
+    return html;
+  }
+
+  var CTRL = 'height:34px;padding:0 6px;border:1px solid var(--reglure);border-radius:4px;font:inherit;font-size:.9rem;box-sizing:border-box;vertical-align:middle';
+
+  window.ajouterLigne = function(produitPk, quantite) {
+    var tbody = document.getElementById('lignes-body');
+    var tr = document.createElement('tr');
+    tr.innerHTML =
+      '<td style="padding:6px 10px"><select name="produit_id" style="width:100%;' + CTRL + '">' + buildOptions(produitPk || null) + '</select></td>' +
+      '<td style="padding:6px 10px" class="nombre"><input type="number" name="quantite" min="1" value="' + (quantite || 1) + '" style="width:80px;text-align:right;' + CTRL + '"></td>' +
+      '<td style="padding:6px 10px"><button type="button" onclick="this.closest(\'tr\').remove()" style="background:none;border:none;color:var(--marge);cursor:pointer;line-height:34px">✕</button></td>';
+    tbody.appendChild(tr);
+  };
+
+  if (INITIALES.length > 0) {
+    INITIALES.forEach(function(l) { ajouterLigne(l.produit_id, l.quantite); });
+  } else {
+    ajouterLigne();
+  }
+
+  document.querySelector('form').addEventListener('submit', function(e) {
+    var selects = document.querySelectorAll('select[name="produit_id"]');
+    var vus = {};
+    for (var i = 0; i < selects.length; i++) {
+      var v = selects[i].value;
+      if (!v) continue;
+      if (vus[v]) {
+        e.preventDefault();
+        alert('Le produit « ' + selects[i].options[selects[i].selectedIndex].text + ' » est sélectionné plusieurs fois.\nSupprimez la ligne en double ou augmentez la quantité.');
+        selects[i].focus();
+        return;
+      }
+      vus[v] = true;
+    }
+  });
+}());
+</script>
+{% endblock %}

@@ -1,0 +1,656 @@
+{% extends "base.html" %}
+{% block titre %}Caisse — {{ ecole.nom }}{% endblock %}
+{% block lieu %}Caisse{% endblock %}
+
+{% block contenu %}
+
+<div style="text-align:center;margin-bottom:18px">
+  <span style="font-size:1.6rem;font-weight:800;color:#1a3060;letter-spacing:.08em;font-family:'Raleway',sans-serif">CAISSE</span>
+</div>
+
+<!-- Téléphone client -->
+<div style="margin-bottom:18px">
+  <label style="display:block;font-size:.85rem;color:var(--encre-clair);margin-bottom:4px">Téléphone client <span id="tel-obligatoire" style="color:var(--marge);display:none">*</span></label>
+  <input type="tel" id="telephone-client" maxlength="20" placeholder="0X XX XX XX XX"
+    style="width:220px;padding:10px;border:1.5px solid var(--reglure);border-radius:var(--rayon);font:inherit">
+</div>
+
+<!-- ── Kits ─────────────────────────────────────────────────────────── -->
+<div class="etiquette" style="color:#e07020;font-size:1rem;font-weight:800">Kits de l'établissement</div>
+<div class="table-caisse-scroll">
+<table class="registre" id="tbl-kits">
+  <thead>
+    <tr>
+      <th style="color:#e07020;font-size:.95rem;font-weight:800">Kit</th>
+      <th style="width:130px;text-align:center;color:#e07020;font-size:.95rem;font-weight:800">Mode</th>
+      <th style="width:90px;text-align:center;color:#e07020;font-size:.95rem;font-weight:800">Qté</th>
+      <th style="width:70px;text-align:center;color:#e07020;font-size:.95rem;font-weight:800">Dispo</th>
+      <th id="th-avoir-kit-col" class="col-avoir-th" style="width:70px;text-align:center;color:var(--marge);font-size:.95rem;font-weight:800">Dû</th>
+      <th class="nombre" style="width:110px;color:#e07020;font-size:.95rem;font-weight:800">Total</th>
+      <th style="width:36px"></th>
+    </tr>
+  </thead>
+  <tbody id="kits-body">
+    <tr id="kits-vide">
+      <td colspan="7" style="color:var(--encre-clair);text-align:center;padding:14px">
+        Aucun kit sélectionné.
+      </td>
+    </tr>
+  </tbody>
+</table>
+</div>
+<div style="margin-top:8px">
+  <button type="button" id="btn-ajouter-kit" class="bouton-secondaire" style="background:#e07020;color:#fff;border-color:#e07020">+ Ajouter une ligne kit</button>
+</div>
+
+<!-- ── Articles ──────────────────────────────────────────────────────── -->
+<div class="etiquette" style="margin-top:64px;color:#228B22;font-size:1rem;font-weight:800">Articles à l'unité</div>
+<div class="table-caisse-scroll">
+<table class="registre" id="tbl-articles">
+  <thead>
+    <tr>
+      <th style="color:#228B22;font-size:.95rem;font-weight:800">Article</th>
+      <th style="width:130px;text-align:center;color:#228B22;font-size:.95rem;font-weight:800">Mode</th>
+      <th style="width:90px;text-align:center;color:#228B22;font-size:.95rem;font-weight:800">Qté</th>
+      <th style="width:70px;text-align:center;color:#228B22;font-size:.95rem;font-weight:800">Dispo</th>
+      <th id="th-avoir-col" class="col-avoir-th" style="width:70px;text-align:center;color:var(--marge);font-size:.95rem;font-weight:800">Dû</th>
+      <th class="nombre" style="width:110px;color:#228B22;font-size:.95rem;font-weight:800">Total</th>
+      <th style="width:36px"></th>
+    </tr>
+  </thead>
+  <tbody id="articles-body">
+    <tr id="articles-vide">
+      <td colspan="7" style="color:var(--encre-clair);text-align:center;padding:14px">
+        Aucun article sélectionné.
+      </td>
+    </tr>
+  </tbody>
+</table>
+</div>
+<div style="margin-top:8px">
+  <button type="button" id="btn-ajouter-article" class="bouton-secondaire" style="background:#228B22;color:#fff;border-color:#228B22">+ Ajouter une ligne article</button>
+</div>
+
+{% if True %}
+<div style="margin-top:44px;text-align:center">
+  <input type="checkbox" id="remise" style="display:none">
+  <label for="remise" id="label-remise" class="bouton-secondaire" style="cursor:pointer;display:inline-flex;align-items:center;gap:8px;user-select:none;background:#fff;color:#6b7280;border-color:#d1d5db">
+    <span id="remise-icone">☐</span> Réduction personnel administratif ({{ ecole.remise_convention|floatformat:0 }} %)
+  </label>
+</div>
+<script>
+document.getElementById("remise").addEventListener("change", function() {
+  var icone = document.getElementById("remise-icone");
+  var label = document.getElementById("label-remise");
+  if (this.checked) {
+    icone.textContent = "☑";
+    label.style.background = "#1a6fc4";
+    label.style.color = "#fff";
+    label.style.borderColor = "#1a6fc4";
+  } else {
+    icone.textContent = "☐";
+    label.style.background = "";
+    label.style.color = "";
+    label.style.borderColor = "";
+  }
+});
+</script>
+{% endif %}
+
+
+<!-- ── Barre d'encaissement ───────────────────────────────────────────── -->
+<div class="encaisser">
+  <div class="inner">
+    <div style="display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:nowrap;overflow-x:auto">
+      <button type="button" class="bouton-primaire" id="valider" disabled style="flex:0 0 auto;white-space:nowrap;width:auto">
+        <span id="valider-label">Encaisser</span><span id="valider-montant"></span>
+      </button>
+      <div style="display:flex;align-items:center;gap:6px;flex:0 0 auto">
+        <label for="montant-donne" style="font-size:1.15rem;font-weight:700;color:var(--accent);white-space:nowrap">Reçu</label>
+        <input type="number" id="montant-donne" min="0" step="1" placeholder="0"
+          style="width:80px;padding:16px 10px;border:1.5px solid var(--reglure);border-radius:var(--rayon);font:inherit;font-size:1.15rem;font-weight:600;text-align:right;-moz-appearance:textfield;appearance:textfield">
+        <style>#montant-donne::-webkit-inner-spin-button,#montant-donne::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}</style>
+      </div>
+      <div id="monnaie-bloc" style="display:none;align-items:center;gap:6px;flex:0 0 auto">
+        <span style="font-size:.85rem;color:var(--encre-clair);white-space:nowrap">Monnaie</span>
+        <span id="monnaie-valeur" style="font-size:1.1rem;font-weight:700;color:var(--encre)">0</span>
+        <span style="font-size:.85rem;color:var(--encre-clair)">F</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+{{ js_data|json_script:"page-data" }}
+<script>
+(function () {
+  "use strict";
+
+  var _d      = JSON.parse(document.getElementById("page-data").textContent);
+  var KITS     = _d.kits;
+  var ARTICLES = _d.articles;
+  var TAUX     = _d.taux;
+  var uuid = crypto.randomUUID();
+  var envoiEnCours = false;
+  var rowCounter   = 0;
+
+  var elKitsBody     = document.getElementById("kits-body");
+  var elKitsVide     = document.getElementById("kits-vide");
+  var elArticlesBody = document.getElementById("articles-body");
+  var elArticlesVide = document.getElementById("articles-vide");
+  var elValider      = document.getElementById("valider");
+  var elLabel        = document.getElementById("valider-label");
+  var elMontant      = document.getElementById("valider-montant");
+  var elMontantDonne = document.getElementById("montant-donne");
+  var elMonnaieBloc  = document.getElementById("monnaie-bloc");
+  var elMonnaieVal   = document.getElementById("monnaie-valeur");
+  var elRemise       = document.getElementById("remise");
+  var elTelephone    = document.getElementById("telephone-client");
+
+  var elTelObl           = document.getElementById("tel-obligatoire");
+  var elThAvoirCol       = document.getElementById("th-avoir-col");
+  var elThAvoirKitCol    = document.getElementById("th-avoir-kit-col");
+
+  var MODES = [
+    { val: "ESPECES",      lbl: "Espèces" },
+    { val: "MOBILE_MONEY", lbl: "Mobile money" },
+    { val: "AUTRE",        lbl: "Autre" },
+  ];
+
+  var KITS_MAP = {};
+  KITS.forEach(function(k) { KITS_MAP[k.id] = k; });
+  var ARTICLES_MAP = {};
+  ARTICLES.forEach(function(a) { ARTICLES_MAP[a.id] = a; });
+
+  function majTousLesKits() {
+    var remaining = {};
+    ARTICLES.forEach(function(a) { remaining[a.id] = a.stock; });
+    elKitsBody.querySelectorAll("tr[data-item-id]").forEach(function(tr) {
+      var kitId = tr.dataset.itemId;
+      var kit = KITS_MAP[kitId];
+      var tdDispo = tr.querySelector(".col-dispo");
+      var tdAvoir = tr.querySelector(".col-avoir");
+      var tdTotal = tr.querySelector(".col-total");
+      var qteInput = tr.querySelector(".qte-input");
+      if (!kit || !kit.lignes || !kitId) { if (tdDispo) tdDispo.textContent = "—"; tr.dataset.served = "0"; return; }
+      var qty = parseInt(qteInput ? qteInput.value : "0", 10) || 0;
+      var prix = parseFloat(tr.dataset.prix) || 0;
+      var max = Infinity;
+      kit.lignes.forEach(function(l) {
+        var r = remaining[l.produit_id] !== undefined ? remaining[l.produit_id] : 0;
+        var m = Math.floor(r / l.quantite);
+        if (m < max) max = m;
+      });
+      if (max === Infinity) max = 0;
+      var served = Math.min(qty, max);
+      var surplus = Math.max(0, qty - max);
+      tr.dataset.served = served;
+      if (tdDispo) { tdDispo.textContent = Math.max(0, max - qty); tdDispo.style.color = surplus > 0 ? "var(--marge)" : "var(--encre-clair)"; }
+      if (tdAvoir) tdAvoir.textContent = surplus > 0 ? surplus : "";
+      if (tdTotal) tdTotal.textContent = (prix && qty) ? fmt(prix * qty) + " F" : "—";
+      kit.lignes.forEach(function(l) {
+        if (remaining[l.produit_id] !== undefined) remaining[l.produit_id] = Math.max(0, remaining[l.produit_id] - served * l.quantite);
+      });
+    });
+  }
+
+  function stockConsommeParKits(produitId) {
+    var total = 0;
+    elKitsBody.querySelectorAll("tr[data-item-id]").forEach(function(tr) {
+      var kit = KITS_MAP[tr.dataset.itemId];
+      if (!kit || !kit.lignes) return;
+      var served = parseInt(tr.dataset.served || "0", 10) || 0;
+      kit.lignes.forEach(function(l) {
+        if (l.produit_id === produitId) total += served * l.quantite;
+      });
+    });
+    return total;
+  }
+
+  function stockRestant(produitId) {
+    var article = ARTICLES_MAP[produitId];
+    return article ? Math.max(0, article.stock - stockConsommeParKits(produitId)) : 0;
+  }
+
+  function majMaxArticles() {
+    // Recalculate dispo and avoir cells for all article rows
+    elArticlesBody.querySelectorAll("tr[data-item-id]").forEach(function(tr) {
+      var pid = tr.dataset.itemId;
+      if (!pid) return;
+      var qty = parseInt(tr.querySelector(".qte-input").value, 10) || 0;
+      var restant = stockRestant(pid);
+      var tdD = tr.querySelector(".col-dispo");
+      if (tdD) { tdD.textContent = restant; tdD.style.color = qty > restant ? "var(--marge)" : "var(--encre-clair)"; }
+      var tdA = tr.querySelector(".col-avoir");
+      if (tdA) { var surplus = Math.max(0, qty - restant); tdA.textContent = surplus > 0 ? surplus : ""; }
+    });
+    // Mettre à jour data-rupture sur les options ET les li visibles du combobox
+    elArticlesBody.querySelectorAll(".sel-article").forEach(function(sel) {
+      Array.from(sel.options).forEach(function(opt) {
+        if (!opt.value) return;
+        if (stockRestant(opt.value) <= 0) {
+          opt.dataset.rupture = "1";
+        } else {
+          delete opt.dataset.rupture;
+        }
+      });
+    });
+    // Répercuter sur les <li> déjà affichés dans la liste du combobox (si ouverte)
+    document.querySelectorAll(".combo-liste li.combo-option").forEach(function(li) {
+      if (!li.dataset.value) return;
+      if (stockRestant(li.dataset.value) <= 0) {
+        li.dataset.rupture = "1";
+      } else {
+        delete li.dataset.rupture;
+      }
+    });
+    rafraichir();
+  }
+
+  function calculerAvoirs() {
+    var besoins = {};
+    elKitsBody.querySelectorAll("tr[data-item-id]").forEach(function(tr) {
+      var kit = KITS_MAP[tr.dataset.itemId];
+      if (!kit || !kit.lignes) return;
+      var qteKit = parseInt(tr.querySelector(".qte-input").value, 10) || 0;
+      kit.lignes.forEach(function(l) {
+        besoins[l.produit_id] = (besoins[l.produit_id] || 0) + qteKit * l.quantite;
+      });
+    });
+    elArticlesBody.querySelectorAll("tr[data-item-id]").forEach(function(tr) {
+      var pid = tr.dataset.itemId;
+      var qte = parseInt(tr.querySelector(".qte-input").value, 10) || 0;
+      besoins[pid] = (besoins[pid] || 0) + qte;
+    });
+    var avoirs = [];
+    for (var pid in besoins) {
+      var art = ARTICLES_MAP[pid];
+      var stock = art ? art.stock : 0;
+      var manquant = besoins[pid] - stock;
+      if (manquant > 0) {
+        avoirs.push({ libelle: art ? art.libelle : pid, manquant: manquant, demande: besoins[pid], stock: stock });
+      }
+    }
+    return avoirs;
+  }
+
+  function fmt(n) {
+    return Math.round(n).toLocaleString("fr-FR");
+  }
+
+  // ── Total ────────────────────────────────────────────────────────────
+  function total() {
+    var t = 0;
+    [elKitsBody, elArticlesBody].forEach(function (tbody) {
+      tbody.querySelectorAll("tr[data-row]").forEach(function (tr) {
+        t += (parseFloat(tr.dataset.prix) || 0) * (parseInt(tr.querySelector(".qte-input").value, 10) || 0);
+      });
+    });
+    if (elRemise && elRemise.checked) t -= Math.round(t * TAUX / 100);
+    return t;
+  }
+
+  function qtesValides() {
+    var ok = true;
+    [elKitsBody, elArticlesBody].forEach(function(tbody) {
+      tbody.querySelectorAll("tr[data-item-id]").forEach(function(tr) {
+        if ((parseInt(tr.querySelector(".qte-input").value, 10) || 0) < 1) ok = false;
+      });
+    });
+    return ok;
+  }
+
+  function rafraichir() {
+    majTousLesKits();
+    var kitsOk = elKitsBody.querySelectorAll("tr[data-row][data-item-id]").length > 0;
+    var artOk  = elArticlesBody.querySelectorAll("tr[data-row][data-item-id]").length > 0;
+    var vide   = !kitsOk && !artOk;
+    var t      = vide ? 0 : total();
+    var qteOk  = vide || qtesValides();
+    var avoirs = vide ? [] : calculerAvoirs();
+    var aDesAvoirs = avoirs.length > 0;
+
+    // Calculer les avoirs de kit depuis les cellules Dû (calcul séquentiel déjà fait)
+    var aDesAvoirsKit = false;
+    var texteAvoirsKit = [];
+    elKitsBody.querySelectorAll("tr[data-item-id]").forEach(function(tr) {
+      var kit = KITS_MAP[tr.dataset.itemId];
+      if (!kit) return;
+      var tdAvoir = tr.querySelector(".col-avoir");
+      var surplus = tdAvoir ? (parseInt(tdAvoir.textContent, 10) || 0) : 0;
+      if (surplus > 0) {
+        aDesAvoirsKit = true;
+        texteAvoirsKit.push(surplus + " × " + kit.libelle + " (kit)");
+      }
+    });
+
+    var aDesAvoirsTous = aDesAvoirs || aDesAvoirsKit;
+
+    if (aDesAvoirsTous) {
+      elTelObl.style.display = "";
+    } else {
+      elTelObl.style.display = "none";
+    }
+
+    // Afficher/masquer la colonne Avoir via classe CSS (max-width collapse)
+    document.getElementById("tbl-kits").classList.toggle("avec-avoir", aDesAvoirsKit);
+    document.getElementById("tbl-articles").classList.toggle("avec-avoir", aDesAvoirs);
+
+    var telOk = !aDesAvoirsTous || (elTelephone.value.trim().length >= 8);
+    var recuOk = (parseFloat(elMontantDonne.value) || 0) >= t;
+    elValider.disabled    = vide || envoiEnCours || !qteOk || !telOk || !recuOk;
+    elMontant.textContent = vide ? "" : (!qteOk ? " Quantité invalide" : (!telOk ? " Téléphone requis" : " " + fmt(t) + " F"));
+    calculerMonnaie();
+  }
+
+  function calculerMonnaie() {
+    var donne = parseFloat(elMontantDonne.value) || 0;
+    var t = total();
+    if (donne > 0 && t > 0) {
+      var monnaie = donne - t;
+      elMonnaieVal.textContent = fmt(Math.max(0, monnaie));
+      elMonnaieVal.style.color = monnaie < 0 ? "var(--marge)" : "var(--encre)";
+      elMonnaieBloc.style.display = "flex";
+    } else {
+      elMonnaieBloc.style.display = "none";
+    }
+  }
+
+  // ── Créer un select de produit ────────────────────────────────────────
+  function creerSelectProduit(classe, donnees, libelleVide) {
+    var sel = document.createElement("select");
+    sel.className = classe;
+    sel.style.cssText = "width:100%;padding:10px 12px;border:1.5px solid var(--reglure);border-radius:var(--rayon);font:inherit";
+
+    var optVide = document.createElement("option");
+    optVide.value = "";
+    optVide.textContent = libelleVide;
+    sel.appendChild(optVide);
+
+    donnees.forEach(function (d) {
+      var opt = document.createElement("option");
+      opt.value = d.id;
+      opt.dataset.prix  = d.prix;
+      opt.dataset.max   = d.max !== undefined ? d.max : d.stock;
+      opt.textContent = d.libelle;
+      if ((d.max !== undefined ? d.max : d.stock) === 0) opt.dataset.rupture = "1";
+      sel.appendChild(opt);
+    });
+    return sel;
+  }
+
+  // ── Créer un select de mode de paiement ──────────────────────────────
+  function creerSelectMode() {
+    var sel = document.createElement("select");
+    sel.className = "sel-mode";
+    sel.setAttribute("data-no-combobox", "");
+    sel.style.cssText = "width:100%;padding:8px 6px;border:1.5px solid var(--reglure);border-radius:var(--rayon);font:inherit;font-size:.85rem;text-align:center";
+    MODES.forEach(function (m) {
+      var opt = document.createElement("option");
+      opt.value       = m.val;
+      opt.textContent = m.lbl;
+      sel.appendChild(opt);
+    });
+    return sel;
+  }
+
+  // ── Construire une ligne de tableau ───────────────────────────────────
+  function creerLigne(selectProduit, isKit) {
+    var rowId = ++rowCounter;
+
+    var tr = document.createElement("tr");
+    tr.dataset.row  = rowId;
+    tr.dataset.prix = "";
+    tr.dataset.type = isKit ? "kit" : "article";
+
+    // Cellule produit
+    var tdProduit = document.createElement("td");
+    tdProduit.appendChild(selectProduit);
+    tr.appendChild(tdProduit);
+
+    // Cellule mode
+    var selMode = creerSelectMode();
+    var tdMode = document.createElement("td");
+    tdMode.style.textAlign = "center";
+    tdMode.appendChild(selMode);
+    tr.appendChild(tdMode);
+
+    // Cellule quantité
+    var qteInput = document.createElement("input");
+    qteInput.type      = "number";
+    qteInput.className = "qte-input";
+    qteInput.value     = "";
+    qteInput.min       = "0";
+    qteInput.style.cssText = "width:100%;padding:6px 8px;border:1.5px solid var(--reglure);border-radius:var(--rayon);font:inherit;text-align:center";
+    var tdQte = document.createElement("td");
+    tdQte.style.textAlign = "center";
+    tdQte.appendChild(qteInput);
+    tr.appendChild(tdQte);
+
+    // Cellule dispo
+    var tdDispo = document.createElement("td");
+    tdDispo.className = "col-dispo";
+    tdDispo.style.fontSize = ".82rem";
+    tdDispo.style.textAlign = "center";
+    tdDispo.style.color = "var(--encre-clair)";
+    tdDispo.textContent = "—";
+    tr.appendChild(tdDispo);
+
+    // Cellule avoir (toujours dans le flux — jamais masquée, juste vide quand pas d'avoir)
+    var tdAvoir = document.createElement("td");
+    tdAvoir.className = "col-avoir chiffre";
+    tdAvoir.style.fontSize = ".82rem";
+    tdAvoir.style.fontWeight = "700";
+    tdAvoir.style.textAlign = "center";
+    tdAvoir.style.color = "var(--marge)";
+    tdAvoir.textContent = "";
+    tr.appendChild(tdAvoir);
+
+    // Cellule total
+    var tdTotal = document.createElement("td");
+    tdTotal.className = "nombre chiffre col-total";
+    tdTotal.style.fontSize = ".85rem";
+    tdTotal.textContent = "—";
+    tr.appendChild(tdTotal);
+
+    // Cellule supprimer
+    var btnSup = document.createElement("button");
+    btnSup.type      = "button";
+    btnSup.className = "btn-sup-ligne";
+    btnSup.setAttribute("aria-label", "Supprimer");
+    btnSup.innerHTML = "✕";
+    btnSup.style.cssText = "background:none;border:0;color:var(--marge);cursor:pointer;font-size:1.1rem";
+    var tdSup = document.createElement("td");
+    tdSup.appendChild(btnSup);
+    tr.appendChild(tdSup);
+
+    // ── Événements ────────────────────────────────────────────────────
+    function majLigne() {
+      var prix = parseFloat(tr.dataset.prix) || 0;
+      var qty  = parseInt(qteInput.value, 10) || 0;
+      tdTotal.textContent = (prix && qty) ? fmt(prix * qty) + " F" : "—";
+      if (isKit) {
+        majTousLesKits();
+      } else {
+        var pid = tr.dataset.itemId;
+        var restant = pid ? stockRestant(pid) : 0;
+        tdDispo.textContent = pid ? restant : "—";
+        tdDispo.style.color = (pid && qty > restant) ? "var(--marge)" : "var(--encre-clair)";
+        var surplusArt = pid ? Math.max(0, qty - restant) : 0;
+        tdAvoir.textContent = surplusArt > 0 ? surplusArt : "";
+      }
+      rafraichir();
+    }
+
+    selectProduit.addEventListener("change", function () {
+      var opt = selectProduit.options[selectProduit.selectedIndex];
+      if (opt && opt.value) {
+        // Vérifier si ce produit est déjà sur une autre ligne
+        var tbody = isKit ? elKitsBody : elArticlesBody;
+        var doublonTr = null;
+        tbody.querySelectorAll("tr[data-item-id]").forEach(function (autreTr) {
+          if (autreTr !== tr && autreTr.dataset.itemId === opt.value) doublonTr = autreTr;
+        });
+        if (doublonTr) {
+          alert("Cet article est déjà présent dans la liste. Modifiez la quantité sur la ligne existante.");
+          selectProduit.value = "";
+          delete tr.dataset.itemId;
+          tr.dataset.prix = "";
+          qteInput.removeAttribute("max");
+          majLigne();
+          return;
+        }
+        tr.dataset.itemId = opt.value;
+        tr.dataset.prix   = opt.dataset.prix;
+        var maxVal = isKit ? parseInt(opt.dataset.max, 10) : stockRestant(opt.value);
+        if (!isKit && maxVal !== undefined && maxVal !== null) {
+          qteInput.dataset.stockDisponible = maxVal;
+        }
+        if (isKit) majMaxArticles();
+      } else {
+        delete tr.dataset.itemId;
+        tr.dataset.prix = "";
+        qteInput.removeAttribute("max");
+        if (isKit) majMaxArticles();
+      }
+      majLigne();
+    });
+
+    qteInput.addEventListener("input", function () {
+      var v = parseInt(this.value, 10);
+      if (!isNaN(v) && v < 0) this.value = 0; // bloquer les négatifs seulement
+      majLigne();
+      if (isKit) majMaxArticles();
+    });
+
+    qteInput.addEventListener("blur", function () {
+      var v = parseInt(this.value, 10);
+      if (!isNaN(v) && v < 0) this.value = 0;
+      majLigne();
+      if (isKit) majMaxArticles();
+    });
+
+    btnSup.addEventListener("click", function () {
+      var tbody = isKit ? elKitsBody : elArticlesBody;
+      var vide  = isKit ? elKitsVide : elArticlesVide;
+      tr.remove();
+      if (!tbody.querySelectorAll("tr[data-row]").length) vide.style.display = "";
+      if (isKit) majMaxArticles();
+      rafraichir();
+    });
+
+    return { tr: tr, sel: selectProduit };
+  }
+
+  // ── Ajouter une ligne ─────────────────────────────────────────────────
+  function ajouterLigne(isKit) {
+    var tbody   = isKit ? elKitsBody : elArticlesBody;
+    var videTr  = isKit ? elKitsVide  : elArticlesVide;
+    var donnees = isKit ? KITS : ARTICLES;
+    var libVide = isKit ? "— Choisir un kit —" : "— Choisir un article —";
+
+    var selProduit = creerSelectProduit(
+      isKit ? "sel-kit" : "sel-article",
+      donnees,
+      libVide
+    );
+    var ligne = creerLigne(selProduit, isKit);
+
+    videTr.style.display = "none";
+    tbody.appendChild(ligne.tr);
+
+    // Activer le combobox si disponible (6+ options)
+    if (window.initCombobox) window.initCombobox(ligne.sel);
+
+    rafraichir();
+  }
+
+  document.getElementById("btn-ajouter-kit").addEventListener("click", function () {
+    ajouterLigne(true);
+  });
+  document.getElementById("btn-ajouter-article").addEventListener("click", function () {
+    ajouterLigne(false);
+  });
+
+  if (elRemise) elRemise.addEventListener("change", rafraichir);
+  if (elTelephone) elTelephone.addEventListener("input", rafraichir);
+  elMontantDonne.addEventListener("input", rafraichir);
+
+  // ── Envoi ─────────────────────────────────────────────────────────────
+  elValider.addEventListener("click", function () {
+    var kitsRows = Array.from(elKitsBody.querySelectorAll("tr[data-row][data-item-id]"));
+    var artRows  = Array.from(elArticlesBody.querySelectorAll("tr[data-row][data-item-id]"));
+    if ((!kitsRows.length && !artRows.length) || envoiEnCours) return;
+
+    envoiEnCours = true;
+    elValider.disabled    = true;
+    elLabel.textContent   = "Enregistrement…";
+    elMontant.textContent = "";
+
+    // Agréger les quantités par id (même id sur plusieurs lignes → somme)
+    var kitsMap = new Map();
+    kitsRows.forEach(function (tr) {
+      var id   = tr.dataset.itemId;
+      var q    = parseInt(tr.querySelector(".qte-input").value, 10) || 1;
+      var mode = tr.querySelector(".sel-mode").value;
+      // Si même kit sur plusieurs lignes, les regrouper (même mode assumé)
+      if (kitsMap.has(id)) {
+        var prev = kitsMap.get(id);
+        kitsMap.set(id, { q: prev.q + q, mode: prev.mode });
+      } else {
+        kitsMap.set(id, { q: q, mode: mode });
+      }
+    });
+
+    var artMap = new Map();
+    artRows.forEach(function (tr) {
+      var id   = tr.dataset.itemId;
+      var q    = parseInt(tr.querySelector(".qte-input").value, 10) || 1;
+      var mode = tr.querySelector(".sel-mode").value;
+      if (artMap.has(id)) {
+        var prev = artMap.get(id);
+        artMap.set(id, { q: prev.q + q, mode: prev.mode });
+      } else {
+        artMap.set(id, { q: q, mode: mode });
+      }
+    });
+
+    var _recu = parseFloat(elMontantDonne.value) || 0;
+    var payload = {
+      uuid: uuid,
+      remise_convention: !!(elRemise && elRemise.checked),
+      telephone: elTelephone ? elTelephone.value.trim() : "",
+      montant_recu: _recu > 0 ? _recu : null,
+      kits:   Array.from(kitsMap).map(function (e) { return { id: Number(e[0]), quantite: e[1].q, mode: e[1].mode }; }),
+      detail: Array.from(artMap).map(function (e)  { return { id: Number(e[0]), quantite: e[1].q, mode: e[1].mode }; }),
+    };
+
+    fetch("", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRFToken": (document.cookie.match(/csrftoken=([^;]+)/) || [])[1] || "",
+      },
+      body: JSON.stringify(payload),
+    })
+    .then(function (res) {
+      return res.json().then(function (data) {
+        if (!res.ok) throw new Error(data.erreur || "Enregistrement refusé.");
+        window.location.href = data.url_recu;
+      });
+    })
+    .catch(function (e) {
+      alert(e.message + "\n\nLa vente n'a pas été enregistrée. Réessayez.");
+      envoiEnCours = false;
+      elLabel.textContent = "Encaisser";
+      rafraichir();
+    });
+  });
+
+  ajouterLigne(true);
+  ajouterLigne(false);
+}());
+</script>
+{% endblock %}

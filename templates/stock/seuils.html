@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+{% block titre %}Seuils de stock — Administration{% endblock %}
+{% block lieu %}Administration › Seuils de stock{% endblock %}
+
+{% block contenu %}
+<div class="admin-entete">
+  <h1>Seuils de stock</h1>
+</div>
+
+<div class="barre-filtre">
+  {% if site %}
+  <div class="champ-recherche">
+    <input type="search" id="recherche" placeholder="Rechercher un produit…" autocomplete="off">
+  </div>
+  {% endif %}
+  <form method="get" style="display:contents">
+    <select name="site" data-no-combobox onchange="this.form.submit()" style="padding:8px 12px;border:1.5px solid var(--reglure);border-radius:var(--rayon);font:inherit;font-size:.88rem;background:var(--papier);color:var(--encre);cursor:pointer">
+      <option value="">— Choisir un site —</option>
+      {% for s in sites %}
+      <option value="{{ s.pk }}"{% if site_filtre == s.pk|stringformat:"s" %} selected{% endif %}>
+        {{ s.nom }}
+      </option>
+      {% endfor %}
+    </select>
+    <noscript><button type="submit" class="bouton-secondaire">Afficher</button></noscript>
+  </form>
+  {% if site %}<span class="compteur-resultats" id="compteur-resultats"></span>{% endif %}
+</div>
+
+{% if not site %}
+<p class="vide-liste">Sélectionnez un site pour afficher et paramétrer les seuils.</p>
+
+{% else %}
+<form method="post" id="form-seuils">
+  {% csrf_token %}
+  <input type="hidden" name="site_filtre" value="{{ site_filtre }}">
+
+  <table class="registre" id="tbl-seuils" style="margin-top:8px">
+    <thead>
+      <tr>
+        <th>Code</th>
+        <th>Produit</th>
+        <th class="nombre">En stock</th>
+        <th class="nombre" style="text-align:center">Mini</th>
+        <th class="nombre" style="text-align:center">Seuil d'alerte</th>
+        <th class="nombre" style="text-align:center">Max</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for produit, solde in rows %}
+      <tr class="{% if solde and solde.en_rupture %}ligne-rupture{% elif solde and solde.sous_seuil %}ligne-alerte{% endif %}">
+        <td><code style="font-family:monospace;font-weight:700;color:var(--accent)">{{ produit.code }}</code></td>
+        <td>{{ produit.designation }}</td>
+        <td class="nombre chiffre" style="font-weight:700;{% if solde and solde.en_rupture %}color:var(--marge){% elif solde and solde.sous_seuil %}color:var(--or){% endif %}">
+          {% if solde %}{{ solde.quantite }}{% else %}<span style="color:var(--encre-pale)">—</span>{% endif %}
+        </td>
+        <td class="nombre" style="text-align:center">
+          <input type="number" name="mini_{{ produit.pk }}"
+                 value="{% if solde %}{{ solde.stock_minimum|stringformat:"d" }}{% else %}0{% endif %}"
+                 min="0" autocomplete="off" class="seuil-input" aria-label="Mini {{ produit.code }}">
+        </td>
+        <td class="nombre" style="text-align:center">
+          <input type="number" name="seuil_{{ produit.pk }}"
+                 value="{% if solde %}{{ solde.stock_securite|stringformat:"d" }}{% else %}0{% endif %}"
+                 min="0" autocomplete="off" class="seuil-input" aria-label="Seuil {{ produit.code }}">
+        </td>
+        <td class="nombre" style="text-align:center">
+          <input type="number" name="maxi_{{ produit.pk }}"
+                 value="{% if solde %}{{ solde.stock_maximum|stringformat:"d" }}{% else %}0{% endif %}"
+                 min="0" autocomplete="off" class="seuil-input" aria-label="Maxi {{ produit.code }}">
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <p class="aucun-resultat" id="aucun-resultat">Aucun produit ne correspond à votre recherche.</p>
+
+  <div class="pied">
+    <div style="display:flex;gap:8px;align-items:center">
+      <a href="{% url 'admin_accueil' %}#produits" class="bouton-secondaire" style="min-width:180px;text-align:center">← Retour administration</a>
+      <button type="submit" name="enregistrer" class="bouton-primaire" style="min-width:180px;width:auto;padding-top:13px;padding-bottom:13px;font-size:.88rem">Enregistrer les seuils</button>
+    </div>
+  </div>
+</form>
+{% endif %}
+
+<style>
+.seuil-input {
+  width: 110px; padding: 6px 8px;
+  border: 1.5px solid var(--reglure); border-radius: var(--rayon);
+  font: inherit; font-size: .88rem; font-variant-numeric: tabular-nums;
+  text-align: right; color: var(--encre); background: var(--papier);
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+.seuil-input:focus {
+  outline: none; border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-clair);
+}
+.ligne-rupture td { background: var(--marge-clair); }
+.ligne-alerte td { background: var(--or-clair); }
+</style>
+{% endblock %}
+
+{% block scripts %}
+{% if site %}
+<script>
+initFiltre({ tableId: 'tbl-seuils', inputId: 'recherche' });
+
+(function () {
+  function v(inp) { return parseInt(inp.value, 10) || 0; }
+
+  function mark(inp, err) {
+    inp.style.borderColor = err ? 'var(--marge)' : '';
+    inp.style.boxShadow   = err ? '0 0 0 3px #fecaca' : '';
+  }
+
+  function validerLigne(tr) {
+    var mini  = tr.querySelector('[name^="mini_"]');
+    var seuil = tr.querySelector('[name^="seuil_"]');
+    var maxi  = tr.querySelector('[name^="maxi_"]');
+    if (!mini || !seuil || !maxi) return true;
+    var vM = v(mini), vS = v(seuil), vX = v(maxi);
+    var errS = vS < vM;
+    var errX = vS > 0 && vX <= vS;
+    mark(seuil, errS);
+    mark(maxi,  errX);
+    return !errS && !errX;
+  }
+
+  /* Validation au chargement — signale immédiatement les valeurs incohérentes */
+  document.querySelectorAll('#tbl-seuils tbody tr').forEach(validerLigne);
+
+  /* Délégation unique sur le tableau — couvre toutes les lignes sans exception */
+  document.getElementById('tbl-seuils').addEventListener('input', function (e) {
+    if (e.target.classList.contains('seuil-input')) {
+      validerLigne(e.target.closest('tr'));
+    }
+  });
+
+  document.getElementById('form-seuils').addEventListener('submit', function (e) {
+    var ok = true;
+    document.querySelectorAll('#tbl-seuils tbody tr').forEach(function (tr) {
+      if (!validerLigne(tr)) ok = false;
+    });
+    if (!ok) {
+      e.preventDefault();
+      alert('Corrigez les valeurs en rouge avant d\'enregistrer.\nRègle : Seuil d\'alerte ≥ Mini  |  Max > Seuil d\'alerte (strictement supérieur).');
+    }
+  });
+}());
+</script>
+{% endif %}
+{% endblock %}

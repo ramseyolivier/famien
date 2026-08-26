@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block titre %}Finances sorties — LEPAD{% endblock %}
+{% block lieu %}Finances — Sorties{% endblock %}
+
+{% block contenu %}
+<div class="admin-entete">
+  <h1>Finances · Sorties</h1>
+</div>
+
+<form method="get" class="finance-filtres">
+  <div class="filtre-champ">
+    <label for="fs-debut">Du</label>
+    <input type="date" id="fs-debut" name="debut" value="{{ filtres.debut }}">
+  </div>
+  <div class="filtre-champ">
+    <label for="fs-fin">Au</label>
+    <input type="date" id="fs-fin" name="fin" value="{{ filtres.fin }}">
+  </div>
+  <div class="filtre-champ">
+    <label for="fs-statut">Statut</label>
+    <select id="fs-statut" name="statut" data-no-combobox>
+      <option value="">Tous</option>
+      {% for code, libelle in statuts %}
+      <option value="{{ code }}"{% if filtres.statut == code %} selected{% endif %}>{{ libelle }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <button type="submit" class="bouton-secondaire" style="align-self:flex-end">Filtrer</button>
+  {% if filtres.debut or filtres.fin or filtres.statut %}
+  <a href="{% url 'finances_sorties' %}" class="bouton-secondaire" title="Réinitialiser" style="align-self:flex-end;min-width:0;padding:8px 12px">↺</a>
+  {% endif %}
+</form>
+
+<div class="hub-stats" style="margin-top:20px">
+  <div class="indicateur">
+    <div class="valeur chiffre">{{ total|floatformat:0 }}</div>
+    <div class="libelle">Total (F CFA)</div>
+  </div>
+</div>
+
+<div class="etiquette" style="margin-top:24px">
+  Dépenses{% if depenses|length == 100 %} — 100 premières{% endif %}
+</div>
+<table class="registre">
+  <thead>
+    <tr>
+      <th>Date</th>
+      <th>Site</th>
+      <th>Catégorie</th>
+      <th>Motif</th>
+      <th>Statut</th>
+      <th class="nombre">Montant</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for dep in depenses %}
+    <tr>
+      <td class="chiffre" style="white-space:nowrap">{{ dep.date_depense|date:"d/m/Y" }}</td>
+      <td>{{ dep.site.nom }}</td>
+      <td style="font-size:.85rem;color:var(--encre-clair)">{{ dep.categorie }}</td>
+      <td style="font-size:.85rem">{{ dep.motif|truncatechars:50 }}</td>
+      <td>
+        {% if dep.statut == "VALIDE" %}<span class="badge badge-actif">Validé</span>
+        {% elif dep.statut == "REJETE" %}<span class="badge" style="background:var(--marge);color:#fff">Rejeté</span>
+        {% elif dep.statut == "SOUMIS" %}<span class="badge" style="background:var(--or-clair);color:var(--or)">Soumis</span>
+        {% else %}<span class="badge" style="background:var(--craie);color:var(--encre-clair)">Brouillon</span>{% endif %}
+      </td>
+      <td class="nombre chiffre" style="font-weight:700">{{ dep.montant|floatformat:0 }}</td>
+      <td><a href="{% url 'depense_detail' dep.pk %}" class="bouton-secondaire">Détail</a></td>
+    </tr>
+  {% empty %}
+    <tr><td colspan="7" style="color:var(--encre-clair);text-align:center;padding:20px">Aucune dépense pour cette période.</td></tr>
+  {% endfor %}
+  </tbody>
+  {% if depenses %}
+  <tfoot>
+    <tr style="background:var(--craie);font-weight:700">
+      <td colspan="5">Total{% if depenses|length == 100 %} (100 premières lignes){% endif %}</td>
+      <td class="nombre chiffre">{{ total|floatformat:0 }}</td>
+      <td></td>
+    </tr>
+  </tfoot>
+  {% endif %}
+</table>
+
+<div style="margin-top:16px;display:flex;gap:8px">
+  <a href="{% url 'depense_nouvelle' %}" class="bouton-secondaire">+ Nouvelle dépense</a>
+  <a href="{% url 'hub_finances' %}" class="bouton-secondaire">← Retour aux finances</a>
+</div>
+{% endblock %}

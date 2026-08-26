@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% block titre %}Stock — Kits constructibles{% endblock %}
+{% block lieu %}Stock kits — {{ perimetre }}{% endblock %}
+
+{% block contenu %}
+<div class="admin-entete">
+  <h1 style="color:var(--valide)">Kits constructibles</h1>
+</div>
+
+<form method="get" class="finance-filtres">
+  {# ── Commune (DG / Manager uniquement) ── #}
+  {% if request.user.acces_national %}
+  <div class="filtre-champ filtre-champ--large">
+    <label>Commune</label>
+    <select name="commune" onchange="var s=this.form.querySelector('[name=ecole]');if(s)s.value='';this.form.submit()">
+      <option value="">Toutes</option>
+      {% for c in communes %}
+      <option value="{{ c.pk }}" {% if filtres.commune == c.pk|stringformat:"s" %}selected{% endif %}>{{ c.nom }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% endif %}
+
+  {# ── École (masqué si périmètre = une seule école) ── #}
+  {% if not ecole_unique %}
+  <div class="filtre-champ filtre-champ--large">
+    <label>École</label>
+    <select name="ecole" onchange="this.form.submit()">
+      <option value="">Toutes les écoles</option>
+      {% for e in toutes_ecoles %}
+      <option value="{{ e.pk }}" {% if filtres.ecole == e.pk|stringformat:"s" %}selected{% endif %}>{{ e.nom }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% endif %}
+
+  {# ── Niveau ── #}
+  <div class="filtre-champ">
+    <label>Niveau</label>
+    <select name="niveau" data-no-combobox onchange="var c=this.form.querySelector('[name=classe]');if(c)c.value='';this.form.submit()">
+      <option value="">Tous</option>
+      {% for code, libelle in niveaux %}
+      <option value="{{ code }}" {% if filtres.niveau == code %}selected{% endif %}>{{ libelle }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  {# ── Classe ── #}
+  <div class="filtre-champ filtre-champ--large">
+    <label>Classe</label>
+    <select name="classe" data-no-combobox onchange="this.form.submit()">
+      <option value="">Toutes</option>
+      {% for c in classes %}
+      <option value="{{ c.pk }}" {% if filtres.classe == c.pk|stringformat:"s" %}selected{% endif %}>{{ c.libelle }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  {# ── Constructibles ── #}
+  <div class="filtre-champ">
+    <label>Constructibles</label>
+    <select name="nc" data-no-combobox onchange="this.form.submit()">
+      <option value="">Tous</option>
+      <option value="1" {% if filtres.nc %}selected{% endif %}>Non constructibles</option>
+    </select>
+  </div>
+
+  <a href="{% url 'stock_kits' %}" class="bouton-secondaire" title="Réinitialiser" style="align-self:flex-end;min-width:0;padding:8px 12px">↺</a>
+  <a href="{% url 'export_kits' %}?commune={{ filtres.commune }}&ecole={{ filtres.ecole }}&niveau={{ filtres.niveau }}&classe={{ filtres.classe }}&nc={{ filtres.nc }}" class="bouton-secondaire" title="Exporter en Excel" style="align-self:flex-end;min-width:0;padding:8px 12px;margin-left:auto">⬇</a>
+</form>
+
+{% if donnees %}
+{% for item in donnees %}
+<div class="etiquette" style="margin-top:20px">{{ item.ecole.nom }}</div>
+<table class="registre" style="table-layout:fixed;width:100%">
+  <colgroup>
+    <col style="width:28%">
+    <col style="width:14%">
+    <col style="width:14%">
+    <col>
+  </colgroup>
+  <thead>
+    <tr>
+      <th>Niveau</th>
+      <th class="nombre">Prix vente</th>
+      <th class="nombre">Constructibles</th>
+      <th>Articles manquants</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for k in item.kits %}
+    <tr {% if k.constructibles == 0 %}style="background:var(--marge-clair)"{% endif %}>
+      <td style="white-space:nowrap">
+        <span class="badge badge-cahier">{{ k.kit.classe.libelle }}</span>
+        <span style="font-size:.78rem;color:var(--encre-pale);margin-left:4px">v{{ k.kit.version }}</span>
+      </td>
+      <td class="nombre chiffre">{{ k.kit.prix_vente|floatformat:0 }} F</td>
+      <td class="nombre">
+        <strong {% if k.constructibles == 0 %}style="color:var(--marge);font-size:1.1rem"
+                {% elif k.constructibles <= 5 %}style="color:var(--or)"
+                {% else %}style="color:var(--valide)"{% endif %}>
+          {{ k.constructibles }}
+        </strong>
+      </td>
+      <td style="font-size:.85rem">
+        {% if k.manquants %}
+          {% for code in k.manquants %}
+          <span class="badge" style="background:var(--marge-clair);color:var(--marge);margin-right:4px">{{ code }}</span>
+          {% endfor %}
+        {% else %}
+          <span style="color:var(--valide)">—</span>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endfor %}
+{% else %}
+<p class="vide-liste" style="margin-top:20px">Aucun kit actif sur votre périmètre, ou aucun stock enregistré.</p>
+{% endif %}
+
+<div style="margin-top:24px">
+  <a href="{% url 'stock_articles' %}" class="bouton-secondaire" style="background:var(--accent);color:#fff;border-color:var(--accent)">← Voir le stock par article</a>
+</div>
+
+<div class="pied">
+  <a href="{% url 'hub_stock' %}" class="bouton-secondaire" style="min-width:180px;text-align:center">← Retour stock</a>
+</div>
+{% endblock %}

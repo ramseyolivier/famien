@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block titre %}Livraison directe #{{ commande.pk }} — LEPAD{% endblock %}
+{% block lieu %}Livraisons magasins — Livraison directe{% endblock %}
+{% block fil_ariane %}{% endblock %}
+
+{% block contenu %}
+<div class="admin-entete">
+  <h1 style="color:var(--accent)">Livraison directe #{{ commande.pk }} — {{ commande.magasin.nom }}</h1>
+</div>
+
+<p style="font-size:.85rem;color:var(--encre-clair);margin-bottom:16px">
+  Magasin : <strong>{{ commande.magasin.nom }}</strong>
+  · Créé le {{ commande.cree_le|date:"d/m/Y à H:i" }} par {{ commande.cree_par.get_full_name|default:commande.cree_par.username }}
+  {% if commande.livree_par %} · Validé par {{ commande.livree_par.get_full_name|default:commande.livree_par.username }}{% endif %}
+</p>
+
+{% if observations %}
+<p style="color:var(--encre-clair);font-size:.9rem;margin-bottom:16px;font-style:italic">{{ observations }}</p>
+{% endif %}
+
+{% if commande.statut == "LIVREE" %}
+<div style="background:#d1fae5;padding:10px 14px;border-radius:6px;border-left:4px solid #10b981;margin-bottom:16px">
+  Livraison directe validée — stock dépôt réservé. En attente de réception par le gestionnaire.
+</div>
+{% elif commande.statut == "RECUE" %}
+<div style="background:#d1fae5;padding:10px 14px;border-radius:6px;border-left:4px solid #10b981;margin-bottom:16px">
+  Réceptionnée le {{ commande.recue_le|date:"d/m/Y à H:i" }}{% if commande.recue_par %} par {{ commande.recue_par.get_full_name|default:commande.recue_par.username }}{% endif %}.
+</div>
+{% endif %}
+
+<div class="etiquette">Articles</div>
+<table class="registre">
+  <thead>
+    <tr>
+      <th>Produit</th>
+      <th class="nombre">Livré</th>
+      {% if commande.statut == "RECUE" %}<th class="nombre">Reçu</th>{% endif %}
+    </tr>
+  </thead>
+  <tbody>
+  {% for l in lignes %}
+    <tr>
+      <td>{{ l.produit.code }} — {{ l.produit.designation }}</td>
+      <td class="nombre">{% if l.quantite_deja_livree %}{{ l.quantite_deja_livree }}{% else %}{{ l.quantite }}{% endif %}</td>
+      {% if commande.statut == "RECUE" %}
+      <td class="nombre" {% if l.quantite_deja_recue != l.quantite_deja_livree %}style="color:var(--marge);font-weight:700"{% endif %}>
+        {% if l.quantite_deja_recue %}{{ l.quantite_deja_recue }}{% else %}—{% endif %}
+      </td>
+      {% endif %}
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+<div style="margin-top:20px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+  {% if peut_valider %}
+  <form method="post" action="{% url 'livraison_directe_valider' commande.pk %}" style="display:inline">
+    {% csrf_token %}
+    <button type="submit" class="bouton-secondaire"
+            style="background:var(--valide);color:#fff;border-color:var(--valide)"
+            onclick="return confirm('Valider et réserver le stock dépôt ?')">Valider</button>
+  </form>
+  {% endif %}
+  {% if peut_supprimer %}
+  <form method="post" action="{% url 'livraison_directe_supprimer' commande.pk %}" style="display:inline">
+    {% csrf_token %}
+    <button type="submit" class="bouton-secondaire" style="color:var(--marge);border-color:var(--reglure)"
+            onclick="return confirm('Supprimer définitivement cette livraison directe ?')">Supprimer</button>
+  </form>
+  {% endif %}
+  {% if peut_modifier %}
+  <a href="{% url 'livraison_directe_modifier' commande.pk %}" class="bouton-secondaire">Modifier</a>
+  {% endif %}
+  <a href="{% url 'export_commande_magasin_detail' commande.pk %}" class="bouton-secondaire" style="margin-left:auto" title="Exporter en Excel">⬇</a>
+</div>
+
+<div style="margin-top:32px;padding-top:12px;border-top:var(--filet);display:flex;gap:10px;flex-wrap:wrap">
+  {% if est_dg_manager %}
+  <a href="{% url 'livraisons_magasin_liste' %}" class="bouton-secondaire"
+     style="background:var(--accent);color:#fff;border-color:var(--accent);min-width:180px;text-align:center">← Retour aux livraisons</a>
+  {% endif %}
+  <a href="{% url 'receptions_magasin_liste' %}" class="bouton-secondaire"
+     style="background:var(--accent);color:#fff;border-color:var(--accent);min-width:180px;text-align:center">← Retour aux réceptions</a>
+</div>
+
+<div class="pied">
+  <a href="{% url 'hub_approvisionnement' %}#magasins" class="bouton-secondaire" style="min-width:180px;text-align:center">← Retour approvisionnement</a>
+</div>
+{% endblock %}

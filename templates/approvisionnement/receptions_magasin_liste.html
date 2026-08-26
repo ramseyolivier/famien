@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block titre %}Réceptions magasin — LEPAD{% endblock %}
+{% block lieu %}Approvisionnement — Réceptions magasin{% endblock %}
+
+{% block contenu %}
+<div class="admin-entete">
+  <h1 style="color:#7c3aed">Réceptions magasin</h1>
+</div>
+
+<form method="get" class="finance-filtres" data-live-filter>
+  <div class="filtre-champ filtre-champ--large">
+    <label>Réception</label>
+    <select name="reception">
+      <option value="">Toutes</option>
+      {% for r in receptions_filtre %}
+      <option value="{{ r.pk }}" {% if filtre_reception == r.pk|stringformat:"s" %}selected{% endif %}>
+        {% if r.observations|slice:":4" == "[LD]" %}CDM{% else %}CM{% endif %} #{{ r.numero }} — {{ r.magasin.nom }}
+      </option>
+      {% endfor %}
+    </select>
+  </div>
+  {% if magasins %}
+  <div class="filtre-champ filtre-champ--large">
+    <label>Magasin</label>
+    <select name="magasin">
+      <option value="">Tous</option>
+      {% for m in magasins %}
+      <option value="{{ m.pk }}" {% if filtre_magasin == m.pk|stringformat:"s" %}selected{% endif %}>{{ m.nom }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% endif %}
+  <div class="filtre-champ">
+    <label>Statut</label>
+    <select name="statut" data-no-combobox>
+      <option value="">Tous</option>
+      <option value="EN_COURS"  {% if filtre_statut == "EN_COURS"  %}selected{% endif %}>En cours</option>
+      <option value="TERMINE"   {% if filtre_statut == "TERMINE"   %}selected{% endif %}>Terminé</option>
+    </select>
+  </div>
+  <div class="filtre-champ filtre-champ--date">
+    <label for="rm-debut">Du</label>
+    <input type="date" id="rm-debut" name="debut" value="{{ filtre_debut }}">
+  </div>
+  <div class="filtre-champ filtre-champ--date">
+    <label for="rm-fin">Au</label>
+    <input type="date" id="rm-fin" name="fin" value="{{ filtre_fin }}">
+  </div>
+  <a href="{% url 'receptions_magasin_liste' %}" class="bouton-secondaire" title="Réinitialiser" style="align-self:flex-end;min-width:0;padding:8px 12px">↺</a>
+  <a href="{% url 'export_receptions_magasin' %}{% if filtre_magasin or filtre_statut or filtre_debut or filtre_fin %}?{% if filtre_magasin %}magasin={{ filtre_magasin }}&{% endif %}{% if filtre_statut %}statut={{ filtre_statut }}&{% endif %}{% if filtre_debut %}debut={{ filtre_debut }}&{% endif %}{% if filtre_fin %}fin={{ filtre_fin }}{% endif %}{% endif %}" class="bouton-secondaire" style="margin-left:auto" title="Exporter en Excel" title="Exporter en Excel">⬇</a>
+</form>
+
+{% if receptions %}
+<table class="registre">
+  <thead>
+    <tr>
+      <th>Réception</th>
+      {% if not est_gestionnaire %}<th>Magasin</th>{% endif %}
+      <th>Type</th>
+      <th>Statut</th>
+      <th>Dernière mise à jour</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for c in receptions %}
+    {% with est_directe=c.observations|slice:":4" %}
+    <tr data-statut="{{ c.statut }}" data-date="{{ c.derniere_maj|date:'Y-m-d'|default:'' }}">
+      <td>
+        {% if est_directe == "[LD]" %}
+          <a href="{% url 'livraison_directe_detail' c.pk %}" style="text-decoration:none;font-weight:600">Réception CDM #{{ c.numero }}</a>
+        {% else %}
+          <a href="{% url 'commande_magasin_detail' c.pk %}" style="text-decoration:none;font-weight:600">Réception CM #{{ c.numero }}</a>
+        {% endif %}
+      </td>
+      {% if not est_gestionnaire %}<td style="font-size:.85rem">{{ c.magasin.nom }}</td>{% endif %}
+      <td style="font-size:.85rem;color:var(--encre-clair)">{% if est_directe == "[LD]" %}Directe{% else %}Commande{% endif %}</td>
+      <td>
+        {% if c.statut == "RECUE" or c.statut == "REJETEE" %}
+          <span class="badge" style="background:var(--valide);color:#fff">Terminé</span>
+        {% else %}
+          <span class="badge" style="background:var(--encre);color:#fff">En cours</span>
+        {% endif %}
+      </td>
+      <td style="white-space:nowrap;font-size:.85rem;color:var(--encre-clair)">{{ c.derniere_maj|date:"d/m/Y H:i"|default:"—" }}</td>
+      <td>
+        {% if c.statut == "LIVREE" and est_gestionnaire %}
+          <a href="{% url 'commande_magasin_reception' c.pk %}" class="bouton-secondaire"
+             style="font-size:.8rem;padding:5px 10px;background:var(--encre);color:#fff;border-color:var(--encre)">
+            Réceptionner
+          </a>
+        {% elif est_directe == "[LD]" %}
+          <a href="{% url 'livraison_directe_detail' c.pk %}" class="bouton-secondaire"
+             style="font-size:.8rem;padding:5px 10px">Détails</a>
+        {% else %}
+          <a href="{% url 'commande_magasin_detail' c.pk %}" class="bouton-secondaire"
+             style="font-size:.8rem;padding:5px 10px">Détails</a>
+        {% endif %}
+      </td>
+    </tr>
+    {% endwith %}
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="vide-liste">Aucune livraison en cours ou réceptionnée.</p>
+{% endif %}
+
+<div class="pied">
+  <a href="{% url 'hub_approvisionnement' %}#magasins" class="bouton-secondaire" style="min-width:180px;text-align:center">← Retour approvisionnement</a>
+</div>
+{% endblock %}

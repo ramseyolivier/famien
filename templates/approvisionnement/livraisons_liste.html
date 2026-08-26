@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+{% block titre %}Livraisons école — LEPAD{% endblock %}
+{% block lieu %}Approvisionnement — Livraisons école{% endblock %}
+
+{% block contenu %}
+<style>
+.bouton-secondaire:not(.bouton-detail){background:#374151!important;color:#fff!important;border-color:#374151!important}
+.pied .bouton-secondaire{background:#e07020!important;border-color:#e07020!important}
+.finance-filtres .bouton-secondaire{background:var(--papier)!important;color:var(--encre)!important;border-color:var(--reglure)!important}
+.admin-entete h1{color:var(--accent)}
+</style>
+<div class="admin-entete">
+  <h1>Livraisons école</h1>
+  {% if magasin %}
+  <a href="{% url 'livraison_directe_ecole' %}" class="bouton-secondaire">+ Livraison directe</a>
+  {% endif %}
+</div>
+
+<form method="get" class="finance-filtres" data-live-filter>
+  {% if communes %}
+  <div class="filtre-champ filtre-champ--large">
+    <label>Commune</label>
+    <select name="commune" id="liv-filtre-commune">
+      <option value="">Toutes</option>
+      {% for c in communes %}
+      <option value="{{ c.pk }}" {% if filtre_commune == c.pk|stringformat:"s" %}selected{% endif %}>{{ c.nom }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% endif %}
+  {% if ecoles %}
+  <div class="filtre-champ filtre-champ--large">
+    <label>École</label>
+    <select name="ecole" id="liv-filtre-ecole">
+      <option value="">Toutes</option>
+      {% for e in ecoles %}
+      <option value="{{ e.pk }}" {% if filtre_ecole == e.pk|stringformat:"s" %}selected{% endif %}>{{ e.nom }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% endif %}
+  <div class="filtre-champ">
+    <label>Statut</label>
+    <select name="statut" data-no-combobox>
+      <option value="">Tous</option>
+      <option value="VALIDEE"  {% if filtre_statut == "VALIDEE"  %}selected{% endif %}>À préparer</option>
+      <option value="LIVREE"   {% if filtre_statut == "LIVREE"   %}selected{% endif %}>En transit</option>
+      <option value="BROUILLON"{% if filtre_statut == "BROUILLON"%}selected{% endif %}>Brouillon (directe)</option>
+    </select>
+  </div>
+  <div class="filtre-champ filtre-champ--date">
+    <label for="lv-debut">Du</label>
+    <input type="date" id="lv-debut" name="debut" value="{{ filtre_debut }}">
+  </div>
+  <div class="filtre-champ filtre-champ--date">
+    <label for="lv-fin">Au</label>
+    <input type="date" id="lv-fin" name="fin" value="{{ filtre_fin }}">
+  </div>
+  <a href="{% url 'livraisons_liste' %}" class="bouton-secondaire" title="Réinitialiser" style="align-self:flex-end;min-width:0;padding:8px 12px">↺</a>
+  <a href="{% url 'export_livraisons_ecole' %}{% if filtre_commune or filtre_ecole or filtre_statut or filtre_debut or filtre_fin %}?{% if filtre_commune %}commune={{ filtre_commune }}&{% endif %}{% if filtre_ecole %}ecole={{ filtre_ecole }}&{% endif %}{% if filtre_statut %}statut={{ filtre_statut }}&{% endif %}{% if filtre_debut %}debut={{ filtre_debut }}&{% endif %}{% if filtre_fin %}fin={{ filtre_fin }}{% endif %}{% endif %}" class="bouton-secondaire" style="margin-left:auto;min-width:0;padding:8px 12px" title="Exporter en Excel">⬇</a>
+</form>
+
+{% if communes %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  var selCommune = document.getElementById('liv-filtre-commune');
+  var selEcole   = document.getElementById('liv-filtre-ecole');
+  if (!selCommune || !selEcole) return;
+
+  selCommune.addEventListener('change', function () {
+    selEcole.value = '';
+    if (selEcole._comboReset) selEcole._comboReset();
+    selCommune.closest('form').submit();
+  });
+});
+</script>
+{% endif %}
+
+{% if commandes %}
+<table class="registre">
+  <thead>
+    <tr>
+      <th>#</th>
+      <th>École</th>
+      <th>Type</th>
+      <th>Statut</th>
+      <th>Date</th>
+      <th class="nombre">Lignes</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for c in commandes %}
+    {% with est_directe=c.observations|slice:":5" %}
+    <tr data-date="{{ c.validee_le|date:'Y-m-d'|default:c.cree_le|date:'Y-m-d'|default:'' }}">
+      <td>
+        {% if supervision %}
+          <a href="{% url 'commande_ecole_detail' c.pk %}" style="text-decoration:none">{{ c.numero }}</a>
+        {% else %}
+          {{ c.numero }}
+        {% endif %}
+      </td>
+      <td><strong>{{ c.ecole.nom }}</strong></td>
+      <td style="font-size:.85rem;color:var(--encre-clair)">
+        {% if est_directe == "[LDE]" %}Directe{% else %}Commande{% endif %}
+      </td>
+      <td>
+        {% if c.statut == "BROUILLON" %}
+          <span class="badge" style="background:var(--encre-clair);color:#fff">Brouillon</span>
+        {% elif c.statut == "VALIDEE" %}
+          <span class="badge" style="background:#7c3aed;color:#fff">À préparer</span>
+        {% elif c.statut == "LIVREE" %}
+          <span class="badge" style="background:var(--or);color:#fff">En transit</span>
+        {% endif %}
+      </td>
+      <td style="white-space:nowrap;font-size:.85rem">{{ c.validee_le|default:c.cree_le|date:"d/m/Y"|default:"—" }}</td>
+      <td class="nombre">{{ c.lignes.count }}</td>
+      <td style="white-space:nowrap">
+        {% if est_directe == "[LDE]" and c.statut == "BROUILLON" %}
+          <a href="{% url 'livraison_directe_ecole_detail' c.pk %}" class="bouton-secondaire bouton-detail"
+             style="font-size:.8rem;padding:5px 10px">Détails</a>
+        {% elif c.statut == "LIVREE" %}
+          <a href="{% url 'commande_ecole_detail' c.pk %}" class="bouton-secondaire bouton-detail"
+             style="font-size:.8rem;padding:5px 10px;color:var(--or);border-color:var(--or)">En attente réception</a>
+        {% elif magasin %}
+          <a href="{% url 'livraison_traiter' c.pk %}" class="bouton-secondaire bouton-detail"
+             style="font-size:.8rem;padding:5px 10px;background:var(--encre)!important;color:#fff!important;border-color:var(--encre)!important">Traiter</a>
+        {% else %}
+          <a href="{% url 'commande_ecole_detail' c.pk %}" class="bouton-secondaire bouton-detail"
+             style="font-size:.8rem;padding:5px 10px">Détails</a>
+        {% endif %}
+      </td>
+    </tr>
+    {% endwith %}
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="vide-liste">Aucune livraison en attente.</p>
+{% endif %}
+
+<div class="pied">
+  <a href="{% url 'hub_approvisionnement' %}#ecole" class="bouton-secondaire" style="min-width:180px;text-align:center">← Retour approvisionnement</a>
+</div>
+{% endblock %}

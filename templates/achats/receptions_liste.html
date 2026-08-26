@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block titre %}Réceptions fournisseur — LEPAD{% endblock %}
+{% block lieu %}Achats — Réceptions fournisseur{% endblock %}
+{% block contenu %}
+<div class="admin-entete">
+  <h1 style="color:var(--marge)">Réceptions fournisseur</h1>
+  <a href="{% url 'reception_libre' %}" class="bouton-secondaire">+ Réception directe</a>
+</div>
+<form method="get" class="finance-filtres" data-live-filter>
+  <div class="filtre-champ filtre-champ--large">
+    <label>Réception</label>
+    <select name="reception">
+      <option value="">Toutes</option>
+      {% for r in receptions_filtre %}
+      <option value="{{ r.pk }}" {% if filtre_reception == r.pk|stringformat:"s" %}selected{% endif %}>{{ r.ref }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="filtre-champ">
+    <label>Statut</label>
+    <select name="statut" data-no-combobox>
+      <option value="">Tous</option>
+      <option value="BROUILLON" {% if filtre_statut == "BROUILLON" %}selected{% endif %}>Brouillon</option>
+      <option value="VALIDE" {% if filtre_statut == "VALIDE" %}selected{% endif %}>Validée</option>
+      <option value="CLOTURE" {% if filtre_statut == "CLOTURE" %}selected{% endif %}>Clôturée</option>
+    </select>
+  </div>
+  <div class="filtre-champ filtre-champ--date">
+    <label for="rf-debut">Du</label>
+    <input type="date" id="rf-debut" name="debut" value="{{ filtre_debut }}">
+  </div>
+  <div class="filtre-champ filtre-champ--date">
+    <label for="rf-fin">Au</label>
+    <input type="date" id="rf-fin" name="fin" value="{{ filtre_fin }}">
+  </div>
+  <a href="{% url 'receptions_liste' %}" class="bouton-secondaire" title="Réinitialiser" style="align-self:flex-end;min-width:0;padding:8px 12px">↺</a>
+  <a href="{% url 'export_receptions_fournisseur' %}{% if filtre_reception or filtre_statut or filtre_debut or filtre_fin %}?{% if filtre_reception %}reception={{ filtre_reception }}&{% endif %}{% if filtre_statut %}statut={{ filtre_statut }}&{% endif %}{% if filtre_debut %}debut={{ filtre_debut }}&{% endif %}{% if filtre_fin %}fin={{ filtre_fin }}{% endif %}{% endif %}" class="bouton-secondaire" style="margin-left:auto" title="Exporter en Excel" title="Exporter en Excel">⬇</a>
+</form>
+
+{% if receptions %}
+<table class="registre">
+  <thead>
+    <tr>
+      <th>Réception</th>
+      <th>Commande</th>
+      <th>Site</th>
+      <th>Statut</th>
+      <th>Date</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for r in receptions %}
+    <tr data-statut="{% if r.statut == 'CLOTURE' or r.commande_id and r.commande.statut == 'CLOTURE' %}CLOTURE{% else %}{{ r.statut }}{% endif %}" data-date="{{ r.cree_le|date:'Y-m-d' }}">
+      <td><a href="{% url 'reception_detail' r.pk %}" style="text-decoration:none">{{ r.reference }}</a></td>
+      <td>
+        {% if r.commande_id %}
+          <a href="{% url 'commande_detail' r.commande.pk %}" style="text-decoration:none">CF #{{ r.commande.pk }} — {{ r.commande.fournisseur.raison_sociale }}</a>
+        {% else %}
+          <span style="color:var(--encre-clair)">—</span>
+        {% endif %}
+      </td>
+      <td style="font-size:.85rem">{{ r.site_effectif.nom|default:"—" }}</td>
+      <td>
+        {% if r.statut == "CLOTURE" or r.commande_id and r.commande.statut == "CLOTURE" %}
+          <span class="badge" style="background:var(--encre);color:#fff">Clôturée</span>
+        {% elif r.statut == "VALIDE" %}
+          <span class="badge badge-actif">Validée</span>
+        {% else %}
+          <span class="badge" style="background:var(--or-clair);color:var(--or)">Brouillon</span>
+        {% endif %}
+      </td>
+      <td style="font-size:.85rem;color:var(--encre-clair)">{{ r.cree_le|date:"d/m/Y" }}</td>
+      <td>
+        <a href="{% url 'reception_detail' r.pk %}" class="bouton-secondaire">Détail</a>
+        {% if r.commande_id and r.commande_id in commandes_avec_valide and r.commande.statut != "CLOTURE" %}
+          <form method="post" action="{% url 'commande_cloturer' r.commande.pk %}" style="display:inline;margin-left:6px" onsubmit="return confirm('Clôturer la commande CF #{{ r.commande.pk }} ? Aucune nouvelle réception ne sera possible.')">{% csrf_token %}
+            <button type="submit" class="bouton-secondaire" style="background:var(--encre);color:#fff;border-color:var(--encre)">Clôturer</button>
+          </form>
+        {% endif %}
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="vide-liste">Aucune réception.</p>
+{% endif %}
+
+<div class="pied">
+  <a href="{% url 'hub_approvisionnement' %}#depot" class="bouton-secondaire" style="min-width:180px;text-align:center">← Retour approvisionnement</a>
+</div>
+{% endblock %}

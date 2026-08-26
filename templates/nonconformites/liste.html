@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block titre %}Non-conformités — LEPAD{% endblock %}
+{% block lieu %}Non-conformités{% endblock %}
+
+{% block contenu %}
+<div class="admin-entete">
+  <h1 style="color:var(--marge)">Non-conformités</h1>
+  <a href="{% url 'nc_nouveau' %}" class="bouton" style="background:var(--marge);border-color:var(--marge)">+ Déclarer</a>
+</div>
+
+<form method="get" class="finance-filtres" data-live-filter>
+  {% if sites_filtre %}
+  <div class="filtre-champ filtre-champ--large">
+    <label>Site</label>
+    <select name="site">
+      <option value="">Tous</option>
+      {% for s in sites_filtre %}
+      <option value="{{ s.site_id }}">{{ s.site__nom }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% endif %}
+  <div class="filtre-champ">
+    <label>Statut</label>
+    <select name="statut" data-no-combobox>
+      <option value="">Tous</option>
+      {% for code, libelle in statuts %}
+      <option value="{{ code }}">{{ libelle }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="filtre-champ filtre-champ--large">
+    <label>Type</label>
+    <select name="type" data-no-combobox>
+      <option value="">Tous</option>
+      {% for code, libelle in types %}
+      <option value="{{ code }}">{{ libelle }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="filtre-champ" style="width:130px;flex:0 0 130px">
+    <label for="nc-debut">Du</label>
+    <input type="date" id="nc-debut" name="debut" style="width:100%;box-sizing:border-box">
+  </div>
+  <div class="filtre-champ" style="width:130px;flex:0 0 130px">
+    <label for="nc-fin">Au</label>
+    <input type="date" id="nc-fin" name="fin" style="width:100%;box-sizing:border-box">
+  </div>
+  <a href="{% url 'nc_liste' %}" class="bouton-secondaire" title="Réinitialiser" style="align-self:flex-end;min-width:0;padding:8px 12px">↺</a>
+</form>
+
+{% if ncs %}
+<table class="registre" style="margin-top:8px">
+  <thead>
+    <tr>
+      <th>N°</th>
+      <th>Type</th>
+      <th>Objet</th>
+      <th>Déclarée par</th>
+      <th>Site</th>
+      <th>Date</th>
+      <th>Statut</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for nc in ncs %}
+    <tr data-statut="{{ nc.statut }}" data-type="{{ nc.type }}" data-site="{{ nc.site_id|default:'' }}" data-date="{{ nc.cree_le|date:'Y-m-d' }}">
+      <td style="font-size:.85rem;color:var(--encre-clair)">#{{ nc.pk }}</td>
+      <td><span class="badge" style="background:var(--marge-clair);color:var(--marge)">{{ nc.get_type_display }}</span></td>
+      <td><strong>{{ nc.titre }}</strong></td>
+      <td style="font-size:.82rem;color:var(--encre-clair)">{{ nc.cree_par.get_full_name|default:nc.cree_par.username }}</td>
+      <td style="font-size:.82rem;color:var(--encre-clair)">{{ nc.site.nom|default:"—" }}</td>
+      <td style="font-size:.82rem;white-space:nowrap">{{ nc.cree_le|date:"d/m/Y" }}</td>
+      <td>
+        {% if nc.statut == 'OUVERTE' %}<span class="badge" style="background:var(--marge);color:#fff">Ouverte</span>
+        {% elif nc.statut == 'EN_COURS' %}<span class="badge" style="background:var(--or);color:#fff">En cours</span>
+        {% elif nc.statut == 'CLOTUREE' %}<span class="badge" style="background:var(--valide);color:#fff">Clôturée</span>
+        {% else %}<span class="badge badge-inactif">Annulée</span>{% endif %}
+      </td>
+      <td><a href="{% url 'nc_detail' nc.pk %}" class="bouton-secondaire" style="font-size:.8rem;padding:5px 10px">Détail</a></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="vide-liste" style="margin-top:20px">Aucune non-conformité.</p>
+{% endif %}
+
+<div class="pied">
+  <a href="{% url 'hub_stock' %}#nonconformites" class="bouton-secondaire" style="min-width:180px;text-align:center">← Retour stock</a>
+</div>
+{% endblock %}

@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block titre %}Connexion — LEPAD{% endblock %}
+{% block contenu %}
+<div class="connexion">
+  <div class="marque" style="text-align:center">LEPAD</div>
+  {% if form.errors %}<div class="message error">Identifiant ou mot de passe incorrect.</div>{% endif %}
+  <form method="post">{% csrf_token %}
+    <input type="text" name="username" placeholder="Identifiant" autocomplete="username" autocapitalize="none" required autofocus>
+    <div style="position:relative;display:flex;align-items:center">
+      <input id="champ-mdp" type="password" name="password" placeholder="Mot de passe" autocomplete="current-password" required style="flex:1;padding-right:44px">
+      <button type="button" id="btn-voir-mdp" onclick="(function(){var c=document.getElementById('champ-mdp'),b=document.getElementById('btn-voir-mdp');c.type=c.type==='password'?'text':'password';b.textContent=c.type==='password'?'👁':'🙈';})()" style="position:absolute;right:0;top:0;bottom:0;width:44px;background:none;border:none;cursor:pointer;font-size:1.1rem;padding:0;display:flex;align-items:center;justify-content:center" aria-label="Afficher/masquer le mot de passe">👁</button>
+    </div>
+    <button type="submit" class="bouton-primaire">Se connecter</button>
+  </form>
+</div>
+{% endblock %}

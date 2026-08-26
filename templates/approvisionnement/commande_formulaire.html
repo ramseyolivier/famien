@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+{% block titre %}{% if commande %}Modifier la commande #{{ commande.numero }}{% else %}Nouvelle commande{% endif %} — LEPAD{% endblock %}
+{% block lieu %}Approvisionnement{% endblock %}
+
+{% block contenu %}
+<div class="admin-entete">
+  <h1 style="color:#6b7280">{% if commande %}Modifier la commande #{{ commande.numero }}{% else %}Nouvelle commande{% endif %}</h1>
+</div>
+
+{% if erreur_magasin %}
+<div class="message error">
+  Cette école n'est rattachée à aucun magasin. Contactez l'administration pour configurer le rattachement.
+</div>
+{% else %}
+
+<form method="post" id="form-commande">
+{% csrf_token %}
+
+<div style="margin:16px 0 12px">
+  <label style="display:block;font-size:.85rem;color:var(--encre-clair);margin-bottom:4px">École</label>
+  <span style="display:inline-block;padding:8px 10px;border:1px solid var(--reglure);border-radius:6px;font-size:.9rem;background:var(--craie);color:var(--encre)">{{ ecole.nom }}</span>
+</div>
+
+<div style="margin-bottom:16px">
+  <label style="display:block;font-size:.85rem;color:var(--encre-clair);margin-bottom:4px">Observations</label>
+  <input type="text" name="observations" maxlength="500"
+         value="{% if commande %}{{ commande.observations }}{% else %}{{ observations_init }}{% endif %}"
+         style="width:100%;padding:8px 10px;border:1px solid var(--reglure);border-radius:6px;font:inherit;box-sizing:border-box">
+</div>
+
+<div class="etiquette">Articles à commander</div>
+
+<div class="table-scroll">
+<table class="registre" style="min-width:680px">
+  <thead>
+    <tr>
+      <th style="min-width:280px">Produit</th>
+      <th class="nombre" style="width:120px">{{ magasin.nom }}</th>
+      <th class="nombre" style="width:110px">Qté proposée</th>
+      <th class="nombre" style="width:130px">Qté commandée</th>
+      <th style="width:40px"></th>
+    </tr>
+  </thead>
+  <tbody id="lignes-body"></tbody>
+</table>
+</div>
+<button type="button" class="bouton-secondaire" style="margin-top:8px" onclick="ajouterLigne()">+ Ligne</button>
+
+<div style="margin-top:20px;display:flex;gap:10px">
+  <button type="submit" class="bouton-secondaire"
+          style="background:var(--accent);color:#fff;border-color:var(--accent)">
+    {% if commande %}Enregistrer les modifications{% else %}Créer la commande{% endif %}
+  </button>
+  {% if commande %}
+  <a href="{% url 'commande_ecole_detail' commande.pk %}" class="bouton-secondaire" style="background:var(--papier);color:var(--encre);border-color:var(--reglure)">Annuler</a>
+  {% else %}
+  <a href="{% url 'commandes_ecole_liste' %}" class="bouton-secondaire" style="background:var(--papier);color:var(--encre);border-color:var(--reglure)">Annuler</a>
+  {% endif %}
+</div>
+</form>
+{% endif %}
+
+<div class="pied">
+  <a href="{% url 'hub_approvisionnement' %}#ecole" class="bouton-secondaire" style="min-width:180px;text-align:center">← Retour approvisionnement</a>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  var STOCK_MAGASIN   = {{ stock_magasin_json|safe|default:"{}" }};
+  var STOCK_ECOLE     = {{ stock_ecole_json|safe|default:"{}" }};
+  var STOCK_MAX_ECOLE = {{ stock_max_ecole_json|safe|default:"{}" }};
+  var LIGNES          = {{ lignes_existantes_json|safe|default:"[]" }};
+
+  var PRODUITS = [];
+  {% for p in produits %}
+  PRODUITS.push({pk:"{{ p.pk }}",code:"{{ p.code|escapejs }}",designation:"{{ p.designation|escapejs }}"});
+  {% endfor %}
+
+  function buildOptions(selectedPk) {
+    var html = '<option value="">— Choisir un produit —</option>';
+    PRODUITS.forEach(function(p) {
+      html += '<option value="' + p.pk + '"' + (String(p.pk) === String(selectedPk) ? ' selected' : '') + '>' + p.code + ' — ' + p.designation + '</option>';
+    });
+    return html;
+  }
+
+  var CTRL = 'padding:10px 8px;border:1.5px solid var(--reglure);border-radius:6px;font:inherit;font-size:.9rem;box-sizing:border-box;width:100%';
+
+  function getPropose(pid) {
+    if (!pid) return null;
+    var max = parseInt(STOCK_MAX_ECOLE[pid], 10);
+    if (!max || max <= 0) return null;
+    var actuel = parseInt(STOCK_ECOLE[pid] || 0, 10);
+    return Math.max(0, max - actuel);
+  }
+
+  function majInfos(select) {
+    var tr = select.closest('tr');
+    var pid = select.value;
+
+    var cellMagasin = tr.querySelector('.cell-magasin');
+    if (cellMagasin) {
+      var dStock = (pid && STOCK_MAGASIN[pid] !== undefined) ? parseInt(STOCK_MAGASIN[pid], 10) : null;
+      cellMagasin.textContent = dStock !== null ? dStock : '—';
+      cellMagasin.style.color = (dStock !== null && dStock === 0) ? 'var(--marge)' : 'var(--encre-clair)';
+    }
+
+    var cellPropose = tr.querySelector('.cell-propose');
+    var propose     = getPropose(pid);
+
+    if (cellPropose) {
+      if (propose !== null) {
+        cellPropose.textContent = propose;
+        cellPropose.style.color = propose === 0 ? 'var(--marge)' : '';
+        cellPropose.style.fontWeight = propose === 0 ? '700' : '';
+      } else {
+        cellPropose.textContent = '—';
+        cellPropose.style.color = '';
+        cellPropose.style.fontWeight = '';
+      }
+    }
+
+    // Pas de max sur l'input — la commande n'est pas bloquée par le stock magasin
+  }
+
+  window.ajouterLigne = function(pid, qty) {
+    var tbody = document.getElementById('lignes-body');
+    var tr = document.createElement('tr');
+    tr.innerHTML =
+      '<td><select name="produit_id" style="' + CTRL + '">' + buildOptions(pid) + '</select></td>' +
+      '<td class="nombre chiffre cell-magasin" style="color:var(--encre-clair)">—</td>' +
+      '<td class="nombre chiffre cell-propose">—</td>' +
+      '<td class="nombre"><input type="number" name="quantite" min="1" value="' + (qty !== undefined ? qty : 1) + '" style="' + CTRL + '"></td>' +
+      '<td style="text-align:center;vertical-align:middle"><button type="button" onclick="this.closest(\'tr\').remove()" style="background:none;border:none;color:var(--marge);cursor:pointer;font-size:1rem">✕</button></td>';
+
+    var sel = tr.querySelector('select');
+    var inp = tr.querySelector('input[name="quantite"]');
+    sel.addEventListener('change', function () { majInfos(this); });
+    document.getElementById('lignes-body').appendChild(tr);
+    if (window.initCombobox) window.initCombobox(sel);
+    majInfos(sel);
+    if (qty !== undefined) inp.value = qty;
+  };
+
+  if (LIGNES.length) {
+    LIGNES.forEach(function(l) { ajouterLigne(l.pid, l.qty); });
+  } else {
+    ajouterLigne();
+  }
+
+  document.getElementById('form-commande').addEventListener('submit', function(e) {
+    var selects = document.querySelectorAll('#lignes-body select[name="produit_id"]');
+    var vus = {};
+    for (var i = 0; i < selects.length; i++) {
+      var v = selects[i].value;
+      if (!v) {
+        e.preventDefault();
+        alert('Sélectionnez un produit pour chaque ligne ou supprimez les lignes vides.');
+        selects[i].focus();
+        return;
+      }
+      if (vus[v]) {
+        e.preventDefault();
+        alert('Le produit « ' + selects[i].options[selects[i].selectedIndex].text + ' » est sélectionné plusieurs fois.');
+        return;
+      }
+      vus[v] = true;
+    }
+  });
+}());
+</script>
+{% endblock %}

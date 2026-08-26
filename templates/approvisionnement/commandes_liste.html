@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% block titre %}Commandes école — LEPAD{% endblock %}
+{% block lieu %}Approvisionnement — Commandes école{% endblock %}
+
+{% block contenu %}
+<style>
+.bouton-secondaire:not(.bouton-detail){background:#374151!important;color:#fff!important;border-color:#374151!important}
+.pied .bouton-secondaire{background:#e07020!important;border-color:#e07020!important}
+.finance-filtres .bouton-secondaire{background:var(--papier)!important;color:var(--encre)!important;border-color:var(--reglure)!important}
+.admin-entete h1{color:#6b7280}
+</style>
+<div class="admin-entete">
+  <h1>Commandes école</h1>
+  {% if not supervision and request.user.profil == "CHEF_EQUIPE" %}
+  <a href="{% url 'commande_ecole_nouvelle' %}" class="bouton-secondaire">+ Nouvelle commande</a>
+  {% endif %}
+</div>
+
+<form method="get" class="finance-filtres" data-live-filter>
+  <div class="filtre-champ filtre-champ--large">
+    <label>Commande</label>
+    <select name="commande">
+      <option value="">Toutes</option>
+      {% for c in commandes_filtre %}
+      <option value="{{ c.pk }}" {% if filtre_commande == c.pk|stringformat:"s" %}selected{% endif %}>Commande #{{ c.numero }} — {{ c.ecole.nom }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% if communes %}
+  <div class="filtre-champ filtre-champ--large">
+    <label>Commune</label>
+    <select name="commune" id="filtre-commune">
+      <option value="">Toutes</option>
+      {% for c in communes %}
+      <option value="{{ c.pk }}" {% if filtre_commune == c.pk|stringformat:"s" %}selected{% endif %}>{{ c.nom }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% endif %}
+  {% if ecoles %}
+  <div class="filtre-champ filtre-champ--large">
+    <label>École</label>
+    <select name="ecole" id="filtre-ecole">
+      <option value="">Toutes</option>
+      {% for e in ecoles %}
+      <option value="{{ e.pk }}" data-commune="{{ e.commune_id }}" {% if filtre_ecole == e.pk|stringformat:"s" %}selected{% endif %}>{{ e.nom }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% endif %}
+  <div class="filtre-champ">
+    <label>Statut</label>
+    <select name="statut" data-no-combobox>
+      <option value="">Tous</option>
+      <option value="ATTENTE"  {% if filtre_statut == "ATTENTE"  %}selected{% endif %}>Validation attendue</option>
+      <option value="EN_COURS" {% if filtre_statut == "EN_COURS" %}selected{% endif %}>En cours</option>
+      <option value="TERMINE"  {% if filtre_statut == "TERMINE"  %}selected{% endif %}>Terminé</option>
+    </select>
+  </div>
+  {% if communes %}<div style="flex-basis:100%;height:0"></div>{% endif %}
+  <div class="filtre-champ filtre-champ--date">
+    <label for="ce-debut">Du</label>
+    <input type="date" id="ce-debut" name="debut" value="{{ filtre_debut }}">
+  </div>
+  <div class="filtre-champ filtre-champ--date">
+    <label for="ce-fin">Au</label>
+    <input type="date" id="ce-fin" name="fin" value="{{ filtre_fin }}">
+  </div>
+  <a href="{% url 'commandes_ecole_liste' %}" class="bouton-secondaire" title="Réinitialiser" style="align-self:flex-end;min-width:0;padding:8px 12px">↺</a>
+  <a href="{% url 'export_commandes_ecole' %}{% if filtre_commande or filtre_ecole or filtre_commune or filtre_statut or filtre_debut or filtre_fin %}?{% if filtre_commande %}commande={{ filtre_commande }}&{% endif %}{% if filtre_commune %}commune={{ filtre_commune }}&{% endif %}{% if filtre_ecole %}ecole={{ filtre_ecole }}&{% endif %}{% if filtre_statut %}statut={{ filtre_statut }}&{% endif %}{% if filtre_debut %}debut={{ filtre_debut }}&{% endif %}{% if filtre_fin %}fin={{ filtre_fin }}{% endif %}{% endif %}" class="bouton-secondaire" style="min-width:0;padding:8px 12px" title="Exporter en Excel">⬇</a>
+</form>
+
+{% if communes %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  var selCommune = document.getElementById('filtre-commune');
+  var selEcole   = document.getElementById('filtre-ecole');
+  if (!selCommune || !selEcole) return;
+
+  selCommune.addEventListener('change', function () {
+    selEcole.value = '';
+    if (selEcole._comboReset) selEcole._comboReset();
+    selCommune.closest('form').submit();
+  });
+});
+</script>
+{% endif %}
+
+{% if commandes %}
+<table class="registre">
+  <thead>
+    <tr>
+      <th>Commande</th>
+      <th>Statut</th>
+      <th>Date</th>
+      <th>Créé par</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for c in commandes %}
+    <tr data-statut="{{ c.statut }}" data-date="{{ c.cree_le|date:'Y-m-d' }}">
+      <td><a href="{% url 'commande_ecole_detail' c.pk %}" style="text-decoration:none">Commande #{{ c.numero }} — {{ c.ecole.nom }}</a></td>
+      <td>
+        {% if c.statut == "BROUILLON" or c.statut == "SOUMISE" %}
+          <span class="badge" style="background:var(--or-clair);color:var(--or)">Validation attendue</span>
+        {% elif c.statut == "VALIDEE" or c.statut == "LIVREE" %}
+          <span class="badge" style="background:var(--encre);color:#fff">En cours</span>
+        {% elif c.statut == "RECUE" or c.statut == "REJETEE" %}
+          <span class="badge" style="background:var(--valide);color:#fff">Terminé</span>
+        {% endif %}
+      </td>
+      <td style="font-size:.85rem;white-space:nowrap">{{ c.cree_le|date:"d/m/Y" }}</td>
+      <td style="font-size:.85rem">{{ c.cree_par.get_full_name|default:c.cree_par.username }}</td>
+      <td style="white-space:nowrap">
+        <a href="{% url 'commande_ecole_detail' c.pk %}" class="bouton-secondaire bouton-detail" style="font-size:.8rem;padding:5px 10px">Détail</a>
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="vide-liste">Aucune commande trouvée.</p>
+{% endif %}
+
+<div class="pied">
+  <a href="{% url 'hub_approvisionnement' %}#ecole" class="bouton-secondaire" style="min-width:180px;text-align:center">← Retour approvisionnement</a>
+</div>
+{% endblock %}

@@ -1,0 +1,1315 @@
+/*
+  Identité visuelle : le cahier d'écolier, version vivante.
+  Encre marine profonde, papier crème chaud, réglure bleutée, filet rouge.
+  Le rouge reste réservé aux ruptures et manques — jamais décoratif.
+*/
+
+@import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600;12..96,700;12..96,800&family=Raleway:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap');
+
+:root {
+  --encre:        #0d1b30;
+  --encre-clair:  #4a5c78;
+  --encre-pale:   #8898b0;
+  --papier:       #faf9f6;
+  --craie:        #f0f2f7;
+  --reglure:      #c8d8ec;
+  --marge:        #c8321e;
+  --marge-clair:  #fde8e5;
+  --valide:       #126940;
+  --valide-clair: #e0f5ec;
+  --accent:       #2255cc;
+  --accent-clair: #e8effe;
+  --or:           #c07c10;
+  --or-clair:     #fef4e0;
+
+  --pas:    4px;
+  --filet:  1px solid var(--reglure);
+  --rayon:  6px;
+  --rayon-lg: 10px;
+  --ombre-xs: 0 1px 2px rgba(13,27,48,.06);
+  --ombre:    0 2px 6px rgba(13,27,48,.08), 0 1px 2px rgba(13,27,48,.05);
+  --ombre-lg: 0 6px 20px rgba(13,27,48,.12), 0 2px 6px rgba(13,27,48,.07);
+  --transition: .15s ease;
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
+
+/* Centrage horizontal des chiffres dans tous les champs numériques. */
+input[type="number"] { text-align: center !important; }
+
+/* Flèches toujours visibles sur le champ QTÉ de la caisse. */
+.qte-input::-webkit-inner-spin-button { opacity: 1; }
+
+/* Article en rupture dans le combobox caisse. */
+.combo-option[data-rupture="1"]::after {
+  content: " — Rupture";
+  color: var(--marge);
+  font-weight: 600;
+}
+
+body {
+  margin: 0;
+  font-family: "Raleway", system-ui, -apple-system, sans-serif;
+  font-size: 17px;
+  line-height: 1.55;
+  color: var(--encre);
+  background: var(--papier);
+  transition: background-color .25s ease;
+}
+
+/* ─── Fonds de page par section ─────────────────────────────────────────── */
+
+.page-vente body        { background-color: #f0fdf4; }
+.page-ventes body       { background-color: #f0fdf4; }
+.page-livraison body    { background-color: #fffbeb; }
+.page-historique body   { background-color: #eff6ff; }
+.page-stock body        { background-color: #f0fdfa; }
+.page-transferts body   { background-color: #f0fdfa; }
+.page-inventaires body  { background-color: #fdf4ff; }
+.page-operations body   { background-color: #fff7ed; }
+.page-achats body       { background-color: #fff7ed; }
+.page-depenses body     { background-color: #fff1f2; }
+.page-admin body        { background-color: #f5f7ff; }
+
+/* ─── Illustration de section (gouttière gauche) ─────────────────────────── */
+
+.page-illustration {
+  display: none;               /* caché par défaut, révélé au-delà du breakpoint */
+}
+
+.illus { display: none; }      /* toutes cachées sauf celle de la section active */
+
+/* Ventes, historique, reçu */
+.page-vente      .illus-ventes,
+.page-ventes     .illus-ventes,
+.page-historique .illus-ventes  { display: block; color: #126940; }
+
+/* File de livraison */
+.page-livraison  .illus-livraison { display: block; color: #b45309; }
+
+/* Stock, transferts, inventaires */
+.page-stock      .illus-stock,
+.page-transferts .illus-stock,
+.page-inventaires .illus-stock { display: block; color: #0e7a70; }
+
+/* Opérations, achats, dépenses, NC */
+.page-operations .illus-operations,
+.page-achats     .illus-operations,
+.page-depenses   .illus-operations,
+.page-nc         .illus-operations { display: block; color: #92400e; }
+
+/* Pilotage / admin */
+.page-admin .illus-admin { display: block; color: #2255cc; }
+
+/* Affichage uniquement quand la gouttière est ≥ 120 px (viewport ≥ 1280 px) */
+@media (min-width: 1280px) {
+  .page-illustration {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: fixed;
+    left: 0;
+    top: 56px;           /* sous le bandeau */
+    bottom: 0;
+    width: calc(50vw - 528px);   /* demi-écran moins demi-enveloppe (520) moins gap (8) */
+    pointer-events: none;
+    overflow: hidden;
+    opacity: .18;
+  }
+}
+
+h1, h2, h3, .display {
+  font-family: "Bricolage Grotesque", "Public Sans", sans-serif;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  margin: 0;
+  line-height: 1.2;
+}
+h1 { font-size: 1.65rem; }
+h2 { font-size: 1.1rem; text-transform: uppercase; letter-spacing: .06em; font-weight: 600; }
+
+.chiffre { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+
+/* ─── Conteneur principal ────────────────────────────────────────────────── */
+
+.enveloppe {
+  max-width: 1040px; margin: 0 auto;
+  padding: 24px 24px 140px 40px;
+  position: relative;
+}
+
+/* Fil d'Ariane */
+.fil-ariane {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  font-size: .8rem;
+  color: var(--encre-clair);
+  margin-bottom: 14px;
+}
+.fil-ariane a {
+  color: var(--accent);
+  text-decoration: none;
+}
+.fil-ariane a:hover { text-decoration: underline; }
+.fil-ariane .sep { color: var(--reglure); }
+.fil-ariane [aria-current="page"] { color: var(--encre); font-weight: 600; }
+
+/* Filet de marge — signature cahier d'écolier */
+.enveloppe::before {
+  content: "";
+  position: absolute; top: 0; bottom: 0; left: 16px;
+  width: 2px;
+  background: linear-gradient(180deg, var(--marge) 0%, rgba(200,50,30,.08) 100%);
+  pointer-events: none;
+}
+
+/* ─── En-tête navigation (barre sombre pleine largeur) ───────────────────── */
+
+.bandeau {
+  position: sticky; top: 0; z-index: 100;
+  display: flex; align-items: center;
+  height: 56px;
+  background: var(--encre);
+  box-shadow: 0 1px 0 rgba(255,255,255,.07), 0 2px 16px rgba(13,27,48,.3);
+  gap: 0;
+}
+
+.bandeau-marque {
+  display: flex; flex-direction: row; align-items: center; gap: 10px;
+  padding: 0 16px;
+  border-right: 1px solid rgba(255,255,255,.1);
+  height: 100%;
+  flex-shrink: 0;
+  min-width: 0;
+}
+
+.bandeau-logo {
+  font-family: "Bricolage Grotesque", sans-serif;
+  font-weight: 800; font-size: .95rem; letter-spacing: -.03em;
+  color: #fff; line-height: 1.1;
+}
+
+.bandeau-contexte {
+  font-size: .58rem; color: rgba(255,255,255,.38);
+  text-transform: uppercase; letter-spacing: .16em; font-weight: 700;
+  line-height: 1; margin-top: 2px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  max-width: 200px;
+}
+
+.bandeau-nav {
+  display: flex; align-items: center; gap: 2px;
+  padding: 0 8px;
+  margin-left: auto;
+  height: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.bandeau-nav::-webkit-scrollbar { display: none; }
+
+.bandeau-nav .nav-pill {
+  display: inline-flex; align-items: center;
+  padding: 7px 14px; border-radius: 6px;
+  font-size: .82rem; font-weight: 600;
+  color: rgba(255,255,255,.6);
+  text-decoration: none; white-space: nowrap;
+  transition: background .12s, color .12s;
+  flex-shrink: 0;
+  height: 34px;
+}
+.bandeau-nav .nav-pill:hover { background: rgba(255,255,255,.12); color: #fff; }
+
+.bandeau-nav .nav-vendre {
+  background: rgba(21,128,61,.55);
+  color: rgba(255,255,255,.9);
+  margin-right: 8px;
+}
+.bandeau-nav .nav-vendre:hover { background: rgba(21,128,61,.8); color: #fff; }
+
+.bandeau-nav .nav-pill-admin {
+  background: var(--marge);
+  color: #fff;
+  margin-left: 8px;
+}
+.bandeau-nav .nav-pill-admin:hover { background: #a8281a; color: #fff; }
+
+/* Pill actif selon la section courante */
+.page-vente      .bandeau-nav .nav-vendre                      { background: rgba(21,128,61,.85); color: #fff; }
+.page-ventes     .bandeau-nav .nav-pill[href^="/ventes"]        { background: rgba(255,255,255,.16); color: #fff; }
+.page-livraison  .bandeau-nav .nav-pill[href^="/ventes"]        { background: rgba(255,255,255,.16); color: #fff; }
+.page-historique .bandeau-nav .nav-pill[href^="/ventes"]        { background: rgba(255,255,255,.16); color: #fff; }
+.page-stock      .bandeau-nav .nav-pill[href^="/stock"]         { background: rgba(255,255,255,.16); color: #fff; }
+.page-transferts .bandeau-nav .nav-pill[href^="/stock"]         { background: rgba(255,255,255,.16); color: #fff; }
+.page-inventaires .bandeau-nav .nav-pill[href^="/stock"]        { background: rgba(255,255,255,.16); color: #fff; }
+.page-operations  .bandeau-nav .nav-pill[href^="/operations"]   { background: rgba(255,255,255,.16); color: #fff; }
+.page-achats     .bandeau-nav .nav-pill[href^="/operations"]    { background: rgba(255,255,255,.16); color: #fff; }
+.page-depenses   .bandeau-nav .nav-pill[href^="/operations"]    { background: rgba(255,255,255,.16); color: #fff; }
+.page-nc         .bandeau-nav .nav-pill[href^="/operations"]    { background: rgba(255,255,255,.16); color: #fff; }
+.page-admin      .bandeau-nav .nav-pill[href^="/administration"] { background: rgba(255,255,255,.16); color: #fff; }
+.page-appro      .bandeau-nav .nav-pill[href^="/approvisionnement"] { background: rgba(255,255,255,.16); color: #fff; }
+.page-appro-depot .bandeau-nav .nav-pill[href^="/approvisionnement"] { background: rgba(255,255,255,.16); color: #fff; }
+.page-appro body { background-color: #eff6ff; }
+.page-appro-depot body { background-color: var(--papier); }
+
+.bandeau-outils {
+  display: flex; align-items: center; gap: 4px;
+  padding: 0 16px 0 8px;
+  border-left: 1px solid rgba(255,255,255,.1);
+  height: 100%;
+  flex-shrink: 0;
+}
+
+.bandeau-qui {
+  font-size: .72rem; color: rgba(255,255,255,.45);
+  max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  margin-right: 2px;
+}
+
+
+.bouton-deconnexion {
+  display: inline-block; text-decoration: none;
+  padding: 5px 11px;
+  font: inherit; font-size: .75rem; font-weight: 600;
+  background: rgba(255,255,255,.08);
+  color: rgba(255,255,255,.65);
+  border: 1px solid rgba(255,255,255,.14);
+  border-radius: 6px; cursor: pointer;
+  transition: all .12s;
+  white-space: nowrap;
+}
+.bouton-deconnexion:hover { background: var(--marge); border-color: var(--marge); color: #fff; }
+
+/* ─── Étiquette de section ──────────────────────────────────────────────── */
+
+.etiquette {
+  display: flex; align-items: center; gap: 10px;
+  margin: 24px 0 12px;
+  font-size: .7rem; text-transform: uppercase;
+  letter-spacing: .14em; font-weight: 700;
+  color: var(--encre-pale);
+}
+.etiquette::after {
+  content: ""; flex: 1; height: 1px;
+  background: linear-gradient(90deg, var(--reglure) 0%, transparent 100%);
+}
+
+/* ─── Kits : dos de cahiers ─────────────────────────────────────────────── */
+
+.rayon { display: grid; grid-template-columns: repeat(auto-fill, minmax(152px, 1fr)); gap: 10px; }
+
+.cahier {
+  position: relative; text-align: left; cursor: pointer;
+  background: var(--papier); border: var(--filet); border-left: 5px solid var(--encre);
+  border-radius: var(--rayon); padding: 14px 12px 12px; min-height: 110px;
+  font-family: inherit; color: inherit; width: 100%;
+  box-shadow: var(--ombre-xs);
+  transition: transform .1s ease, box-shadow .1s ease, border-left-color .1s ease;
+}
+.cahier:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--ombre);
+  border-left-color: var(--accent);
+}
+.cahier:active { transform: translateY(0); box-shadow: var(--ombre-xs); }
+.cahier:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.cahier .niveau {
+  font-family: "Bricolage Grotesque", sans-serif; font-weight: 800;
+  font-size: 1.85rem; line-height: 1; letter-spacing: -.04em; color: var(--encre);
+}
+.cahier .prix { margin-top: 10px; font-size: 1.05rem; font-weight: 700; color: var(--encre); }
+.cahier .dispo { margin-top: 4px; font-size: .72rem; color: var(--encre-pale); font-weight: 500; }
+.cahier .compteur {
+  position: absolute; top: 10px; right: 10px; min-width: 28px; height: 28px;
+  display: none; align-items: center; justify-content: center;
+  background: var(--accent); color: #fff; border-radius: 50%;
+  font-weight: 700; font-size: .88rem; box-shadow: 0 2px 6px rgba(34,85,204,.4);
+}
+.cahier[data-quantite]:not([data-quantite="0"]) .compteur { display: flex; }
+.cahier[data-quantite]:not([data-quantite="0"]) {
+  border-left-color: var(--valide);
+  background: linear-gradient(135deg, #f0f9f4 0%, var(--papier) 60%);
+}
+.cahier.rupture { border-left-color: var(--marge); opacity: .6; }
+.cahier.rupture .dispo { color: var(--marge); font-weight: 600; }
+
+.rayon-articles { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
+.rayon-articles .cahier { min-height: 90px; padding: 10px 10px 8px; }
+
+/* ─── Panier ────────────────────────────────────────────────────────────── */
+
+.panier {
+  border: var(--filet); border-radius: var(--rayon);
+  background: var(--craie); overflow: hidden;
+  box-shadow: var(--ombre-xs);
+}
+.panier .ligne {
+  display: flex; justify-content: space-between; gap: 10px;
+  padding: 10px 14px; border-bottom: 1px dashed var(--reglure); font-size: .92rem;
+  transition: background var(--transition);
+}
+.panier .ligne:last-child { border-bottom: 0; }
+.panier .ligne:hover { background: var(--accent-clair); }
+.panier .vide { padding: 18px 14px; color: var(--encre-pale); font-size: .88rem; text-align: center; }
+
+/* ─── Barre d'encaissement ──────────────────────────────────────────────── */
+
+.encaisser {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
+  background: var(--papier);
+  border-top: 2px solid var(--encre);
+  box-shadow: 0 -4px 20px rgba(13,27,48,.1);
+  padding: 0;
+}
+.encaisser .inner {
+  max-width: 1040px; margin: 0 auto;
+  padding: 12px 24px calc(12px + env(safe-area-inset-bottom)) 40px;
+}
+.modes { display: flex; gap: 8px; margin-bottom: 10px; }
+.modes button {
+  flex: 1; padding: 10px 6px; font: inherit; font-size: .82rem; cursor: pointer; font-weight: 500;
+  background: var(--papier); color: var(--encre-clair);
+  border: var(--filet); border-radius: var(--rayon);
+  transition: all var(--transition);
+}
+.modes button:hover { border-color: var(--accent-clair); background: var(--accent-clair); color: var(--accent); }
+.modes button[aria-pressed="true"] {
+  background: var(--encre); color: var(--papier);
+  border-color: var(--encre); font-weight: 700;
+  box-shadow: var(--ombre-xs);
+}
+.modes button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+/* ─── Boutons ───────────────────────────────────────────────────────────── */
+
+.bouton-primaire {
+  width: 100%; padding: 16px;
+  font-family: "Bricolage Grotesque", sans-serif;
+  font-size: 1.15rem; font-weight: 700; letter-spacing: -.01em;
+  color: #fff;
+  background: linear-gradient(135deg, var(--encre) 0%, #1a3060 100%);
+  border: 0; border-radius: var(--rayon); cursor: pointer;
+  box-shadow: 0 2px 8px rgba(13,27,48,.25);
+  transition: transform var(--transition), box-shadow var(--transition), background var(--transition);
+}
+.bouton-primaire:hover {
+  background: linear-gradient(135deg, var(--accent) 0%, #1a3060 100%);
+  box-shadow: 0 4px 14px rgba(34,85,204,.35);
+  transform: translateY(-1px);
+}
+.bouton-primaire:active { transform: translateY(0); box-shadow: var(--ombre-xs); }
+.bouton-primaire:disabled { background: var(--reglure); color: #8898b0; cursor: not-allowed; box-shadow: none; transform: none; }
+.bouton-primaire:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+#valider-montant { margin-left: 10px; font-size: 1.25em; font-weight: 800; letter-spacing: -.02em; }
+
+.bouton {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 9px 20px; font: inherit; font-size: .9rem; font-weight: 700; cursor: pointer;
+  background: var(--accent); color: #fff;
+  border: 0; border-radius: var(--rayon);
+  text-decoration: none;
+  box-shadow: 0 2px 6px rgba(34,85,204,.22);
+  transition: all var(--transition);
+}
+.bouton:hover { background: #1740a8; box-shadow: 0 4px 12px rgba(34,85,204,.3); transform: translateY(-1px); }
+.bouton:active { transform: translateY(0); }
+.bouton:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+
+.bouton-secondaire {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 9px 16px; font: inherit; font-size: .88rem; font-weight: 600; cursor: pointer;
+  background: var(--papier); color: var(--encre);
+  border: 1.5px solid var(--reglure); border-radius: var(--rayon);
+  text-decoration: none;
+  transition: all var(--transition);
+  box-shadow: var(--ombre-xs);
+}
+.bouton-secondaire:hover {
+  border-color: var(--accent); color: var(--accent);
+  background: var(--accent-clair);
+  box-shadow: var(--ombre);
+  transform: translateY(-1px);
+}
+.bouton-secondaire:active { transform: translateY(0); }
+.bouton-secondaire:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+/* ─── Fiches livraison ──────────────────────────────────────────────────── */
+
+.fiche {
+  border: var(--filet); border-left: 5px solid var(--encre);
+  border-radius: var(--rayon); padding: 14px 16px; margin-bottom: 12px;
+  background: var(--papier); box-shadow: var(--ombre-xs);
+  transition: box-shadow var(--transition), transform var(--transition);
+}
+.fiche:hover { box-shadow: var(--ombre); transform: translateX(2px); }
+.fiche.manque { border-left-color: var(--marge); background: var(--marge-clair); }
+.fiche .tete { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.fiche .num { font-family: "Bricolage Grotesque", sans-serif; font-weight: 700; font-size: 1.1rem; }
+.fiche .attente { font-size: .78rem; color: var(--encre-pale); }
+.fiche ul { margin: 8px 0 10px; padding-left: 20px; font-size: .9rem; }
+.fiche .absent { color: var(--marge); font-weight: 600; }
+
+/* ─── Tableau de bord indicateurs ───────────────────────────────────────── */
+
+.indicateurs { display: grid; grid-template-columns: repeat(auto-fit, minmax(165px, 1fr)); gap: 10px; }
+.indicateur {
+  border: var(--filet); border-top: 3px solid var(--reglure);
+  border-radius: var(--rayon); padding: 14px 16px;
+  background: var(--papier); box-shadow: var(--ombre-xs);
+  transition: transform var(--transition), box-shadow var(--transition), border-top-color var(--transition);
+}
+.indicateur:hover { transform: translateY(-2px); box-shadow: var(--ombre); }
+.indicateur a.indicateur, a.indicateur { text-decoration: none; color: inherit; display: block; }
+a.indicateur:hover { border-top-color: var(--accent); }
+a.indicateur:hover .valeur { color: var(--accent); }
+.indicateur .valeur {
+  font-family: "Bricolage Grotesque", sans-serif; font-weight: 800;
+  font-size: 1.8rem; letter-spacing: -.04em; line-height: 1;
+  transition: color var(--transition);
+}
+.indicateur .libelle {
+  font-size: .7rem; text-transform: uppercase; letter-spacing: .1em;
+  color: var(--encre-pale); margin-top: 6px; font-weight: 600;
+}
+.indicateur.alerte { border-top-color: var(--marge); }
+.indicateur.alerte .valeur { color: var(--marge); }
+.indicateur.valide { border-top-color: var(--valide); }
+.indicateur.valide .valeur { color: var(--valide); }
+
+/* ─── Tableaux ──────────────────────────────────────────────────────────── */
+
+table.registre { width: 100%; border-collapse: collapse; font-size: .9rem; }
+table.registre thead tr {
+  background: linear-gradient(180deg, var(--craie) 0%, rgba(240,242,247,0) 100%);
+}
+table.registre th {
+  text-align: left; font-size: .68rem; text-transform: uppercase;
+  letter-spacing: .1em; color: var(--encre-pale); font-weight: 700;
+  border-bottom: 2px solid var(--encre); padding: 10px 10px 8px;
+  vertical-align: bottom; white-space: nowrap;
+}
+table.registre td {
+  padding: 10px; border-bottom: 1px solid var(--reglure);
+  vertical-align: middle;
+  transition: background var(--transition);
+}
+table.registre tbody tr:hover td { background: var(--accent-clair); }
+table.registre tbody tr:hover td:first-child { border-left: 3px solid var(--accent); padding-left: 7px; }
+td.nombre, th.nombre { text-align: right; font-variant-numeric: tabular-nums; }
+table.registre th.nombre { text-align: right; }
+
+/* ─── Badges ────────────────────────────────────────────────────────────── */
+
+.badge {
+  display: inline-flex; align-items: center;
+  padding: 2px 8px; border-radius: 20px;
+  font-size: .72rem; font-weight: 700; letter-spacing: .04em;
+  text-transform: uppercase; white-space: nowrap;
+}
+.badge-actif   { background: var(--valide-clair); color: var(--valide); }
+.badge-inactif { background: var(--craie); color: var(--encre-pale); }
+.badge-rupture { background: var(--marge-clair); color: var(--marge); }
+.badge-dg      { background: #1e1b4b; color: #c7d2fe; }
+.badge-manager { background: #312e81; color: #e0e7ff; }
+.badge-superviseur { background: var(--or-clair); color: var(--or); }
+.badge-gest    { background: var(--accent-clair); color: var(--accent); }
+.badge-chef    { background: #f0fdf4; color: #166534; }
+.badge-commercial { background: var(--craie); color: var(--encre-clair); }
+.badge-cahier  { background: var(--accent-clair); color: var(--accent); }
+.badge-materiel { background: var(--or-clair); color: var(--or); }
+.badge-livre   { background: var(--valide-clair); color: var(--valide); }
+
+/* ─── Messages ──────────────────────────────────────────────────────────── */
+
+.message {
+  padding: 12px 16px; border-radius: var(--rayon); margin-bottom: 12px;
+  font-size: .9rem; border-left: 4px solid; font-weight: 500;
+  box-shadow: var(--ombre-xs);
+}
+.message.success { border-color: var(--valide); background: var(--valide-clair); color: #0a4427; }
+.message.error, .message.warning { border-color: var(--marge); background: var(--marge-clair); color: #7a1a0f; }
+.message.info { border-color: var(--accent); background: var(--accent-clair); color: #0e2a7a; }
+
+/* ─── Combobox (select filtrable) ───────────────────────────────────────── */
+
+.combo { display: block; }
+
+.combo-saisie {
+  width: 100%;
+  padding: 10px 36px 10px 12px;
+  border: 1.5px solid var(--reglure);
+  border-radius: var(--rayon);
+  font: inherit; font-size: 1rem;
+  color: var(--encre);
+  background: white;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='%238898b0' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 11px center;
+  transition: border-color var(--transition), box-shadow var(--transition);
+  cursor: text;
+  box-sizing: border-box;
+}
+.combo-saisie:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-clair);
+}
+.combo-saisie::placeholder { color: var(--encre-pale); }
+
+/* Liste : position:fixed, top/left/width injectés par JS */
+.combo-liste {
+  position: fixed;
+  z-index: 9999;
+  max-height: 280px;
+  overflow-y: auto;
+  background: white;
+  border: 1.5px solid var(--reglure);
+  border-radius: var(--rayon);
+  box-shadow: 0 8px 24px rgba(0,0,0,.14), 0 2px 6px rgba(0,0,0,.08);
+  list-style: none;
+  margin: 0; padding: 4px 0;
+}
+.combo-liste[hidden] { display: none; }
+
+.combo-option {
+  padding: 10px 14px;
+  cursor: pointer;
+  font-size: .92rem;
+  line-height: 1.4;
+  transition: background var(--transition);
+  color: var(--encre);
+}
+.combo-option:hover,
+.combo-option.combo-actif {
+  background: var(--accent-clair);
+  color: var(--accent);
+}
+.combo-option--disabled {
+  color: var(--encre-pale);
+  cursor: not-allowed;
+}
+.combo-option--disabled:hover { background: none; color: var(--encre-pale); }
+.combo-option mark {
+  background: none;
+  color: var(--accent);
+  font-weight: 700;
+}
+.combo-vide {
+  padding: 10px 14px;
+  font-size: .88rem;
+  color: var(--encre-pale);
+  font-style: italic;
+}
+
+/* ─── Connexion ─────────────────────────────────────────────────────────── */
+
+.connexion {
+  max-width: 360px; margin: 10vh auto;
+  padding: 32px; background: var(--papier);
+  border: var(--filet); border-radius: var(--rayon-lg);
+  box-shadow: var(--ombre-lg);
+}
+.connexion input {
+  width: 100%; padding: 13px 14px; font: inherit; margin-bottom: 12px;
+  border: 1.5px solid var(--reglure); border-radius: var(--rayon);
+  background: var(--craie); color: var(--encre);
+  transition: border-color var(--transition), background var(--transition);
+}
+.connexion input:focus { outline: none; border-color: var(--accent); background: var(--papier); }
+.connexion .marque {
+  font-family: "Bricolage Grotesque", sans-serif; font-weight: 800;
+  font-size: 2.2rem; letter-spacing: -.05em;
+  background: linear-gradient(135deg, var(--encre) 0%, var(--accent) 130%);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+  margin-bottom: 24px; display: block;
+}
+
+.pied { margin-top: 32px; padding-top: 12px; border-top: var(--filet); font-size: .75rem; color: var(--encre-pale); }
+.pied .bouton-secondaire { background:#e07020; color:#fff; border-color:#e07020; }
+.pied .bouton-secondaire:hover { background:#c45f10; border-color:#c45f10; }
+
+/* ─── Barre de recherche et filtres ─────────────────────────────────────── */
+
+.barre-filtre {
+  display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+  margin: 14px 0 4px; padding: 12px 14px;
+  background: var(--craie); border: var(--filet); border-radius: var(--rayon);
+}
+.barre-filtre .champ-recherche {
+  position: relative; flex: 1 1 200px;
+}
+.barre-filtre .champ-recherche::before {
+  content: "⌕";
+  position: absolute; left: 11px; top: 50%; transform: translateY(-50%);
+  font-size: 1.1rem; color: var(--encre-pale); pointer-events: none;
+  font-style: normal;
+}
+.barre-filtre input[type="search"],
+.barre-filtre input[type="text"] {
+  width: 100%; padding: 9px 12px 9px 32px;
+  border: 1.5px solid var(--reglure); border-radius: 20px;
+  font: inherit; font-size: .9rem; background: var(--papier); color: var(--encre);
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+.barre-filtre input:focus {
+  outline: none; border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(34,85,204,.12);
+}
+.barre-filtre select {
+  padding: 9px 12px; border: 1.5px solid var(--reglure); border-radius: var(--rayon);
+  font: inherit; font-size: .85rem; background: var(--papier); color: var(--encre);
+  cursor: pointer; transition: border-color var(--transition);
+}
+.barre-filtre select:focus { outline: none; border-color: var(--accent); }
+.barre-filtre select:hover { border-color: var(--accent-clair); }
+.compteur-resultats {
+  font-size: .78rem; color: var(--encre-pale); font-weight: 600;
+  padding: 4px 8px; background: var(--papier);
+  border-radius: 20px; border: var(--filet); white-space: nowrap;
+}
+.aucun-resultat {
+  text-align: center; padding: 32px 16px;
+  color: var(--encre-pale); font-size: .9rem;
+  display: none;
+}
+.aucun-resultat.visible { display: block; }
+
+/* ─── Module Administration ──────────────────────────────────────────────── */
+
+.admin-entete {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap; margin-top: 20px; margin-bottom: 6px;
+}
+.admin-raccourcis { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+
+/* ─── Sections colorées du tableau de bord administration ───────────────── */
+.admin-section {
+  border-radius: calc(var(--rayon) + 2px);
+  padding: 18px 20px 16px;
+  margin-top: 20px;
+  border-left: 5px solid transparent;
+  scroll-margin-top: 72px;
+}
+.admin-section .etiquette { margin-top: 0; }
+
+.admin-section--produits {
+  background: #fffbeb;
+  border-left-color: #f59e0b;
+}
+.admin-section--produits .etiquette { color: #92400e; }
+.admin-section--produits .etiquette::after { background: linear-gradient(90deg, #f59e0b55 0%, transparent 100%); }
+.admin-section--produits a.indicateur:hover { border-top-color: #f59e0b; }
+.admin-section--produits a.indicateur:hover .valeur { color: #d97706; }
+
+.admin-section--zone {
+  background: #f0fdf4;
+  border-left-color: #10b981;
+}
+.admin-section--zone .etiquette { color: #065f46; }
+.admin-section--zone .etiquette::after { background: linear-gradient(90deg, #10b98155 0%, transparent 100%); }
+.admin-section--zone a.indicateur:hover { border-top-color: #10b981; }
+.admin-section--zone a.indicateur:hover .valeur { color: #059669; }
+
+.admin-section--acces {
+  background: #eef2ff;
+  border-left-color: #6366f1;
+}
+.admin-section--acces .etiquette { color: #3730a3; }
+.admin-section--acces .etiquette::after { background: linear-gradient(90deg, #6366f155 0%, transparent 100%); }
+.admin-section--acces a.indicateur:hover { border-top-color: #6366f1; }
+.admin-section--acces a.indicateur:hover .valeur { color: #4f46e5; }
+
+.admin-section--tarifs {
+  background: #ecfeff;
+  border-left-color: #06b6d4;
+}
+.admin-section--tarifs .etiquette { color: #164e63; }
+.admin-section--tarifs .etiquette::after { background: linear-gradient(90deg, #06b6d455 0%, transparent 100%); }
+.admin-section--tarifs a.indicateur:hover { border-top-color: #06b6d4; }
+.admin-section--tarifs a.indicateur:hover .valeur { color: #0891b2; }
+
+/* Formulaires */
+.formulaire { max-width: 640px; margin-top: 18px; }
+.champ { margin-bottom: 16px; }
+.champ label {
+  display: block; font-size: .75rem; text-transform: uppercase;
+  letter-spacing: .08em; color: var(--encre-clair); font-weight: 700;
+  margin-bottom: 6px;
+}
+.champ input[type="text"],
+.champ input[type="number"],
+.champ input[type="password"],
+.champ input[type="email"],
+.champ select,
+.champ textarea {
+  width: 100%; padding: 11px 12px; font: inherit; font-size: .95rem;
+  border: 1.5px solid var(--reglure); border-radius: var(--rayon);
+  background: var(--papier); color: var(--encre);
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+.champ input:focus,
+.champ select:focus,
+.champ textarea:focus {
+  outline: none; border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(34,85,204,.12);
+}
+.champ input:hover:not(:focus),
+.champ select:hover:not(:focus) { border-color: var(--encre-pale); }
+.champ-checkbox { display: flex; align-items: center; gap: 10px; }
+.champ-checkbox input[type="checkbox"] {
+  width: 18px; height: 18px; cursor: pointer; accent-color: var(--accent);
+}
+.champ-checkbox label { margin: 0; text-transform: none; font-size: .92rem; font-weight: 400; color: var(--encre); }
+.aide-champ { margin: 5px 0 0; font-size: .78rem; color: var(--encre-pale); }
+.erreur-champ { margin: 5px 0 0; font-size: .82rem; color: var(--marge); font-weight: 600; }
+
+.actions-formulaire {
+  display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+  margin-top: 24px; padding-top: 18px;
+  border-top: var(--filet);
+}
+.actions-formulaire .bouton-primaire { width: auto; padding: 11px 24px; font-size: 1rem; }
+
+/* Liens d'action dans les tableaux */
+.lien-action {
+  font-size: .8rem; color: var(--encre-pale); text-decoration: none;
+  margin-left: 8px; padding: 3px 8px; border-radius: var(--rayon);
+  font-weight: 500; transition: all var(--transition);
+}
+.lien-action:hover { background: var(--accent-clair); color: var(--accent); }
+.lien-action.lien-danger:hover { background: var(--marge-clair); color: var(--marge); }
+.lien-bouton {
+  background: none; border: 0; padding: 3px 8px; border-radius: var(--rayon);
+  font: inherit; font-size: .8rem; font-weight: 500; cursor: pointer; color: var(--encre-pale);
+  transition: all var(--transition);
+}
+.lien-bouton:hover { background: var(--accent-clair); color: var(--accent); }
+.lien-bouton.lien-danger:hover { background: var(--marge-clair); color: var(--marge); }
+
+.icone-action {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; border-radius: var(--rayon);
+  color: var(--encre-pale); text-decoration: none;
+  background: none; border: 0; font: inherit; cursor: pointer;
+  transition: all var(--transition);
+  vertical-align: middle; margin-left: 4px;
+}
+.icone-action:hover { background: var(--accent-clair); color: var(--accent); }
+.icone-action.icone-danger:hover { background: var(--marge-clair); color: var(--marge); }
+
+.bouton-tarif {
+  display: inline-flex; align-items: center;
+  padding: 3px 10px; border-radius: var(--rayon);
+  font-size: .75rem; font-weight: 700; text-decoration: none;
+  letter-spacing: .04em; text-transform: uppercase;
+  background: var(--valide-clair); color: var(--valide);
+  border: 1.5px solid var(--valide);
+  transition: all var(--transition); vertical-align: middle; margin-right: 4px;
+}
+.bouton-tarif:hover { background: var(--valide); color: #fff; }
+
+.bouton-danger {
+  padding: 8px 16px; font: inherit; font-size: .88rem; font-weight: 600; cursor: pointer;
+  background: var(--marge); color: #fff; border: 0; border-radius: var(--rayon);
+  box-shadow: 0 2px 6px rgba(200,50,30,.3);
+  transition: all var(--transition);
+}
+.bouton-danger:hover { background: #a82010; box-shadow: 0 4px 12px rgba(200,50,30,.4); transform: translateY(-1px); }
+
+.vide-liste {
+  color: var(--encre-pale); font-size: .9rem; margin-top: 24px;
+  text-align: center; padding: 32px;
+  border: 2px dashed var(--reglure); border-radius: var(--rayon);
+}
+.vide-liste a { color: var(--accent); text-decoration: none; font-weight: 600; }
+
+/* Composition de kit */
+.kit-ligne { margin-bottom: 8px; }
+.kit-ligne-inner {
+  display: flex; gap: 10px; align-items: flex-end;
+  border: 1.5px solid var(--reglure); border-radius: var(--rayon);
+  padding: 10px 12px; background: var(--craie);
+  transition: border-color var(--transition), background var(--transition);
+}
+.kit-ligne-inner:focus-within { border-color: var(--accent); background: var(--accent-clair); }
+.kit-ligne-inner .champ { margin-bottom: 0; }
+.bouton-retirer {
+  background: none; border: 1.5px solid var(--reglure); border-radius: var(--rayon);
+  padding: 6px 10px; font-size: .8rem; cursor: pointer; color: var(--encre-pale);
+  flex-shrink: 0; align-self: flex-end; height: 40px;
+  transition: all var(--transition);
+}
+.bouton-retirer:hover { background: var(--marge-clair); border-color: var(--marge); color: var(--marge); }
+.kit-calcul {
+  display: flex; gap: 16px; flex-wrap: wrap;
+  font-size: .88rem; color: var(--encre-clair); font-weight: 500;
+  padding: 10px 14px; margin-bottom: 12px;
+  background: linear-gradient(135deg, var(--accent-clair) 0%, var(--craie) 100%);
+  border: 1.5px solid var(--reglure); border-radius: var(--rayon);
+}
+.kit-calcul strong { color: var(--encre); font-weight: 700; }
+.kit-info-lecture {
+  display: flex; gap: 20px; flex-wrap: wrap;
+  padding: 12px 14px; background: var(--or-clair);
+  border: 1.5px solid #f0d090; border-radius: var(--rayon);
+  margin-bottom: 16px; font-size: .92rem; font-weight: 500; color: #6b4400;
+}
+
+td.rupture { color: var(--marge); font-weight: 700; }
+
+/* ─── Fiche verte (NC clôturée, inventaire validé) ──────────────────────── */
+.fiche.vert { border-left-color: var(--valide); background: var(--valide-clair); }
+
+/* ─── Bordure d'accentuation (notification non lue) ─────────────────────── */
+.fiche.accent-border { border-left-color: var(--accent); }
+
+/* ─── Cloche de notifications ────────────────────────────────────────────── */
+.notif-cloche {
+  position: relative;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 34px; height: 34px;
+  border-radius: 6px;
+  text-decoration: none; font-size: .95rem;
+  color: rgba(255,255,255,.65);
+  transition: background .12s, color .12s;
+}
+.notif-cloche:hover { background: rgba(255,255,255,.12); color: #fff; }
+.notif-badge {
+  position: absolute; top: 2px; right: 2px;
+  min-width: 15px; height: 15px; padding: 0 3px;
+  background: var(--marge); color: #fff;
+  font-size: .6rem; font-weight: 700; border-radius: 8px;
+  display: flex; align-items: center; justify-content: center; line-height: 1;
+}
+
+/* ─── Groupe de champs formulaire ────────────────────────────────────────── */
+.groupe-champ { margin-bottom: 16px; }
+.groupe-champ .etiquette { display: block; margin-bottom: 4px; }
+
+/* ─── Pages hub — grille de navigation ──────────────────────────────────── */
+
+.hub-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.hub-grille {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.hub-carte {
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 18px 20px;
+  background: var(--papier);
+  border: 1.5px solid var(--reglure);
+  border-radius: var(--rayon-lg);
+  text-decoration: none; color: var(--encre);
+  box-shadow: var(--ombre-xs);
+  transition: all .14s ease;
+  min-height: 100px;
+}
+.hub-carte:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--ombre-lg);
+  border-color: var(--accent);
+}
+.hub-carte:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+.hub-carte-icone {
+  display: flex; align-items: center; justify-content: center;
+  width: 40px; height: 40px;
+  background: var(--craie); border-radius: var(--rayon);
+  color: var(--encre); flex-shrink: 0;
+}
+.hub-carte-titre {
+  font-family: "Bricolage Grotesque", sans-serif;
+  font-weight: 700; font-size: .98rem; color: var(--encre);
+}
+.hub-carte-desc {
+  font-size: .8rem; color: var(--encre-clair); line-height: 1.4;
+  margin-top: auto;
+}
+.hub-carte-badge {
+  display: inline-flex; align-items: center;
+  padding: 2px 8px; border-radius: 20px;
+  font-size: .68rem; font-weight: 700;
+  background: var(--marge-clair); color: var(--marge);
+  align-self: flex-start; margin-top: 2px;
+}
+.hub-carte-badge.neutre { background: var(--craie); color: var(--encre-pale); }
+.hub-carte-badge.ok { background: var(--valide-clair); color: var(--valide); }
+
+.hub-carte-principale {
+  background: var(--accent); border-color: var(--accent);
+  box-shadow: 0 4px 12px rgba(34,85,204,.22);
+}
+.hub-carte-principale .hub-carte-titre,
+.hub-carte-principale .hub-carte-desc { color: rgba(255,255,255,.92); }
+.hub-carte-principale .hub-carte-icone {
+  background: rgba(255,255,255,.18); color: #fff;
+}
+.hub-carte-principale:hover { background: #1740a8; border-color: #1740a8; }
+
+.hub-carte-alerte { background: #fff1f2; border-color: #fca5a5; }
+.hub-carte-alerte:hover { background: #ffe4e6; border-color: #f87171; }
+.hub-carte-alerte .hub-carte-icone { background: #fee2e2; color: var(--marge); }
+
+.hub-section { margin-top: 28px; }
+.hub-section-titre {
+  font-size: .68rem; text-transform: uppercase; letter-spacing: .14em;
+  color: var(--encre-pale); font-weight: 700;
+  margin-bottom: 10px; padding-bottom: 8px;
+  border-bottom: 1px solid var(--reglure);
+}
+
+.hub-section--couleur {
+  border-radius: calc(var(--rayon) + 2px);
+  padding: 18px 20px 16px;
+  margin-top: 20px;
+  border-left: 5px solid transparent;
+  scroll-margin-top: 72px;
+}
+.hub-section--achats {
+  background: #fff7ed;
+  border-left-color: #f97316;
+}
+.hub-section--achats .hub-section-titre { color: #7c2d12; border-bottom-color: #fed7aa; }
+.hub-section--magasin {
+  background: #eff6ff;
+  border-left-color: #3b82f6;
+}
+.hub-section--magasin .hub-section-titre { color: #1e3a5f; border-bottom-color: #bfdbfe; }
+.hub-section--ecole {
+  background: #f0fdf4;
+  border-left-color: #10b981;
+}
+.hub-section--ecole .hub-section-titre { color: #065f46; border-bottom-color: #a7f3d0; }
+
+/* ─── Finance filtres ────────────────────────────────────────────────────── */
+.finance-filtres {
+  display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end;
+  background: var(--craie); border: 1px solid var(--reglure);
+  border-radius: var(--rayon); padding: 14px 16px; margin-bottom: 18px;
+}
+.filtre-champ { display: flex; flex-direction: column; gap: 5px; }
+.filtre-champ--large { flex: 1 1 190px; min-width: 0; }
+.filtre-champ--date  { flex: 0 0 148px; }
+.filtre-champ label {
+  font-size: .70rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .08em; color: var(--encre-pale); white-space: nowrap;
+}
+.filtre-champ select,
+.filtre-champ input[type="date"],
+.filtre-champ input[type="search"],
+.filtre-champ input[type="text"] {
+  -webkit-appearance: none; -moz-appearance: none; appearance: none;
+  height: 38px; padding: 0 12px;
+  border: 1.5px solid var(--reglure); border-radius: var(--rayon);
+  font: inherit; font-size: .88rem; color: var(--encre);
+  background: #fff; width: 100%; box-sizing: border-box;
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+.filtre-champ select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='%238898b0' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 10px center;
+  padding-right: 30px; cursor: pointer;
+}
+.filtre-champ input[type="date"] { padding: 0 8px; cursor: pointer; }
+.filtre-champ select:focus,
+.filtre-champ input[type="date"]:focus,
+.filtre-champ input[type="search"]:focus,
+.filtre-champ input[type="text"]:focus {
+  outline: none; border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(34,85,204,.10);
+}
+.filtre-champ .combo-saisie {
+  height: 38px; padding: 0 36px 0 12px; font-size: .88rem;
+}
+.filtre-champ select:hover:not(:focus),
+.filtre-champ input[type="date"]:hover:not(:focus),
+.filtre-champ input[type="search"]:hover:not(:focus),
+.filtre-champ input[type="text"]:hover:not(:focus) { border-color: var(--encre-pale); }
+.finance-filtres .bouton-secondaire { height: 38px; padding: 0 16px; align-self: flex-end; }
+tfoot tr td { border-top: 2px solid var(--reglure); }
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}
+
+/* ─── Responsivité mobile ───────────────────────────────────────────────── */
+
+/* Enveloppe permettant le scroll horizontal des tableaux trop larges */
+.table-scroll {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+@media (max-width: 640px) {
+
+  /* ── Formulaires de commande (école et magasin) : card par ligne produit ── */
+
+  table#lignes { display: block; }
+  table#lignes thead { display: none; }
+  table#lignes tbody { display: block; }
+
+  table#lignes tr.ligne-commande {
+    display: block;
+    border: 1px solid var(--reglure);
+    border-radius: var(--rayon);
+    margin-bottom: 12px;
+    padding: 12px;
+    background: var(--papier);
+    box-shadow: var(--ombre-xs);
+  }
+
+  /* Toutes les cellules en bloc par défaut */
+  table#lignes tr.ligne-commande td {
+    display: block;
+    border: none;
+    padding: 0;
+    text-align: left;
+  }
+
+  /* Produit : pleine largeur avec marge en bas */
+  table#lignes tr.ligne-commande td:first-child { margin-bottom: 10px; }
+
+  /* Select et combobox : pleine largeur */
+  table#lignes tr.ligne-commande td:first-child select,
+  table#lignes tr.ligne-commande td:first-child .combo,
+  table#lignes tr.ligne-commande td:first-child .combo-saisie {
+    width: 100% !important;
+    min-height: 48px !important;
+    font-size: 1rem !important;
+  }
+
+  /* Ligne dispo + qté + suppression : côte à côte */
+  table#lignes tr.ligne-commande td:not(:first-child) {
+    display: inline-block;
+    vertical-align: middle;
+    margin-right: 8px;
+  }
+
+  /* Label "Dispo" implicite devant le chiffre */
+  table#lignes .dispo-affichage::before,
+  table#lignes .stock-cell::before {
+    content: 'Dispo : ';
+    font-size: .75rem;
+    color: var(--encre-pale);
+    display: block;
+    line-height: 1;
+    margin-bottom: 2px;
+  }
+
+  /* Input quantité : plus grand et lisible */
+  table#lignes tr.ligne-commande input[type="number"] {
+    width: 90px !important;
+    min-height: 48px !important;
+    font-size: 1.1rem !important;
+    padding: 8px !important;
+    text-align: center !important;
+  }
+
+  /* ── Tableaux de saisie (livraison / réception) ── */
+
+  /* Inputs numériques : taille agrandie pour être lisibles */
+  table.registre input[type="number"] {
+    min-width: 80px !important;
+    width: 80px !important;
+    font-size: 1.05rem !important;
+    min-height: 48px !important;
+    padding: 8px 6px !important;
+    text-align: center !important;
+  }
+
+  /* Champs texte (motif d'écart) */
+  table.registre input[type="text"] {
+    font-size: .95rem !important;
+    min-height: 48px !important;
+    padding: 10px 8px !important;
+  }
+
+  /* Réduire le padding des cellules pour gagner de la place */
+  table.registre td,
+  table.registre th { padding: 8px 6px; }
+
+}
+
+/* ── Hamburger ───────────────────────────────────────────────────────────── */
+.hamburger {
+  display: flex; flex-direction: column; justify-content: center;
+  gap: 5px; width: 36px; height: 36px; padding: 6px;
+  background: none; border: none; cursor: pointer; border-radius: var(--rayon);
+  flex-shrink: 0;
+}
+.hamburger span {
+  display: block; height: 2px; width: 100%;
+  background: #fff; border-radius: 2px;
+  transition: transform .25s, opacity .25s;
+}
+.hamburger:hover { background: rgba(255,255,255,.12); }
+.hamburger[aria-expanded="true"] span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
+.hamburger[aria-expanded="true"] span:nth-child(2) { opacity: 0; }
+.hamburger[aria-expanded="true"] span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
+
+/* ── Overlay ─────────────────────────────────────────────────────────────── */
+.sidebar-overlay {
+  display: none; position: fixed; inset: 0; z-index: 199;
+  background: transparent;
+}
+.sidebar-overlay.actif { display: block; }
+
+/* ── Sidebar ─────────────────────────────────────────────────────────────── */
+.sidebar {
+  position: fixed; top: 0; left: 0; bottom: 0; z-index: 200;
+  width: 280px;
+  background: var(--encre);
+  display: flex; flex-direction: column;
+  transform: translateX(-100%);
+  transition: transform .28s cubic-bezier(.4,0,.2,1);
+  overflow: hidden;
+}
+.sidebar.ouvert { transform: translateX(0); }
+
+.sidebar-entete {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 16px; height: 56px; flex-shrink: 0;
+  border-bottom: 1px solid rgba(255,255,255,.1);
+}
+.sidebar-logo {
+  font-family: 'Bricolage Grotesque', sans-serif;
+  font-size: 1.15rem; font-weight: 800;
+  color: #fff; letter-spacing: .04em;
+}
+.sidebar-fermer {
+  background: none; border: none; cursor: pointer; color: rgba(255,255,255,.6);
+  padding: 6px; border-radius: var(--rayon); display: flex; align-items: center;
+  transition: color .15s, background .15s;
+}
+.sidebar-fermer:hover { color: #fff; background: rgba(255,255,255,.1); }
+
+.sidebar-corps {
+  flex: 1; overflow-y: auto; padding: 12px 0 16px;
+  scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.15) transparent;
+}
+.sidebar-corps::-webkit-scrollbar { width: 4px; }
+.sidebar-corps::-webkit-scrollbar-thumb { background: rgba(255,255,255,.15); border-radius: 4px; }
+
+.sidebar-section {
+  margin-bottom: 4px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(255,255,255,.07);
+}
+.sidebar-section:last-of-type { border-bottom: none; }
+
+.sidebar-section-titre {
+  padding: 10px 20px 4px;
+  font-size: .65rem; font-weight: 700; letter-spacing: .1em;
+  text-transform: uppercase; color: rgba(255,255,255,.4);
+}
+.sidebar-sous-titre {
+  padding: 8px 20px 2px 32px;
+  font-size: .62rem; font-weight: 700; letter-spacing: .08em;
+  text-transform: uppercase; color: rgba(255,255,255,.3);
+}
+.sidebar-lien {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 20px; font-size: .88rem; color: rgba(255,255,255,.75);
+  text-decoration: none; border-radius: 0;
+  transition: background .15s, color .15s;
+  border-left: 3px solid transparent;
+}
+.sidebar-lien:hover, .sidebar-lien:focus {
+  background: rgba(255,255,255,.08); color: #fff;
+  border-left-color: var(--accent);
+}
+.sidebar-lien-principal {
+  font-weight: 600; color: #fff;
+  background: rgba(34,85,204,.35);
+  border-left-color: var(--accent);
+}
+.sidebar-lien-principal:hover { background: rgba(34,85,204,.5); }
+.sidebar-lien-sous { padding-left: 36px; font-size: .84rem; }
+
+.sidebar-pied {
+  margin: 8px 12px 0; padding: 14px 12px;
+  border-top: 1px solid rgba(255,255,255,.1);
+  display: flex; flex-direction: column; gap: 10px;
+}
+.sidebar-qui {
+  font-size: .82rem; color: rgba(255,255,255,.5); font-weight: 500;
+}
+.sidebar-deconnexion {
+  display: block; text-decoration: none;
+  background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.15);
+  color: rgba(255,255,255,.7); font: inherit; font-size: .82rem;
+  padding: 7px 14px; border-radius: var(--rayon); cursor: pointer;
+  transition: background .15s, color .15s; text-align: left; width: 100%;
+  box-sizing: border-box;
+}
+.sidebar-deconnexion:hover { background: rgba(255,255,255,.15); color: #fff; }
+
+/* ── Tables caisse : scroll horizontal sur mobile ────────────────────────── */
+.table-caisse-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+/* ── Colonne Avoir : cachée par défaut, visible si la table a .avec-avoir ── */
+#tbl-kits th.col-avoir-th, #tbl-kits td.col-avoir,
+#tbl-articles th.col-avoir-th, #tbl-articles td.col-avoir {
+  max-width: 0;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  overflow: hidden;
+  white-space: nowrap;
+}
+#tbl-kits.avec-avoir th.col-avoir-th, #tbl-kits.avec-avoir td.col-avoir,
+#tbl-articles.avec-avoir th.col-avoir-th, #tbl-articles.avec-avoir td.col-avoir {
+  max-width: 70px;
+  padding-left: 10px !important;
+  padding-right: 10px !important;
+  overflow: visible;
+}
+
+
+/* ── Tables caisse : réduction proportionnelle sur mobile ────────────────── */
+@media (max-width: 640px) {
+  #tbl-kits, #tbl-articles { table-layout: fixed !important; }
+
+  /* Largeurs réduites (override les inline styles des th) */
+  #tbl-kits th:nth-child(2), #tbl-articles th:nth-child(2) { width: 75px !important; }  /* Mode  */
+  #tbl-kits th:nth-child(3), #tbl-articles th:nth-child(3) { width: 52px !important; }  /* Qté   */
+  #tbl-kits th:nth-child(4), #tbl-articles th:nth-child(4) { width: 44px !important; }  /* Dispo */
+  #tbl-kits th:nth-child(5), #tbl-articles th:nth-child(5) { width: 44px !important; }  /* Avoir */
+  #tbl-kits th:nth-child(6), #tbl-articles th:nth-child(6) { width: 65px !important; }  /* Total */
+  #tbl-kits th:nth-child(7), #tbl-articles th:nth-child(7) { width: 26px !important; }  /* ×     */
+
+  /* Padding et police réduits dans toutes les cellules */
+  #tbl-kits td, #tbl-kits th,
+  #tbl-articles td, #tbl-articles th { padding: 5px 3px !important; font-size: .74rem !important; }
+
+  /* Input quantité : annuler les règles génériques trop larges */
+  #tbl-kits .qte-input, #tbl-articles .qte-input {
+    min-width: 0 !important; width: 100% !important;
+    min-height: 44px !important; padding: 4px 2px !important;
+    font-size: .82rem !important;
+  }
+
+  /* Select mode */
+  #tbl-kits .sel-mode, #tbl-articles .sel-mode {
+    padding: 5px 1px !important; font-size: .72rem !important; min-height: 44px !important;
+  }
+
+  /* Combobox kit/article */
+  #tbl-kits .combo-saisie, #tbl-articles .combo-saisie {
+    padding: 6px 22px 6px 5px !important; font-size: .74rem !important; min-height: 44px !important;
+  }
+
+  /* Première colonne : tronquer si trop long */
+  #tbl-kits td:first-child, #tbl-articles td:first-child { overflow: hidden; }
+}

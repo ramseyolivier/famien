@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block titre %}INV-{{ inventaire.pk }} — LEPAD{% endblock %}
+{% block lieu %}Inventaires — Détail{% endblock %}
+
+{% block contenu %}
+<div class="admin-entete">
+  <h1>INV-{{ inventaire.pk }} — {{ inventaire.site.nom }}</h1>
+  <span style="font-size:1rem;color:var(--accent);font-weight:600">{{ inventaire.cree_le|date:"d/m/Y" }}</span>
+</div>
+
+<div style="display:flex;gap:24px;flex-wrap:wrap;margin-bottom:20px;font-size:.88rem;color:var(--encre-clair)">
+  <span>Créé par <strong style="color:var(--encre)">{{ inventaire.cree_par.get_full_name|default:inventaire.cree_par.username }}</strong></span>
+  {% if inventaire.valide_le %}
+  <span>Validé le <strong style="color:var(--encre)">{{ inventaire.valide_le|date:"d/m/Y H:i" }}</strong> par <strong style="color:var(--encre)">{{ inventaire.valide_par.get_full_name|default:"—" }}</strong></span>
+  {% endif %}
+  <span>Statut :
+    {% if inventaire.statut == "VALIDE" %}
+      <span class="badge badge-actif">{{ inventaire.get_statut_display }}</span>
+    {% elif inventaire.statut == "ANNULE" %}
+      <span class="badge" style="background:var(--encre-clair);color:#fff">{{ inventaire.get_statut_display }}</span>
+    {% else %}
+      <span class="badge" style="background:var(--or-clair);color:var(--or)">{{ inventaire.get_statut_display }}</span>
+    {% endif %}
+  </span>
+</div>
+
+<table class="registre">
+  <thead>
+    <tr>
+      <th>Désignation</th>
+      <th class="nombre">Théorique</th>
+      <th class="nombre">Physique</th>
+      <th class="nombre">Écart</th>
+      <th>Commentaire</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for l in lignes %}
+    <tr {% if l.ecart != 0 %}style="background:{% if l.ecart < 0 %}var(--marge-clair){% else %}var(--valide-clair){% endif %}"{% endif %}>
+      <td>{{ l.produit.designation }}</td>
+      <td class="nombre chiffre">{{ l.quantite_theorique }}</td>
+      <td class="nombre chiffre">{{ l.quantite_physique }}</td>
+      <td class="nombre chiffre" style="color:{% if l.ecart < 0 %}var(--marge){% elif l.ecart > 0 %}var(--valide){% else %}var(--encre-pale){% endif %};font-weight:{% if l.ecart != 0 %}700{% else %}400{% endif %}">
+        {{ l.ecart|stringformat:"+d" }}
+      </td>
+      <td style="font-size:.85rem;color:var(--encre-clair)">{{ l.commentaire|default:"—" }}</td>
+    </tr>
+  {% empty %}
+    <tr><td colspan="5" class="vide-liste">Aucune ligne.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+<div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--reglure);display:flex;align-items:center;justify-content:space-between">
+  <a href="{% url 'inventaires_liste' %}" class="bouton-secondaire" style="min-width:180px;text-align:center;background:var(--accent);color:#fff;border-color:var(--accent)">← Retour inventaires</a>
+  {% if inventaire.statut == "VALIDE" %}
+  <a href="{% url 'inventaire_export' inventaire.pk %}" class="bouton-secondaire" title="Exporter en Excel" style="min-width:0;padding:8px 12px">⬇</a>
+  {% endif %}
+</div>
+<div class="pied">
+  <a href="{% url 'hub_stock' %}" class="bouton-secondaire" style="min-width:180px;text-align:center">← Retour stock</a>
+</div>
+{% endblock %}

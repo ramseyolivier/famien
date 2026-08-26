@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+{% block titre %}Déclarer un versement{% endblock %}
+{% block lieu %}Finances — Nouveau versement{% endblock %}
+
+{% block contenu %}
+<div class="admin-entete">
+  <h1>{% if vers_banque_seulement %}Sortie de fonds{% else %}Déclarer un versement{% endif %}</h1>
+</div>
+
+{% if not vers_banque_seulement %}
+<p style="font-size:.88rem;color:var(--encre-clair);margin-bottom:20px">
+  Le destinataire recevra une notification et devra confirmer la réception.
+</p>
+{% endif %}
+
+<form method="post" enctype="multipart/form-data" id="form-versement">
+{% csrf_token %}
+
+<div class="etiquette">Solde disponible</div>
+<div class="indicateur {% if solde_disponible <= 0 %}manque{% else %}valide{% endif %}" style="margin-bottom:20px;display:inline-flex;flex-direction:column;min-width:200px">
+  <div class="valeur chiffre" style="font-size:1.4rem">{{ solde_disponible|floatformat:0 }}</div>
+  <div class="libelle">F CFA en main</div>
+</div>
+
+{% if vers_banque_seulement %}
+  {# DG/MANAGER : sortie banque uniquement #}
+  <input type="hidden" name="vers_banque" value="1">
+
+{% elif peut_vers_banque %}
+  {# SUPERVISEUR : choix entre versement hiérarchique et sortie banque #}
+  <div class="etiquette">Type de sortie</div>
+  <div style="display:flex;gap:12px;margin-bottom:20px;max-width:420px">
+    <label style="flex:1;display:flex;align-items:center;gap:8px;padding:12px;border:1.5px solid var(--reglure);border-radius:var(--rayon);cursor:pointer">
+      <input type="radio" name="vers_banque" value="0" checked onchange="toggleDest(this.value)" style="width:18px;height:18px">
+      <span>Versement hiérarchique</span>
+    </label>
+    <label style="flex:1;display:flex;align-items:center;gap:8px;padding:12px;border:1.5px solid var(--reglure);border-radius:var(--rayon);cursor:pointer">
+      <input type="radio" name="vers_banque" value="1" onchange="toggleDest(this.value)" style="width:18px;height:18px">
+      <span>Sortie banque</span>
+    </label>
+  </div>
+
+  <div id="bloc-destinataire" style="margin-bottom:20px;max-width:420px">
+    <div class="etiquette">Vers</div>
+    <select name="destinataire" id="sel-destinataire" style="width:100%">
+      <option value="">— Choisir un destinataire —</option>
+      {% for d in destinataires %}
+      <option value="{{ d.pk }}">{{ d.get_full_name }} — {{ d.get_profil_display }}</option>
+      {% endfor %}
+    </select>
+    {% if not destinataires %}
+    <p style="color:var(--marge);font-size:.85rem;margin-top:6px">Aucun destinataire disponible.</p>
+    {% endif %}
+  </div>
+
+{% else %}
+  {# CHEF_EQUIPE : toujours un destinataire humain #}
+  <div class="etiquette">Vers</div>
+  <div style="margin-bottom:20px;max-width:420px">
+    <select name="destinataire" required style="width:100%">
+      <option value="">— Choisir un destinataire —</option>
+      {% for d in destinataires %}
+      <option value="{{ d.pk }}">{{ d.get_full_name }} — {{ d.get_profil_display }}</option>
+      {% endfor %}
+    </select>
+    {% if not destinataires %}
+    <p style="color:var(--marge);font-size:.85rem;margin-top:6px">Aucun destinataire disponible.</p>
+    {% endif %}
+  </div>
+{% endif %}
+
+<div class="etiquette">Montant et mode</div>
+<div style="display:flex;gap:16px;margin-bottom:20px;max-width:420px">
+  <div style="flex:1">
+    <input type="number" name="montant" id="montant" min="1" max="{{ solde_disponible|floatformat:0 }}" required
+           placeholder="Montant (F CFA)"
+           style="width:100%;height:44px;padding:0 12px;border:1.5px solid var(--reglure);border-radius:var(--rayon);font:inherit;font-size:1rem">
+  </div>
+  <div style="flex:1">
+    <select name="mode" required data-no-combobox style="width:100%;height:44px;padding:0 10px;border:1.5px solid var(--reglure);border-radius:var(--rayon);font:inherit">
+      {% for code, libelle in modes %}
+      <option value="{{ code }}"{% if vers_banque_seulement and code == "VIREMENT_BANQUE" %} selected{% endif %}>{{ libelle }}</option>
+      {% endfor %}
+    </select>
+  </div>
+</div>
+
+<div class="etiquette">Référence <span style="font-weight:400;font-size:.8rem;letter-spacing:0;text-transform:none;color:var(--encre-clair)">(n° transaction / référence — facultatif)</span></div>
+<div style="margin-bottom:20px;max-width:420px">
+  <input type="text" name="reference" maxlength="200" placeholder="Ex : CI230809XXXXXX"
+         style="width:100%;height:44px;padding:0 12px;border:1.5px solid var(--reglure);border-radius:var(--rayon);font:inherit">
+</div>
+
+<div class="etiquette">Note <span style="font-weight:400;font-size:.8rem;letter-spacing:0;text-transform:none;color:var(--encre-clair)">(facultatif)</span></div>
+<div style="margin-bottom:20px;max-width:420px">
+  <textarea name="note" rows="2"
+            style="width:100%;padding:10px 12px;border:1.5px solid var(--reglure);border-radius:var(--rayon);font:inherit;resize:vertical"></textarea>
+</div>
+
+<div id="bloc-recu" style="margin-bottom:28px;max-width:420px;{% if not vers_banque_seulement %}display:none;{% endif %}">
+  <div class="etiquette">Bordereau / reçu <span style="font-weight:400;font-size:.8rem;letter-spacing:0;text-transform:none;color:var(--encre-clair)">(photo)</span></div>
+  <input type="file" name="recu_banque" id="recu_banque" accept="image/*" capture="environment"
+         {% if vers_banque_seulement %}required{% endif %}
+         style="display:block;width:100%;padding:10px 0;font:inherit;font-size:.9rem">
+</div>
+
+<div style="display:flex;gap:10px">
+  <button type="submit" class="bouton-secondaire" id="btn-envoyer"
+          style="background:var(--accent);color:#fff;border-color:var(--accent);min-height:44px"
+          {% if solde_disponible <= 0 %}disabled{% endif %}>
+    ↑ {% if vers_banque_seulement %}Enregistrer la sortie{% else %}Déclarer le versement{% endif %}
+  </button>
+  <a href="{% url 'versements_liste' %}" class="bouton-secondaire">Annuler</a>
+</div>
+</form>
+
+<div class="pied"></div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  var max = {{ solde_disponible|floatformat:0 }};
+  var input = document.getElementById("montant");
+
+  input.addEventListener("input", function () {
+    var v = parseFloat(this.value);
+    if (!isNaN(v) && v > max) this.value = max;
+  });
+
+  document.getElementById("btn-envoyer").addEventListener("click", function (e) {
+    var v = parseFloat(input.value);
+    if (!v || v <= 0) { e.preventDefault(); alert("Saisissez un montant valide."); return; }
+    if (v > max) { e.preventDefault(); alert("Le montant dépasse votre solde disponible (" + max.toLocaleString("fr-FR") + " F CFA)."); return; }
+    {% if vers_banque_seulement %}
+    if (!confirm("Confirmer la sortie de " + v.toLocaleString("fr-FR") + " F CFA vers la banque ?")) e.preventDefault();
+    {% else %}
+    if (!confirm("Confirmer le versement de " + v.toLocaleString("fr-FR") + " F CFA ?")) e.preventDefault();
+    {% endif %}
+  });
+});
+
+{% if peut_vers_banque and not vers_banque_seulement %}
+function toggleDest(val) {
+  var bloc = document.getElementById("bloc-destinataire");
+  var sel  = document.getElementById("sel-destinataire");
+  var blocRecu = document.getElementById("bloc-recu");
+  var recu = document.getElementById("recu_banque");
+  if (val === "1") {
+    bloc.style.display = "none";
+    sel.removeAttribute("required");
+    blocRecu.style.display = "";
+    recu.setAttribute("required", "");
+  } else {
+    bloc.style.display = "";
+    sel.setAttribute("required", "");
+    blocRecu.style.display = "none";
+    recu.removeAttribute("required");
+  }
+}
+{% endif %}
+</script>
+{% endblock %}

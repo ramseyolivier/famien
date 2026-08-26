@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block titre %}Livraisons magasin — LEPAD{% endblock %}
+{% block lieu %}Approvisionnement — Livraisons magasin{% endblock %}
+
+{% block contenu %}
+<div class="admin-entete">
+  <h1 style="color:var(--accent)">Livraisons magasin</h1>
+  {% if est_dg_manager %}
+  <a href="{% url 'livraison_directe_magasin' %}" class="bouton-secondaire">+ Livraison directe</a>
+  {% endif %}
+</div>
+
+<form method="get" class="finance-filtres" data-live-filter>
+  {% if magasins %}
+  <div class="filtre-champ filtre-champ--large">
+    <label>Magasin</label>
+    <select name="magasin">
+      <option value="">Tous</option>
+      {% for m in magasins %}
+      <option value="{{ m.pk }}" {% if filtre_magasin == m.pk|stringformat:"s" %}selected{% endif %}>{{ m.nom }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% endif %}
+  <div class="filtre-champ">
+    <label>Statut</label>
+    <select name="statut" data-no-combobox>
+      <option value="">Tous</option>
+      <option value="VALIDEE"  {% if filtre_statut == "VALIDEE"  %}selected{% endif %}>À préparer</option>
+      <option value="LIVREE"   {% if filtre_statut == "LIVREE"   %}selected{% endif %}>En transit</option>
+      <option value="BROUILLON"{% if filtre_statut == "BROUILLON"%}selected{% endif %}>Brouillon (directe)</option>
+    </select>
+  </div>
+  <div class="filtre-champ filtre-champ--date">
+    <label for="lm-debut">Du</label>
+    <input type="date" id="lm-debut" name="debut" value="{{ filtre_debut }}">
+  </div>
+  <div class="filtre-champ filtre-champ--date">
+    <label for="lm-fin">Au</label>
+    <input type="date" id="lm-fin" name="fin" value="{{ filtre_fin }}">
+  </div>
+  <a href="{% url 'livraisons_magasin_liste' %}" class="bouton-secondaire" title="Réinitialiser" style="align-self:flex-end;min-width:0;padding:8px 12px">↺</a>
+  <a href="{% url 'export_livraisons_magasin' %}{% if filtre_magasin or filtre_statut or filtre_debut or filtre_fin %}?{% if filtre_magasin %}magasin={{ filtre_magasin }}&{% endif %}{% if filtre_statut %}statut={{ filtre_statut }}&{% endif %}{% if filtre_debut %}debut={{ filtre_debut }}&{% endif %}{% if filtre_fin %}fin={{ filtre_fin }}{% endif %}{% endif %}" class="bouton-secondaire" style="margin-left:auto" title="Exporter en Excel">⬇</a>
+</form>
+
+{% if commandes %}
+<table class="registre">
+  <thead>
+    <tr>
+      <th>#</th>
+      <th>Magasin</th>
+      <th>Type</th>
+      <th>Statut</th>
+      <th>Date</th>
+      <th class="nombre">Lignes</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for c in commandes %}
+    {% with est_directe=c.observations|slice:":4" %}
+    <tr data-date="{{ c.cree_le|date:'Y-m-d' }}">
+      <td>{{ c.numero }}</td>
+      <td>{{ c.magasin.nom }}</td>
+      <td style="font-size:.85rem;color:var(--encre-clair)">
+        {% if est_directe == "[LD]" %}Directe{% else %}Commande{% endif %}
+      </td>
+      <td>
+        {% if c.statut == "BROUILLON" %}
+          <span class="badge" style="background:var(--encre-clair);color:#fff">Brouillon</span>
+        {% elif c.statut == "VALIDEE" %}
+          <span class="badge" style="background:#7c3aed;color:#fff">À préparer</span>
+        {% elif c.statut == "LIVREE" %}
+          <span class="badge" style="background:var(--or);color:#fff">En transit</span>
+        {% endif %}
+      </td>
+      <td style="white-space:nowrap;font-size:.85rem">{{ c.cree_le|date:"d/m/Y" }}</td>
+      <td class="nombre">{{ c.lignes.count }}</td>
+      <td>
+        {% if est_directe == "[LD]" %}
+          <a href="{% url 'livraison_directe_detail' c.pk %}" class="bouton-secondaire"
+             style="font-size:.8rem;padding:5px 10px">Détails</a>
+        {% elif c.statut == "LIVREE" %}
+          <a href="{% url 'commande_magasin_detail' c.pk %}" class="bouton-secondaire"
+             style="font-size:.8rem;padding:5px 10px;color:var(--or);border-color:var(--or)">En attente réception</a>
+        {% elif peut_livrer %}
+          <a href="{% url 'commande_magasin_livraison' c.pk %}" class="bouton-secondaire"
+             style="font-size:.8rem;padding:5px 10px;background:var(--encre);color:#fff;border-color:var(--encre)">
+            Traiter
+          </a>
+        {% else %}
+          <a href="{% url 'commande_magasin_detail' c.pk %}" class="bouton-secondaire"
+             style="font-size:.8rem;padding:5px 10px">Détails</a>
+        {% endif %}
+      </td>
+    </tr>
+    {% endwith %}
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="vide-liste">Aucune livraison en attente.</p>
+{% endif %}
+
+<div class="pied">
+  <a href="{% url 'hub_approvisionnement' %}#magasins" class="bouton-secondaire" style="min-width:180px;text-align:center">← Retour approvisionnement</a>
+</div>
+{% endblock %}

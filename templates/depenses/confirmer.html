@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block titre %}Confirmer la dépense #{{ depense.pk }} — LEPAD{% endblock %}
+{% block lieu %}Dépenses{% endblock %}
+{% block contenu %}
+<div class="admin-entete">
+  <h1 style="color:var(--marge)">Confirmer la dépense #{{ depense.pk }}</h1>
+</div>
+
+<div class="fiche" style="margin:0 0 24px">
+  <div style="font-size:.88rem;color:var(--encre-clair);margin-bottom:6px">
+    {% if depense.site %}{{ depense.site.nom }}{% else %}Supervision{% endif %} · {{ depense.date_depense|date:"d/m/Y" }}
+  </div>
+  <div style="margin-bottom:8px">
+    <span style="color:var(--encre-clair)">Motif :</span> <strong>{{ depense.motif }}</strong>
+  </div>
+  <div>
+    <span style="color:var(--encre-clair)">Montant autorisé :</span>
+    <strong style="font-size:1.3rem;color:var(--marge)">{{ depense.montant|floatformat:0 }} F CFA</strong>
+  </div>
+</div>
+
+<form method="post">
+  {% csrf_token %}
+  <div class="champ" style="margin-bottom:20px">
+    <label for="montant_reel" style="display:block;margin-bottom:6px;font-weight:600">
+      Montant réellement dépensé (F CFA) — ne peut pas dépasser {{ depense.montant|floatformat:0 }} F
+    </label>
+    <input
+      type="number"
+      id="montant_reel"
+      name="montant_reel"
+      min="0"
+      max="{{ depense.montant|floatformat:0 }}"
+      step="1"
+      required
+      style="font-size:1.2rem;padding:12px 16px;width:100%;max-width:320px;border:2px solid var(--reglure);border-radius:6px"
+      placeholder=""
+      autofocus
+    >
+  </div>
+
+  <div style="display:flex;gap:12px;flex-wrap:wrap">
+    <button type="submit" class="bouton-principal" style="min-width:160px;min-height:44px;background:var(--valide);border-color:var(--valide);color:#fff">
+      &#10003; Confirmer
+    </button>
+    <a href="{% url 'depense_detail' depense.pk %}" class="bouton-secondaire" style="min-height:44px;display:inline-flex;align-items:center">Annuler</a>
+  </div>
+</form>
+
+<div class="pied">
+  <a href="{% url 'finances_entrees_sorties' %}" class="bouton-secondaire">← E/S</a>
+</div>
+{% endblock %}

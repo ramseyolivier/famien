@@ -1,0 +1,258 @@
+{% extends "base.html" %}
+{% block titre %}Approvisionnement — LEPAD{% endblock %}
+{% block lieu %}Approvisionnement{% endblock %}
+
+{% block contenu %}
+<div class="admin-entete" style="margin-top:28px">
+  <h1>Approvisionnement</h1>
+</div>
+
+{% if request.user.profil == 'DG' or request.user.profil == 'MANAGER' or request.user.is_superuser %}
+<div class="hub-stats">
+  <div class="indicateur{% if nb_commandes %} alerte{% endif %}">
+    <div class="valeur">{{ nb_commandes }}</div>
+    <div class="libelle">Commandes fournisseur</div>
+  </div>
+  <div class="indicateur{% if nb_commandes_magasin_a_valider %} alerte{% endif %}">
+    <div class="valeur">{{ nb_commandes_magasin_a_valider }}</div>
+    <div class="libelle">Commandes magasin</div>
+  </div>
+  <div class="indicateur{% if nb_commandes_ecole_a_valider %} alerte{% endif %}">
+    <div class="valeur">{{ nb_commandes_ecole_a_valider }}</div>
+    <div class="libelle">Commandes écoles</div>
+  </div>
+  <div class="indicateur{% if nb_livraisons_magasin_a_preparer %} alerte{% endif %}">
+    <div class="valeur">{{ nb_livraisons_magasin_a_preparer }}</div>
+    <div class="libelle">Livraisons à préparer</div>
+  </div>
+  <div class="indicateur{% if nb_livraisons_magasin_a_recevoir %} alerte{% endif %}">
+    <div class="valeur">{{ nb_livraisons_magasin_a_recevoir }}</div>
+    <div class="libelle">Réceptions en cours</div>
+  </div>
+  <div class="indicateur{% if nb_articles_deficit %} alerte{% endif %}">
+    <div class="valeur">{{ nb_articles_deficit }}</div>
+    <div class="libelle">Articles en déficit</div>
+  </div>
+</div>
+{% elif request.user.profil == 'SUPERVISEUR' %}
+<div class="hub-stats">
+  <div class="indicateur{% if nb_livraisons_ecole_a_preparer %} alerte{% endif %}">
+    <div class="valeur">{{ nb_livraisons_ecole_a_preparer }}</div>
+    <div class="libelle">Livraisons école à préparer</div>
+  </div>
+  <div class="indicateur{% if nb_livraisons_magasin_a_recevoir %} alerte{% endif %}">
+    <div class="valeur">{{ nb_livraisons_magasin_a_recevoir }}</div>
+    <div class="libelle">Livraisons dépôt à réceptionner</div>
+  </div>
+  <div class="indicateur{% if nb_produits_reserves_magasin %} alerte{% endif %}">
+    <div class="valeur">{{ nb_produits_reserves_magasin }}</div>
+    <div class="libelle">Produits réservés</div>
+  </div>
+</div>
+{% elif request.user.profil == 'GEST_MAGASIN' %}
+<div class="hub-stats">
+  <div class="indicateur{% if nb_commandes_ecole_a_valider %} alerte{% endif %}">
+    <div class="valeur">{{ nb_commandes_ecole_a_valider }}</div>
+    <div class="libelle">Commandes école à valider</div>
+  </div>
+  <div class="indicateur{% if nb_livraisons_ecole_a_preparer %} alerte{% endif %}">
+    <div class="valeur">{{ nb_livraisons_ecole_a_preparer }}</div>
+    <div class="libelle">Livraisons école à préparer</div>
+  </div>
+  <div class="indicateur{% if nb_livraisons_magasin_a_recevoir %} alerte{% endif %}">
+    <div class="valeur">{{ nb_livraisons_magasin_a_recevoir }}</div>
+    <div class="libelle">Livraisons dépôt à réceptionner</div>
+  </div>
+  <div class="indicateur{% if nb_produits_reserves_magasin %} alerte{% endif %}">
+    <div class="valeur">{{ nb_produits_reserves_magasin }}</div>
+    <div class="libelle">Produits réservés</div>
+  </div>
+  <div class="indicateur{% if nb_articles_deficit_ecole %} alerte{% endif %}">
+    <div class="valeur">{{ nb_articles_deficit_ecole }}</div>
+    <div class="libelle">Articles en déficit école</div>
+  </div>
+</div>
+{% elif request.user.profil == 'CHEF_EQUIPE' %}
+<div class="hub-stats">
+  <div class="indicateur{% if nb_receptions_ecole_a_faire %} alerte{% endif %}">
+    <div class="valeur">{{ nb_receptions_ecole_a_faire }}</div>
+    <div class="libelle">Livraisons à réceptionner</div>
+  </div>
+</div>
+{% endif %}
+
+{# ── Dépôt général ───────────────────────────────────────────────────────── #}
+{% if request.user.profil == 'DG' or request.user.profil == 'MANAGER' or request.user.is_superuser %}
+<div class="hub-section hub-section--couleur hub-section--achats" id="depot">
+  <div class="hub-section-titre">Dépôt général</div>
+  <div class="hub-grille">
+    <a href="{% url 'commandes_liste' %}" class="hub-carte">
+      <span class="hub-carte-icone">
+        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+      </span>
+      <strong class="hub-carte-titre">Commandes fournisseur</strong>
+      <span class="hub-carte-desc">Créer et valider les commandes auprès des fournisseurs</span>
+      {% if nb_commandes %}
+      <span class="hub-carte-badge">{{ nb_commandes }} à valider</span>
+      {% endif %}
+    </a>
+    <a href="{% url 'receptions_liste' %}" class="hub-carte">
+      <span class="hub-carte-icone">
+        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><path d="M12 22V7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg>
+      </span>
+      <strong class="hub-carte-titre">Réceptions fournisseur</strong>
+      <span class="hub-carte-desc">Réceptionner et contrôler les livraisons au dépôt</span>
+    </a>
+    <a href="{% url 'stock_reserve_depot' %}" class="hub-carte">
+      <span class="hub-carte-icone">
+        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/><path d="M7 10h2"/><path d="M11 10h6"/><path d="M7 14h2"/><path d="M11 14h4"/></svg>
+      </span>
+      <strong class="hub-carte-titre">Stock réservé dépôt</strong>
+      <span class="hub-carte-desc">Produits engagés vers les magasins, en attente d'envoi</span>
+      {% if nb_produits_reserves_depot %}
+      <span class="hub-carte-badge neutre">{{ nb_produits_reserves_depot }} produit{{ nb_produits_reserves_depot|pluralize }}</span>
+      {% else %}
+      <span class="hub-carte-badge ok">Aucune réservation</span>
+      {% endif %}
+    </a>
+    <a href="{% url 'pilotage_commandes_depot' %}" class="hub-carte"{% if nb_articles_deficit %} style="background:#dbeafe;border-color:var(--accent)"{% endif %}>
+      <span class="hub-carte-icone">
+        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+      </span>
+      <strong class="hub-carte-titre">Déficits consolidés dépôt</strong>
+      <span class="hub-carte-desc">Déficits consolidés par article — stock à commander au fournisseur</span>
+      {% if nb_articles_deficit %}
+      <span class="hub-carte-badge">{{ nb_articles_deficit }} article{{ nb_articles_deficit|pluralize }} en déficit</span>
+      {% endif %}
+    </a>
+  </div>
+</div>
+{% endif %}
+
+{# ── Magasins ────────────────────────────────────────────────────────────── #}
+{% if request.user.profil == 'GEST_MAGASIN' or request.user.profil == 'SUPERVISEUR' or request.user.profil == 'MANAGER' or request.user.profil == 'DG' or request.user.is_superuser %}
+<div class="hub-section hub-section--couleur hub-section--magasin" id="magasins">
+  <div class="hub-section-titre">Magasins</div>
+  <div class="hub-grille">
+    <a href="{% url 'commandes_magasin_liste' %}" class="hub-carte"{% if nb_commandes_magasin_a_valider %} style="background:#dbeafe;border-color:var(--accent)"{% endif %}>
+      <span class="hub-carte-icone">
+        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+      </span>
+      <strong class="hub-carte-titre">Commandes magasin</strong>
+      <span class="hub-carte-desc">
+        {% if request.user.profil == 'GEST_MAGASIN' %}Demander du stock au dépôt
+        {% elif request.user.profil == 'SUPERVISEUR' %}Consulter les commandes des magasins
+        {% elif request.user.profil == 'DG' or request.user.profil == 'MANAGER' %}Valider les demandes des magasins
+        {% else %}Suivi des commandes magasin{% endif %}
+      </span>
+      {% if nb_commandes_magasin_a_valider %}
+      <span class="hub-carte-badge">{{ nb_commandes_magasin_a_valider }} à valider</span>
+      {% endif %}
+    </a>
+    {% if request.user.profil == 'DG' or request.user.profil == 'MANAGER' or request.user.is_superuser %}
+    <a href="{% url 'livraisons_magasin_liste' %}" class="hub-carte"{% if nb_livraisons_magasin_a_preparer %} style="background:#dbeafe;border-color:var(--accent)"{% endif %}>
+      <span class="hub-carte-icone">
+        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
+      </span>
+      <strong class="hub-carte-titre">Livraisons magasin</strong>
+      <span class="hub-carte-desc">Préparer et envoyer les stocks vers les magasins</span>
+      {% if nb_livraisons_magasin_a_preparer %}
+      <span class="hub-carte-badge">{{ nb_livraisons_magasin_a_preparer }} à préparer</span>
+      {% endif %}
+    </a>
+    {% endif %}
+    <a href="{% url 'receptions_magasin_liste' %}" class="hub-carte"{% if nb_livraisons_magasin_a_recevoir %} style="background:#dbeafe;border-color:var(--accent)"{% endif %}>
+      <span class="hub-carte-icone">
+        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><path d="M12 22V7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg>
+      </span>
+      <strong class="hub-carte-titre">Réceptions magasin</strong>
+      <span class="hub-carte-desc">
+        {% if request.user.profil == 'GEST_MAGASIN' %}Confirmer la réception des livraisons du dépôt
+        {% else %}Suivi des réceptions dans les magasins{% endif %}
+      </span>
+      {% if nb_livraisons_magasin_a_recevoir %}
+      <span class="hub-carte-badge neutre">{{ nb_livraisons_magasin_a_recevoir }} à réceptionner</span>
+      {% endif %}
+    </a>
+    {% if request.user.profil == 'GEST_MAGASIN' or request.user.profil == 'SUPERVISEUR' or request.user.profil == 'DG' or request.user.profil == 'MANAGER' or request.user.is_superuser %}
+    <a href="{% url 'stock_reserve' %}" class="hub-carte">
+      <span class="hub-carte-icone">
+        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/><path d="M7 10h2"/><path d="M11 10h6"/><path d="M7 14h2"/><path d="M11 14h4"/></svg>
+      </span>
+      <strong class="hub-carte-titre">Stock réservé magasin</strong>
+      <span class="hub-carte-desc">Produits engagés pour les commandes écoles validées</span>
+      {% if nb_produits_reserves_magasin %}
+      <span class="hub-carte-badge neutre">{{ nb_produits_reserves_magasin }} produit{{ nb_produits_reserves_magasin|pluralize }}</span>
+      {% else %}
+      <span class="hub-carte-badge ok">Aucune réservation</span>
+      {% endif %}
+    </a>
+    {% endif %}
+    {% if request.user.profil == 'GEST_MAGASIN' %}
+    <a href="{% url 'pilotage_commandes_ecole' %}" class="hub-carte"{% if nb_articles_deficit_ecole %} style="background:#dbeafe;border-color:var(--accent)"{% endif %}>
+      <span class="hub-carte-icone">
+        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+      </span>
+      <strong class="hub-carte-titre">Déficits consolidés magasin</strong>
+      <span class="hub-carte-desc">Articles en déficit magasin — à commander au dépôt</span>
+      {% if nb_articles_deficit_ecole %}
+      <span class="hub-carte-badge">{{ nb_articles_deficit_ecole }} article{{ nb_articles_deficit_ecole|pluralize }} en déficit</span>
+      {% endif %}
+    </a>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+{# ── École ───────────────────────────────────────────────────────────────── #}
+<div class="hub-section hub-section--couleur hub-section--ecole" id="ecole">
+  <div class="hub-section-titre">École</div>
+  <div class="hub-grille">
+    <a href="{% url 'commandes_ecole_liste' %}" class="hub-carte"{% if request.user.profil == 'GEST_MAGASIN' and nb_commandes_ecole_a_valider %} style="background:#dbeafe;border-color:var(--accent)"{% endif %}>
+      <span class="hub-carte-icone">
+        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+      </span>
+      <strong class="hub-carte-titre">Commandes école</strong>
+      <span class="hub-carte-desc">
+        {% if request.user.profil == 'CHEF_EQUIPE' %}Demander des fournitures au magasin
+        {% elif request.user.profil == 'COMMERCIAL' %}Consulter les commandes de votre école
+        {% elif request.user.profil == 'GEST_MAGASIN' %}Valider les demandes des écoles
+        {% else %}Vue d'ensemble des commandes par école{% endif %}
+      </span>
+      {% if request.user.profil == 'GEST_MAGASIN' and nb_commandes_ecole_a_valider %}
+      <span class="hub-carte-badge">{{ nb_commandes_ecole_a_valider }} à valider</span>
+      {% endif %}
+    </a>
+    {% if request.user.profil == 'GEST_MAGASIN' or request.user.profil == 'DG' or request.user.profil == 'MANAGER' or request.user.profil == 'SUPERVISEUR' or request.user.is_superuser %}
+    <a href="{% url 'livraisons_liste' %}" class="hub-carte"{% if request.user.profil == 'GEST_MAGASIN' and nb_livraisons_ecole_a_preparer %} style="background:#dbeafe;border-color:var(--accent)"{% endif %}>
+      <span class="hub-carte-icone">
+        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
+      </span>
+      <strong class="hub-carte-titre">Livraisons école</strong>
+      <span class="hub-carte-desc">
+        {% if request.user.profil == 'GEST_MAGASIN' %}Préparer et livrer les commandes validées
+        {% else %}Suivi des livraisons magasin → école{% endif %}
+      </span>
+      {% if request.user.profil == 'GEST_MAGASIN' and nb_livraisons_ecole_a_preparer %}
+      <span class="hub-carte-badge">{{ nb_livraisons_ecole_a_preparer }} à livrer</span>
+      {% endif %}
+    </a>
+    {% endif %}
+    {% if request.user.profil == 'CHEF_EQUIPE' or request.user.profil == 'GEST_MAGASIN' or request.user.profil == 'DG' or request.user.profil == 'MANAGER' or request.user.profil == 'SUPERVISEUR' or request.user.is_superuser %}
+    <a href="{% url 'receptions_ecole_liste' %}" class="hub-carte"{% if request.user.profil == 'CHEF_EQUIPE' and nb_receptions_ecole_a_faire %} style="background:#dbeafe;border-color:var(--accent)"{% endif %}>
+      <span class="hub-carte-icone">
+        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><path d="M12 22V7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg>
+      </span>
+      <strong class="hub-carte-titre">Réceptions école</strong>
+      <span class="hub-carte-desc">
+        {% if request.user.profil == 'CHEF_EQUIPE' %}Confirmer la réception des livraisons
+        {% else %}Suivi des réceptions dans les écoles{% endif %}
+      </span>
+      {% if request.user.profil == 'CHEF_EQUIPE' and nb_receptions_ecole_a_faire %}
+      <span class="hub-carte-badge">{{ nb_receptions_ecole_a_faire }} à réceptionner</span>
+      {% endif %}
+    </a>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

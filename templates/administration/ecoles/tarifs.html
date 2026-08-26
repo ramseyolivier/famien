@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+{% block titre %}Tarifs — {{ ecole.nom }}{% endblock %}
+{% block lieu %}Administration › Écoles › {{ ecole.nom }} › Tarifs{% endblock %}
+
+{% block contenu %}
+<div class="admin-entete">
+  <h1>Tarifs au détail — {{ ecole.nom }}</h1>
+</div>
+
+<div class="barre-filtre">
+  <div class="champ-recherche">
+    <input type="search" id="recherche" placeholder="Rechercher un produit…" autocomplete="off">
+  </div>
+  <span class="compteur-resultats" id="compteur-resultats"></span>
+</div>
+
+<form method="post" id="form-tarifs">
+  {% csrf_token %}
+  <table class="registre" id="table-tarifs" style="margin-top:8px">
+    <thead>
+      <tr>
+        <th>Code</th>
+        <th>Désignation</th>
+        <th class="nombre">Prix d'achat (CFA)</th>
+        <th class="nombre">Prix de vente (CFA)</th>
+        <th class="nombre">Marge (CFA)</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for l in lignes %}
+      <tr data-cout="{{ l.cout_js }}">
+        <td><code style="font-family:monospace;font-weight:700;color:var(--accent)">{{ l.produit.code }}</code></td>
+        <td>{{ l.produit.designation }}</td>
+        <td class="nombre chiffre" style="color:var(--encre-clair)">{{ l.produit.cout_achat|floatformat:0 }} F</td>
+        <td class="nombre" style="white-space:nowrap">
+          {# hidden input — toujours soumis avec le formulaire #}
+          <input type="hidden" class="tarif-hidden" name="prix_{{ l.produit.pk }}" value="{{ l.prix_js }}">
+          <span class="tarif-valeur chiffre">{% if l.prix_ecole is not None %}{{ l.prix_ecole|floatformat:0 }} F{% else %}—{% endif %}</span>
+          {# number input — visible uniquement pendant l'édition #}
+          <input
+            class="tarif-input"
+            type="number"
+            value="{{ l.prix_js }}"
+            min="0"
+            step="1"
+            style="display:none;width:100px;text-align:right;padding:5px 8px;border:1.5px solid var(--accent);border-radius:var(--rayon);font-family:inherit;font-size:.9rem"
+          >
+          <button type="button" class="icone-action btn-edit-tarif" title="Modifier le prix" style="margin-left:2px">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          </button>
+          <button type="button" class="icone-action btn-ok-tarif" title="Valider" style="display:none;margin-left:2px;color:var(--valide)">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          </button>
+        </td>
+        <td class="nombre chiffre tarif-marge">—</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="aucun-resultat" id="aucun-resultat">Aucun produit ne correspond à votre recherche.</p>
+
+  <div class="pied">
+    <div style="display:flex;gap:8px;align-items:center">
+      <a href="{% url 'admin_ecoles' %}" class="bouton-secondaire" style="min-width:180px;text-align:center">← Retour aux écoles</a>
+      <button type="submit" class="bouton-primaire" style="min-width:180px;padding-top:13px;padding-bottom:13px;font-size:.88rem">Enregistrer les tarifs</button>
+    </div>
+  </div>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+initFiltre({ tableId: 'table-tarifs', inputId: 'recherche' });
+
+function calculerMarge(tr) {
+  const cout   = parseFloat(tr.dataset.cout) || 0;
+  const hidden = tr.querySelector('.tarif-hidden');
+  const cell   = tr.querySelector('.tarif-marge');
+  const pv     = hidden.value !== '' ? parseFloat(hidden.value) : null;
+  if (pv === null || isNaN(pv)) { cell.innerHTML = '—'; return; }
+  const marge   = pv - cout;
+  const couleur = marge > 0 ? 'var(--valide)' : marge < 0 ? 'var(--marge)' : 'var(--encre-pale)';
+  const signe   = marge > 0 ? '+' : marge < 0 ? '−' : '';
+  cell.innerHTML = `<span style="color:${couleur};font-weight:700">${signe}${Math.abs(Math.round(marge)).toLocaleString('fr-FR')} F</span>`;
+}
+
+function autoSave() {
+  const form = document.getElementById('form-tarifs');
+  fetch(window.location.href, {
+    method: 'POST',
+    body: new FormData(form),
+    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+  }).catch(() => {});
+}
+
+function ouvrirEdition(btn) {
+  const tr    = btn.closest('tr');
+  const valeur = tr.querySelector('.tarif-valeur');
+  const input  = tr.querySelector('.tarif-input');
+  const hidden = tr.querySelector('.tarif-hidden');
+  const btnOk  = tr.querySelector('.btn-ok-tarif');
+  input.value          = hidden.value;
+  valeur.style.display = 'none';
+  input.style.display  = '';
+  input.focus();
+  input.select();
+  btn.style.display    = 'none';
+  btnOk.style.display  = '';
+}
+
+function fermerEdition(btn) {
+  const tr      = btn.closest('tr');
+  const valeur  = tr.querySelector('.tarif-valeur');
+  const input   = tr.querySelector('.tarif-input');
+  const hidden  = tr.querySelector('.tarif-hidden');
+  const btnEdit = tr.querySelector('.btn-edit-tarif');
+  hidden.value         = input.value;
+  valeur.textContent   = input.value ? Math.round(parseFloat(input.value)).toLocaleString('fr-FR') + ' F' : '—';
+  valeur.style.display = '';
+  input.style.display  = 'none';
+  btn.style.display    = 'none';
+  btnEdit.style.display = '';
+  calculerMarge(tr);
+  autoSave();
+}
+
+document.querySelectorAll('.btn-edit-tarif').forEach(b => b.addEventListener('click', () => ouvrirEdition(b)));
+document.querySelectorAll('.btn-ok-tarif').forEach(b  => b.addEventListener('click', () => fermerEdition(b)));
+
+document.querySelectorAll('.tarif-input').forEach(input => {
+  input.addEventListener('input', () => {
+    const tr     = input.closest('tr');
+    const hidden = tr.querySelector('.tarif-hidden');
+    hidden.value = input.value;
+    calculerMarge(tr);
+  });
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter')  { e.preventDefault(); input.closest('tr').querySelector('.btn-ok-tarif').click(); }
+    if (e.key === 'Escape') { input.closest('tr').querySelector('.btn-ok-tarif').click(); }
+  });
+  input.addEventListener('blur', () => {
+    const btnOk = input.closest('tr').querySelector('.btn-ok-tarif');
+    if (btnOk.style.display !== 'none') btnOk.click();
+  });
+});
+
+document.querySelectorAll('#table-tarifs tbody tr').forEach(tr => calculerMarge(tr));
+</script>
+{% endblock %}

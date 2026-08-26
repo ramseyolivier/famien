@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+{% block titre %}Facture {{ v.numero }}{% endblock %}
+{% block lieu %}Facture {{ v.numero }}{% endblock %}
+{% block nav_hist %}{% endblock %}
+
+{% block contenu %}
+<div style="margin-top:16px">
+
+  <div class="fiche{% if v.statut == 'ANNULEE' %} manque{% endif %}" style="padding:20px 24px">
+
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px">
+      <div>
+        <div class="etiquette" style="margin:0 0 4px;font-size:1.1rem;color:#1a6fc4">Facture de vente</div>
+        <h2 style="margin:0;font-size:1.5rem;font-weight:800;color:var(--accent)">{{ v.numero }}</h2>
+        <p style="margin:6px 0 0;font-size:.88rem;color:var(--encre-clair)">
+          {{ v.ecole.nom }}{% if v.ecole.commune %} · {{ v.ecole.commune }}{% endif %}
+        </p>
+      </div>
+      <div style="text-align:right">
+        <div style="font-size:1.6rem;font-weight:800;color:var(--encre)">{{ v.montant_total|floatformat:0 }} <span style="font-size:.9rem;font-weight:400">F CFA</span></div>
+        {% if v.remise %}<div style="font-size:.85rem;color:var(--encre-clair)">dont remise −{{ v.remise|floatformat:0 }} F</div>{% endif %}
+        <div style="margin-top:8px">
+          {% if v.statut == 'LIVREE' %}<span class="badge badge-actif" style="font-size:.9rem;padding:4px 12px">Payée</span>
+          {% elif v.statut == 'EN_ATTENTE' %}<span class="badge" style="background:var(--or-clair);color:var(--or);font-size:.9rem;padding:4px 12px">À remettre</span>
+          {% elif v.statut == 'PARTIELLE' %}<span class="badge" style="background:var(--marge-clair);color:var(--marge);font-size:.9rem;padding:4px 12px">Partielle</span>
+          {% else %}<span class="badge badge-inactif" style="font-size:.9rem;padding:4px 12px">Annulée</span>{% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:24px;flex-wrap:wrap;margin-top:16px;padding-top:16px;border-top:1px solid var(--reglure);font-size:.85rem;color:var(--encre-clair)">
+      <span><strong style="color:var(--encre)">Date</strong> {{ v.horodatage|date:"d/m/Y" }}</span>
+      <span><strong style="color:var(--encre)">Heure</strong> {{ v.horodatage|time:"H:i:s" }}</span>
+      <span><strong style="color:var(--encre)">Vendeuse</strong> {{ v.vendeuse.get_full_name|default:v.vendeuse.username }}</span>
+      <span><strong style="color:var(--encre)">Paiement</strong> {{ v.modes_paiement_display }}</span>
+      {% if v.telephone_client %}<span><strong style="color:var(--encre)">Tél. client</strong> {{ v.telephone_client }}</span>{% endif %}
+      {% if v.montant_recu %}<span><strong style="color:var(--encre)">Reçu</strong> {{ v.montant_recu|floatformat:0 }} F</span>{% endif %}
+      {% if v.monnaie_rendue %}<span><strong style="color:var(--encre)">Monnaie rendue</strong> {{ v.monnaie_rendue|floatformat:0 }} F</span>{% endif %}
+    </div>
+  </div>
+
+  <div class="etiquette" style="margin-top:24px">Vendu et payé</div>
+  <table class="registre">
+    <thead>
+      <tr>
+        <th>Article</th>
+        <th class="nombre">Quantité</th>
+        <th class="nombre">Prix unitaire</th>
+        <th class="nombre">Montant</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for l in v.lignes.all %}
+      <tr>
+        <td>
+          <strong>{{ l.libelle }}</strong>
+          {% if l.kit %}
+          <div style="margin-top:4px;padding-left:12px;border-left:2px solid var(--reglure)">
+            {% for kl in l.kit.lignes.all %}
+            <span style="font-size:.78rem;color:var(--encre-clair);display:inline-block;margin-right:8px">{{ kl.quantite }} × {{ kl.produit.designation }}</span>
+            {% endfor %}
+          </div>
+          {% endif %}
+        </td>
+        <td class="nombre">{{ l.quantite }}</td>
+        <td class="nombre" style="color:var(--encre-clair)">{{ l.prix_unitaire|floatformat:0 }}</td>
+        <td class="nombre chiffre"><strong>{{ l.montant|floatformat:0 }}</strong></td>
+      </tr>
+      {% endfor %}
+      {% if v.remise %}
+      <tr style="color:var(--encre-clair)">
+        <td colspan="3">Remise conventionnelle</td>
+        <td class="nombre">−{{ v.remise|floatformat:0 }}</td>
+      </tr>
+      {% endif %}
+      <tr style="background:var(--accent-clair)">
+        <td colspan="3"><strong>Total encaissé</strong></td>
+        <td class="nombre chiffre"><strong style="color:var(--accent)">{{ v.montant_total|floatformat:0 }} F</strong></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="etiquette" style="margin-top:24px">Composition physique remise</div>
+  <table class="registre">
+    <thead>
+      <tr>
+        <th>Désignation</th>
+        <th class="nombre">Servi</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for lp in v.lignes_produit.all %}
+      <tr>
+        <td>{{ lp.produit.designation }}</td>
+        <td class="nombre" style="color:var(--valide)">{{ lp.quantite_servie }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% if v.reste_a_livrer %}
+  <div style="margin-top:12px;padding:12px 16px;background:var(--marge-clair);border-left:4px solid var(--marge);border-radius:var(--rayon)">
+    <div class="etiquette" style="color:var(--marge);margin-bottom:8px">Reste dû</div>
+    <table class="registre">
+      <thead>
+        <tr>
+          <th>Désignation</th>
+          <th class="nombre" style="color:var(--marge)">Quantité</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for lp in v.reste_a_livrer %}
+        <tr>
+          <td>{{ lp.produit.designation }}</td>
+          <td class="nombre" style="font-weight:700;color:var(--marge)">{{ lp.quantite_manquante }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  {% if v.statut == 'ANNULEE' %}
+  <div style="margin-top:16px;padding:14px 18px;background:var(--marge-clair);border-left:4px solid var(--marge);border-radius:var(--rayon)">
+    <strong style="color:var(--marge)">Vente annulée</strong>
+    {% if v.annulee_le %}<span style="color:var(--encre-clair);font-size:.88rem;margin-left:8px">le {{ v.annulee_le|date:"d/m/Y à H:i" }}</span>{% endif %}
+    {% if v.annulee_par %}<span style="color:var(--encre-clair);font-size:.88rem;margin-left:4px">par {{ v.annulee_par.get_full_name }}</span>{% endif %}
+    {% if v.motif_annulation %}
+    <div style="margin-top:6px;font-size:.88rem;color:var(--encre)">Motif : {{ v.motif_annulation }}</div>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% if v.annulation_demandee and v.statut != 'ANNULEE' %}
+  <div style="margin-top:16px;padding:12px 16px;background:var(--marge-clair);border-left:4px solid var(--marge);border-radius:var(--rayon);font-size:.88rem">
+    <strong style="color:var(--marge)">Demande d'annulation en cours</strong>
+    {% if v.motif_demande %}<div style="margin-top:4px;color:var(--encre)">Motif : {{ v.motif_demande }}</div>{% endif %}
+  </div>
+  {% endif %}
+
+  <div style="margin-top:20px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+    <a href="{% url 'historique_ventes' %}" class="bouton-secondaire" style="background:#1a6fc4;color:#fff;border-color:#1a6fc4">← Historique</a>
+    <a href="{% url 'recu' v.uuid %}" class="bouton-secondaire" style="background:#fff;color:#1a6fc4;border-color:#1a6fc4">Reçu</a>
+    {% if peut_demander_annulation %}
+    <a href="{% url 'vente_demander_annulation' v.uuid %}" class="bouton-secondaire" style="background:var(--marge);color:#fff;border-color:var(--marge)">Demander annulation</a>
+    {% endif %}
+    {% if peut_rejeter_annulation or peut_annuler %}
+    <div style="display:flex;gap:8px;margin-left:auto">
+      {% if peut_rejeter_annulation %}
+      <form method="post" action="{% url 'vente_rejeter_annulation' v.uuid %}" style="display:inline">{% csrf_token %}
+        <button type="submit" class="bouton-secondaire" style="color:var(--marge);border-color:var(--marge)">Rejeter l'annulation</button>
+      </form>
+      {% endif %}
+      {% if peut_annuler %}
+      <a href="{% url 'vente_annuler' v.uuid %}" class="bouton-secondaire" style="background:var(--marge);color:#fff;border-color:var(--marge)">Annuler la vente</a>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+
+</div>
+<hr style="border:none;border-top:1px solid var(--reglure);margin:12px 0">
+<div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
+  {% if user.peut_vendre %}<a href="{% url 'vente' %}" class="bouton-secondaire" style="background:#e07020;color:#fff;border-color:#e07020;text-decoration:none">← Nouvelle vente</a>{% endif %}
+  {% if user.profil != 'COMMERCIAL' %}<a href="{% url 'demandes_annulation' %}" class="bouton-secondaire" style="background:#e07020;color:#fff;border-color:#e07020;text-decoration:none">← Retour Annulations</a>{% endif %}
+  <div style="display:flex;gap:6px;margin-left:auto">
+    <button type="button" class="bouton-secondaire" onclick="history.back()" title="Précédent" style="background:#e07020;color:#fff;border-color:#e07020;padding:9px 12px">&lt;</button>
+    <button type="button" class="bouton-secondaire" onclick="history.forward()" title="Suivant" style="background:#e07020;color:#fff;border-color:#e07020;padding:9px 12px">&gt;</button>
+  </div>
+</div>
+{% endblock %}

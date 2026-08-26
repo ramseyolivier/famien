@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block titre %}Stock réservé Magasin — LEPAD{% endblock %}
+{% block lieu %}Approvisionnement — Stock réservé Magasin{% endblock %}
+
+{% block contenu %}
+<div class="admin-entete">
+  <h1>Stock réservé Magasin</h1>
+</div>
+
+{% if magasin %}
+<div style="margin-bottom:16px">
+  <label style="display:block;font-size:.85rem;color:var(--encre-clair);margin-bottom:4px">Magasin</label>
+  <span style="display:inline-block;padding:8px 10px;border:1px solid var(--reglure);border-radius:6px;font-size:.9rem;background:var(--craie);color:var(--encre)">{{ magasin.nom }}</span>
+</div>
+{% endif %}
+
+<p style="color:var(--encre-clair);font-size:.9rem;margin-bottom:16px">
+  Quantités engagées vers les écoles pour des commandes validées en attente de livraison.
+  Le stock disponible est le stock total moins ces réservations.
+</p>
+
+<form method="get" class="finance-filtres">
+  {% if est_dg_manager and communes_filtre %}
+  <div class="filtre-champ filtre-champ--large">
+    <label>Commune</label>
+    <select name="commune" onchange="this.form.submit()">
+      <option value="">Toutes les communes</option>
+      {% for c in communes_filtre %}
+      <option value="{{ c.pk }}" {% if filtre_commune == c.pk|stringformat:"s" %}selected{% endif %}>{{ c.nom }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% endif %}
+
+  {% if sites_filtre and est_dg_manager %}
+  <div class="filtre-champ filtre-champ--large">
+    <label>Magasin</label>
+    <select name="site" onchange="this.form.submit()">
+      <option value="">Tous les magasins</option>
+      {% for s in sites_filtre %}
+      <option value="{{ s.pk }}" {% if filtre_site == s.pk|stringformat:"s" %}selected{% endif %}>{{ s.nom }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% endif %}
+
+  <div class="filtre-champ filtre-champ--large">
+    <label>Produit</label>
+    <select name="produit" onchange="this.form.submit()">
+      <option value="">Tous les produits</option>
+      {% for p in produits_filtre %}
+      <option value="{{ p.produit_id }}" {% if filtre_produit == p.produit_id|stringformat:"s" %}selected{% endif %}>
+        {{ p.produit__code }} — {{ p.produit__designation }}
+      </option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <a href="{% url 'stock_reserve' %}" class="bouton-secondaire" title="Réinitialiser" style="align-self:flex-end;min-width:0;padding:8px 12px">↺</a>
+</form>
+
+{% if groupes %}
+<div style="overflow-x:auto;margin-top:8px">
+<table class="registre">
+  <thead>
+    <tr>
+      {% if peut_tout_voir %}<th>Magasin</th>{% endif %}
+      <th>Produit</th>
+      <th class="nombre">Stock total</th>
+      <th class="nombre">Réservé</th>
+      <th class="nombre">Disponible</th>
+      <th>Détail</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for g in groupes %}
+    <tr>
+      {% if peut_tout_voir %}
+      <td style="font-size:.82rem;color:var(--encre-clair);white-space:nowrap">{{ g.magasin.nom }}</td>
+      {% endif %}
+      <td><strong>{{ g.produit.code }}</strong> — {{ g.produit.designation }}</td>
+      <td class="nombre chiffre">{{ g.stock_total }}</td>
+      <td class="nombre chiffre" style="color:var(--or)">{{ g.reserve_total }}</td>
+      <td class="nombre chiffre" style="color:{% if g.disponible == 0 %}var(--marge){% else %}var(--valide){% endif %}">{{ g.disponible }}</td>
+      <td style="font-size:.82rem;color:var(--encre-clair)">
+        {% for l in g.lignes %}
+          <span style="display:inline-block;margin-right:10px;white-space:nowrap">
+            <a href="{% url 'commande_ecole_detail' l.commande.pk %}" style="color:var(--accent)">CM #{{ l.commande.pk }}</a>
+            {{ l.ecole.nom }} — {{ l.quantite }}
+          </span>
+        {% endfor %}
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<p class="vide-liste">Aucune réservation en cours — tout le stock magasin est disponible.</p>
+{% endif %}
+
+{% if not peut_tout_voir %}
+<div style="margin-top:24px">
+  <a href="{% url 'livraisons_liste' %}" class="bouton-secondaire"
+     style="background:#374151;color:#fff;border-color:#374151">← Retour aux livraisons</a>
+</div>
+{% endif %}
+
+<div class="pied">
+  <a href="{% url 'hub_approvisionnement' %}#magasins" class="bouton-secondaire" style="min-width:180px;text-align:center">← Retour approvisionnement</a>
+</div>
+{% endblock %}

@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block titre %}Tarifs — {{ produit.designation }}{% endblock %}
+{% block lieu %}Administration › Produits › {{ produit.code }} › Tarifs{% endblock %}
+
+{% block contenu %}
+<div class="admin-entete">
+  <h1>Tarifs par école — {{ produit.code }}</h1>
+  <span style="color:var(--encre-clair);font-size:.9rem">{{ produit.designation }}</span>
+</div>
+<p style="color:var(--encre-clair);font-size:.88rem;margin-bottom:16px">
+  Prix de référence : <strong>{{ produit.cout_achat|floatformat:0 }} F CFA</strong> (coût achat) &nbsp;·&nbsp;
+  Laissez un champ vide pour ne pas appliquer de tarif spécifique à cette école.
+</p>
+
+<div class="barre-filtre">
+  <div class="champ-recherche">
+    <input type="search" id="recherche" placeholder="Rechercher une école…" autocomplete="off">
+  </div>
+  <span class="compteur-resultats" id="compteur-resultats"></span>
+</div>
+
+<form method="post">
+  {% csrf_token %}
+  <table class="registre" id="table-tarifs" style="margin-top:8px">
+    <thead>
+      <tr>
+        <th>École</th>
+        <th>Commune</th>
+        <th class="nombre">Prix spécifique</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for l in lignes %}
+      <tr>
+        <td><strong>{{ l.ecole.nom }}</strong></td>
+        <td style="color:var(--encre-clair)">{{ l.ecole.commune|default:"—" }}</td>
+        <td class="nombre">
+          <input
+            type="number"
+            name="prix_{{ l.ecole.pk }}"
+            value="{% if l.prix_ecole is not None %}{{ l.prix_ecole|floatformat:0 }}{% endif %}"
+            min="0"
+            step="1"
+            placeholder="—"
+            style="width:120px;text-align:right;padding:6px 8px;border:1.5px solid var(--reglure);border-radius:var(--rayon);font-family:inherit;font-size:.9rem"
+          >
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="aucun-resultat" id="aucun-resultat">Aucune école ne correspond à votre recherche.</p>
+
+  <div class="pied">
+    <a href="{% url 'admin_produits' %}" class="bouton-secondaire">← Retour aux produits</a>
+    <button type="submit" class="bouton-primaire">Enregistrer les tarifs</button>
+  </div>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+initFiltre({ tableId: 'table-tarifs', inputId: 'recherche' });
+</script>
+{% endblock %}

@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block titre %}Inventaire #{{ inventaire.pk }} — LEPAD{% endblock %}
+{% block lieu %}Inventaires — Saisie{% endblock %}
+{% block contenu %}
+<div class="admin-entete">
+  <h1>Nouvel inventaire</h1>
+  <span style="font-size:1rem;color:var(--accent);font-weight:600">{{ inventaire.cree_le|date:"d/m/Y" }}</span>
+</div>
+<p style="color:var(--encre-clair)">Saisissez les quantités comptées physiquement. Enregistrez à tout moment, validez quand l'inventaire est complet.</p>
+
+<form method="post" style="margin-top:12px">
+{% csrf_token %}
+<table class="registre">
+  <thead>
+    <tr><th>Désignation</th><th class="nombre">Théorique</th><th class="nombre">Physique</th><th class="nombre">Écart</th></tr>
+  </thead>
+  <tbody>
+  {% for l in lignes %}
+    <tr {% if l.ecart != 0 %}style="background:{% if l.ecart < 0 %}var(--marge-clair){% else %}var(--valide-clair){% endif %}"{% endif %}>
+      <td>{{ l.produit.designation }}</td>
+      <td class="nombre chiffre">{{ l.quantite_theorique }}</td>
+      <td class="nombre">
+        <input type="number" name="qte_{{ l.pk }}" value="{{ l.quantite_physique }}" min="0"
+          style="width:80px;padding:4px 6px;border:1px solid var(--reglure);border-radius:4px;font:inherit;text-align:right;font-size:.95rem"
+          onchange="majEcart(this, {{ l.quantite_theorique }})">
+      </td>
+      <td class="nombre chiffre" id="ecart-{{ l.pk }}"
+        style="color:{% if l.ecart < 0 %}var(--marge){% elif l.ecart > 0 %}var(--valide){% else %}var(--encre-pale){% endif %};font-weight:{% if l.ecart != 0 %}700{% else %}400{% endif %}">
+        {{ l.ecart|stringformat:"+d" }}
+      </td>
+    </tr>
+    <tr id="com_{{ l.pk }}" style="display:{% if l.ecart != 0 %}table-row{% else %}none{% endif %}">
+      <td colspan="4" style="padding-top:0;padding-bottom:6px;border-top:none">
+        <input type="text" name="com_{{ l.pk }}" value="{{ l.commentaire }}" placeholder="Explication de l'écart…"
+          style="width:100%;padding:6px 8px;border:1.5px solid var(--or);border-radius:4px;font:inherit;font-size:.85rem;box-sizing:border-box">
+      </td>
+    </tr>
+  {% empty %}
+    <tr><td colspan="5" class="vide-liste">Aucun produit en stock sur ce site.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+<div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+  <button type="submit" name="action" value="enregistrer" class="bouton-secondaire">Enregistrer</button>
+  <button type="submit" name="action" value="valider" class="bouton-secondaire"
+          style="background:{% if blocages %}var(--encre-clair){% else %}var(--valide){% endif %};color:#fff;border-color:{% if blocages %}var(--encre-clair){% else %}var(--valide){% endif %}"
+          {% if not blocages %}onclick="return validerInventaire()"{% endif %}>
+    Valider
+  </button>
+  <button type="submit" name="action" value="annuler" class="bouton-secondaire"
+          style="color:var(--marge);border-color:var(--marge)"
+          onclick="return confirm('Supprimer cet inventaire ? Cette action est irréversible.')">
+    Supprimer
+  </button>
+  <a href="{% url 'inventaire_export' inventaire.pk %}" class="bouton-secondaire" style="margin-left:auto" title="Exporter en Excel">⬇</a>
+</div>
+{% if blocages %}
+<div style="margin-top:10px;display:flex;flex-direction:column;gap:6px">
+  {% for b in blocages %}
+  <p style="font-size:.83rem;color:var(--marge);margin:0">
+    Validation bloquée — {{ b.message }}.
+    <a href="{% url b.url_name %}" style="color:var(--marge);text-decoration:underline">{{ b.label }}</a>
+  </p>
+  {% endfor %}
+</div>
+{% endif %}
+</form>
+
+<div style="margin-top:24px;padding-top:16px;border-top:1px solid var(--reglure)">
+  <a href="{% url 'inventaires_liste' %}" class="bouton-secondaire" style="min-width:180px;text-align:center;background:var(--accent);color:#fff;border-color:var(--accent)">← Retour inventaires</a>
+</div>
+<div class="pied">
+  <a href="{% url 'hub_stock' %}" class="bouton-secondaire" style="min-width:180px;text-align:center">← Retour stock</a>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+function majEcart(input, theorique) {
+  const pk = input.name.split('_')[1];
+  const physique = parseInt(input.value) || 0;
+  const ecart = physique - theorique;
+  const cell = document.getElementById('ecart-' + pk);
+  cell.textContent = (ecart >= 0 ? '+' : '') + ecart;
+  cell.style.color = ecart < 0 ? 'var(--marge)' : ecart > 0 ? 'var(--valide)' : 'var(--encre-pale)';
+  cell.style.fontWeight = ecart !== 0 ? '700' : '400';
+  input.closest('tr').style.background = ecart < 0 ? 'var(--marge-clair)' : ecart > 0 ? 'var(--valide-clair)' : '';
+  const com = document.getElementById('com_' + pk);
+  if (com) com.style.display = ecart !== 0 ? 'table-row' : 'none';
+}
+
+function validerInventaire() {
+  /* Vérifier que chaque ligne en écart a une raison saisie */
+  const manquants = [];
+  document.querySelectorAll('[id^="com_"]').forEach(function(row) {
+    if (row.style.display === 'none') return;
+    const input = row.querySelector('input[type="text"]');
+    if (input && !input.value.trim()) {
+      const pk = row.id.split('_')[1];
+      const designRow = document.querySelector('input[name="qte_' + pk + '"]');
+      const label = designRow ? designRow.closest('tr').cells[0].textContent.trim() : pk;
+      manquants.push(label);
+    }
+  });
+  if (manquants.length) {
+    alert('Renseignez la raison de l\'écart pour :\n• ' + manquants.join('\n• '));
+    return false;
+  }
+  return confirm('Valider l\'inventaire ? Les écarts seront appliqués au stock.');
+}
+</script>
+{% endblock %}

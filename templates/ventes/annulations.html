@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+{% block titre %}Annulations{% endblock %}
+{% block lieu %}Ventes — Annulations{% endblock %}
+
+{% block contenu %}
+<div class="admin-entete">
+  <h1>Annulations de ventes</h1>
+</div>
+
+{% if messages %}
+{% for m in messages %}
+<div class="message {% if 'erreur' in m.tags or 'error' in m.tags %}warning{% else %}info{% endif %}" style="margin-bottom:12px">{{ m }}</div>
+{% endfor %}
+{% endif %}
+
+{% if peut_traiter %}
+<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+  <span style="font-size:.95rem;font-weight:700;color:var(--marge)">Demandes en attente</span>
+  {% if nb_demandes %}
+  <span style="background:var(--marge);color:#fff;border-radius:10px;padding:1px 10px;font-size:.78rem;font-weight:700">{{ nb_demandes }}</span>
+  {% endif %}
+</div>
+
+{% if demandes %}
+<table class="registre" style="margin-bottom:32px">
+  <thead>
+    <tr>
+      <th>N° vente</th>
+      <th>École</th>
+      <th class="nombre">Montant</th>
+      <th>Date vente</th>
+      <th>Motif demandé</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for v in demandes %}
+    <tr>
+      <td><strong style="color:var(--accent)">{{ v.numero }}</strong></td>
+      <td>{{ v.ecole.nom }}</td>
+      <td class="nombre chiffre">{{ v.montant_total|floatformat:0 }} F</td>
+      <td style="font-size:.85rem;color:var(--encre-clair);white-space:nowrap">{{ v.horodatage|date:"d/m/Y à H:i" }}</td>
+      <td style="font-size:.85rem;color:var(--encre)">{{ v.motif_demande|truncatechars:80 }}</td>
+      <td style="text-align:right">
+        <a href="{% url 'facture_vente' v.uuid %}" class="bouton-secondaire"
+          style="font-size:.82rem;padding:5px 12px;min-height:0;background:var(--marge);color:#fff;border-color:var(--marge)">
+          Traiter →
+        </a>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div style="margin-bottom:28px;padding:14px 18px;background:#f9fafb;border-radius:var(--rayon);color:var(--encre-clair);font-size:.9rem">
+  Aucune demande d'annulation en attente.
+</div>
+{% endif %}
+{% endif %}
+
+{% if peut_traiter %}
+<div style="margin-bottom:10px">
+  <span style="font-size:.95rem;font-weight:700;color:var(--encre)">Historique des annulations</span>
+</div>
+{% endif %}
+
+<form method="get" class="finance-filtres" id="form-annulations">
+  {% if multi_communes %}
+  <div class="filtre-champ filtre-champ--large">
+    <label>Commune</label>
+    <select name="commune" onchange="var s=this.form.querySelector('[name=ecole]');if(s)s.value='';this.form.submit()">
+      <option value="">Toutes</option>
+      {% for c in communes %}
+      <option value="{{ c.pk }}" {% if filtres.commune == c.pk|stringformat:"s" %}selected{% endif %}>{{ c.nom }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% endif %}
+
+  <div class="filtre-champ filtre-champ--large">
+    <label>École</label>
+    <select name="ecole" onchange="this.form.submit()">
+      <option value="">Toutes les écoles</option>
+      {% for e in ecoles %}
+      <option value="{{ e.pk }}" {% if filtres.ecole == e.pk|stringformat:"s" %}selected{% endif %}>{{ e.nom }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="filtre-champ" style="flex:0 0 105px">
+    <label>Du</label>
+    <input type="date" name="debut" value="{{ filtres.debut }}" onchange="this.form.submit()">
+  </div>
+  <div class="filtre-champ" style="flex:0 0 105px">
+    <label>Au</label>
+    <input type="date" name="fin" value="{{ filtres.fin }}" onchange="this.form.submit()">
+  </div>
+  <div style="display:flex;align-items:flex-end;padding-bottom:2px">
+    <a href="{% url 'historique_annulations' %}" class="bouton-secondaire" title="Réinitialiser" style="min-width:0;padding:6px 12px">↺</a>
+  </div>
+
+  <div style="display:flex;gap:0;align-items:flex-end;padding-bottom:2px;margin-left:auto">
+    <a href="{% url 'export_annulations' %}?{% if filtres.debut %}debut={{ filtres.debut }}&{% endif %}{% if filtres.fin %}fin={{ filtres.fin }}&{% endif %}{% if filtres.commune %}commune={{ filtres.commune }}&{% endif %}{% if filtres.ecole %}ecole={{ filtres.ecole }}{% endif %}" class="bouton-secondaire" title="Exporter en Excel" style="min-width:0;padding:8px 12px">⬇</a>
+  </div>
+</form>
+
+<table class="registre" style="margin-top:8px">
+  <thead>
+    <tr>
+      <th>Annulée le</th>
+      <th>N° vente</th>
+      <th>École</th>
+      <th>Caissière</th>
+      <th>Annulée par</th>
+      <th>Contenu</th>
+      <th class="nombre" style="width:110px">Montant</th>
+      <th>Motif</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for v in annulations %}
+    <tr>
+      <td class="chiffre" style="white-space:nowrap">{{ v.annulee_le|date:"d/m/Y H:i" }}</td>
+      <td><strong style="color:var(--encre)">{{ v.numero }}</strong></td>
+      <td>{{ v.ecole.nom }}</td>
+      <td style="font-size:.85rem;color:var(--encre-clair)">{{ v.vendeuse.get_full_name }}</td>
+      <td style="font-weight:600;font-size:.85rem">{{ v.annulee_par.get_full_name|default:"—" }}</td>
+      <td style="font-size:.82rem">
+        {% for l in v.lignes.all %}{{ l.quantite }}× {{ l.libelle }}{% if not forloop.last %}, {% endif %}{% endfor %}
+      </td>
+      <td class="nombre chiffre">{{ v.montant_total|floatformat:0 }}</td>
+      <td style="font-size:.85rem;color:var(--marge)">{{ v.motif_annulation }}</td>
+      <td style="text-align:right">
+        <a href="{% url 'facture_vente' v.uuid %}" class="bouton-secondaire"
+          style="font-size:.82rem;padding:5px 12px;min-height:0">
+          Détail
+        </a>
+      </td>
+    </tr>
+  {% empty %}
+    <tr>
+      <td colspan="9" style="color:var(--encre-clair);text-align:center;padding:20px">
+        Aucune annulation sur cette période.
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+<div class="pied">
+  <a href="{% url 'hub_ventes' %}" class="bouton-secondaire">← Retour ventes</a>
+</div>
+{% endblock %}

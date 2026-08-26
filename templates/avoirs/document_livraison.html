@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% block titre %}Reste dû — {{ v.numero }}{% endblock %}
+{% block lieu %}Avoirs — {{ v.numero }}{% endblock %}
+
+{% block contenu %}
+<div style="margin-top:16px">
+  <div class="fiche">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px">
+      <div>
+        <div class="etiquette" style="margin:0 0 4px;font-size:1.1rem;color:#1a6fc4">Reste dû — Vente d'origine</div>
+        <h2 style="margin:0;font-size:1.5rem;font-weight:800;color:var(--accent)">{{ v.numero }}</h2>
+        <p style="margin:6px 0 0;font-size:.88rem;color:var(--encre-clair)">
+          {{ v.ecole.nom }}{% if v.ecole.commune %} · {{ v.ecole.commune }}{% endif %}
+          · {{ v.horodatage|date:"d/m/Y à H:i" }}
+        </p>
+        {% if v.telephone_client %}
+        <p style="margin:4px 0 0;font-size:.9rem">
+          Tél. client : <strong>{{ v.telephone_client }}</strong>
+          <a href="tel:{{ v.telephone_client }}" style="color:#1a6fc4;margin-left:6px;font-size:.82rem">Appeler</a>
+        </p>
+        {% endif %}
+      </div>
+      <div style="text-align:right">
+        <div style="font-size:1.4rem;font-weight:800;color:var(--encre)">{{ v.montant_total|floatformat:0 }} <span style="font-size:.85rem;font-weight:400">F CFA</span></div>
+        <div style="font-size:.82rem;color:var(--encre-clair)">Montant total encaissé</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="etiquette" style="margin-top:24px">Articles à livrer</div>
+  <table class="registre">
+    <thead>
+      <tr>
+        <th>Article</th>
+        <th class="nombre">Dû total</th>
+        <th class="nombre">Déjà servi</th>
+        <th class="nombre" style="color:var(--marge)">Restant</th>
+        <th class="nombre">Stock dispo</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for lp in v.lignes_produit.all %}
+      <tr>
+        <td>
+          <span style="font-size:.88rem">{{ lp.produit.designation }}</span>
+        </td>
+        <td class="nombre chiffre">{{ lp.quantite_due }}</td>
+        <td class="nombre chiffre" style="color:var(--valide)">{{ lp.quantite_servie }}</td>
+        <td class="nombre chiffre" style="font-weight:700;color:{% if lp.avoir_annule %}var(--encre-pale){% elif lp.quantite_manquante %}var(--marge){% else %}var(--valide){% endif %}">
+          {% if lp.avoir_annule %}<span style="color:var(--encre-pale);font-weight:400;font-size:.85rem">Annulé</span>
+          {% elif lp.quantite_manquante %}{{ lp.quantite_manquante }}
+          {% else %}✓{% endif %}
+        </td>
+        <td class="nombre" style="font-size:.85rem;{% if lp.quantite_manquante and not lp.avoir_annule %}color:{% if lp.stock_dispo %}var(--valide){% else %}var(--marge){% endif %}{% else %}color:var(--encre-pale){% endif %}">
+          {% if lp.quantite_manquante and not lp.avoir_annule %}
+            <strong>{{ lp.stock_dispo }}</strong>
+          {% else %}—{% endif %}
+        </td>
+        <td style="text-align:right;white-space:nowrap">
+          {% if lp.quantite_manquante and not lp.avoir_annule %}
+            {% if peut_livrer %}
+            <form method="post" action="{% url 'avoir_livrer_partiel' lp.pk %}"
+                  style="display:inline-flex;align-items:center;gap:6px">
+              {% csrf_token %}
+              <input type="number" name="quantite" min="1" max="{{ lp.quantite_manquante }}"
+                     value="{{ lp.quantite_manquante }}"
+                     style="width:60px;padding:4px 6px;border:1.5px solid var(--reglure);border-radius:var(--rayon);font:inherit;text-align:center">
+              <button type="submit" class="bouton-secondaire"
+                      style="font-size:.82rem;padding:4px 10px;min-height:0;background:var(--valide);color:#fff;border-color:var(--valide)">
+                Livrer
+              </button>
+            </form>
+            {% endif %}
+            {% if peut_annuler_avoir %}
+            <form method="post" action="{% url 'avoir_annuler_ligne' lp.pk %}"
+                  style="display:inline;margin-left:4px"
+                  onsubmit="return confirm('Annuler cet avoir ? Le client sera remboursé.')">
+              {% csrf_token %}
+              <button type="submit" class="bouton-secondaire"
+                      style="font-size:.78rem;padding:3px 8px;min-height:0;color:var(--marge);border-color:var(--marge)">
+                Annuler
+              </button>
+            </form>
+            {% endif %}
+          {% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+
+  {% if v.reste_a_livrer and peut_livrer %}
+  <div style="margin-top:20px;padding:16px 20px;background:var(--fond-alt,#f7f7f5);border:1px solid var(--reglure);border-radius:8px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">
+    <div>
+      <div style="font-weight:700;font-size:.95rem">Livrer tout le reliquat</div>
+      <div style="font-size:.82rem;color:var(--encre-clair);margin-top:3px">
+        La livraison sera limitée au stock disponible. Aucun encaissement supplémentaire.
+      </div>
+    </div>
+    <form method="post" action="{% url 'avoir_livrer' v.uuid %}">
+      {% csrf_token %}
+      <button type="submit" class="bouton-secondaire"
+              style="background:var(--valide);color:#fff;border-color:var(--valide);font-size:.95rem;padding:10px 20px">
+        Livrer tout
+      </button>
+    </form>
+  </div>
+  {% elif not v.reste_a_livrer %}
+  <div style="margin-top:16px;padding:14px 18px;background:#e8f5e9;border-left:4px solid var(--valide);border-radius:var(--rayon)">
+    <strong style="color:var(--valide)">Avoir soldé intégralement</strong> — toutes les quantités ont été remises.
+  </div>
+  {% endif %}
+
+  <div style="margin-top:20px;display:flex;gap:10px;flex-wrap:wrap">
+<a href="{% url 'recu' v.uuid %}" class="bouton-secondaire" style="color:#1a6fc4;border-color:#1a6fc4;background:#fff">Reçu</a>
+  </div>
+</div>
+{% endblock %}
+
+{% block nav_hist %}
+<div id="nav-hist" style="display:flex;justify-content:space-between;align-items:center;width:100%">
+  <a href="{% url 'avoirs_liste' %}" class="bouton-secondaire">← Reste dû</a>
+  <div style="display:flex;gap:6px">
+    <button type="button" class="bouton-secondaire" onclick="history.back()" title="Précédent" style="padding:9px 12px">&lt;</button>
+    <button type="button" class="bouton-secondaire" onclick="history.forward()" title="Suivant" style="padding:9px 12px">&gt;</button>
+  </div>
+</div>
+{% endblock %}

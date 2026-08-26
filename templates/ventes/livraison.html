@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block titre %}Livraisons{% endblock %}
+{% block lieu %}File de livraison{% endblock %}
+
+{% block contenu %}
+<p style="color:var(--encre-clair);font-size:.85rem;margin:12px 0 0">
+  Remplace le reçu papier comme jeton entre la caisse et le stand. Chaque fiche indique ce qu'il faut constituer.
+</p>
+
+<div class="etiquette">À remettre · {{ attente|length }}</div>
+{% for v in attente %}
+  <div class="fiche{% if not v.est_complete %} manque{% endif %}">
+    <div class="tete">
+      <span class="num">{{ v.numero }}</span>
+      <span class="attente">{{ v.ecole.nom }} · encaissé à {{ v.horodatage|date:"H:i" }} · {{ v.horodatage|timesince:maintenant }} d'attente</span>
+    </div>
+    <ul>
+      {% for l in v.lignes_produit.all %}
+        <li{% if l.quantite_manquante %} class="absent"{% endif %}>
+          {{ l.quantite_due }} × {{ l.produit.designation }} ({{ l.produit.code }})
+          {% if l.quantite_manquante %} — {{ l.quantite_manquante }} en rupture{% endif %}
+        </li>
+      {% endfor %}
+    </ul>
+    <form method="post" action="{% url 'livrer' v.uuid %}">{% csrf_token %}
+      <button type="submit" class="bouton-secondaire">Remis au client</button>
+      <a href="{% url 'recu' v.uuid %}" class="bouton-secondaire" style="text-decoration:none;display:inline-block">Reçu</a>
+    </form>
+  </div>
+{% empty %}
+  <p style="color:var(--encre-clair)">Rien à remettre. La caisse n'a aucune vente en attente.</p>
+{% endfor %}
+
+<div class="etiquette">Soldes à livrer · {{ partielles|length }}</div>
+{% for v in partielles %}
+  <div class="fiche manque">
+    <div class="tete">
+      <span class="num">{{ v.numero }}</span>
+      <span class="attente">{{ v.ecole.nom }} · {{ v.horodatage|date:"d/m à H:i" }}</span>
+    </div>
+    <ul>
+      {% for l in v.reste_a_livrer %}
+        <li class="absent">{{ l.quantite_manquante }} × {{ l.produit.designation }} ({{ l.produit.code }})</li>
+      {% endfor %}
+    </ul>
+    <form method="post" action="{% url 'servir_solde' v.uuid %}">{% csrf_token %}
+      <button type="submit" class="bouton-secondaire">Servir le solde depuis le stock</button>
+    </form>
+  </div>
+{% empty %}
+  <p style="color:var(--encre-clair)">Aucun solde en attente. Toutes les ventes ont été servies intégralement.</p>
+{% endfor %}
+{% endblock %}

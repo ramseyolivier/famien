@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block titre %}Produits — Administration{% endblock %}
+{% block lieu %}Administration › Produits{% endblock %}
+
+{% block contenu %}
+<div class="admin-entete">
+  <h1>Produits</h1>
+  <a href="{% url 'admin_produit_nouveau' %}" class="bouton-secondaire">+ Nouveau produit</a>
+</div>
+
+{% if produits %}
+<div class="barre-filtre">
+  <div class="champ-recherche">
+    <input type="search" id="recherche" placeholder="Rechercher un produit…" autocomplete="off">
+  </div>
+  <select id="filtre-categorie"><option value="">Toutes catégories</option></select>
+  <select id="filtre-statut"><option value="">Tous statuts</option></select>
+  <span class="compteur-resultats" id="compteur-resultats"></span>
+</div>
+
+<table class="registre" id="table-produits" style="margin-top:8px;table-layout:fixed;width:100%">
+  <colgroup>
+    <col style="width:8%">
+    <col style="width:28%">
+    <col style="width:16%">
+    <col style="width:15%">
+    <col style="width:11%">
+    <col style="width:8%">
+    <col style="width:14%">
+  </colgroup>
+  <thead>
+    <tr>
+      <th>Code</th>
+      <th>Désignation</th>
+      <th>Catégorie</th>
+      <th>Marque</th>
+      <th class="nombre">Coût achat</th>
+      <th>Statut</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for p in produits %}
+    <tr>
+      <td><code style="font-family:monospace;font-weight:700;color:var(--accent)">{{ p.code }}</code></td>
+      <td>{{ p.designation }}</td>
+      <td><span class="badge badge-cahier">{{ p.categorie|default:"—" }}</span></td>
+      <td>{{ p.marque|default:"—" }}</td>
+      <td class="nombre chiffre">{{ p.cout_achat|floatformat:0 }} F</td>
+      <td>
+        {% if p.actif %}<span class="badge badge-actif">Actif</span>
+        {% else %}<span class="badge badge-inactif">Inactif</span>{% endif %}
+      </td>
+      <td style="text-align:right;white-space:nowrap">
+        <a href="{% url 'admin_produit_modifier' p.pk %}" class="icone-action" title="Modifier">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        </a>
+        <form method="post" action="{% url 'admin_produit_activer' p.pk %}" style="display:inline">
+          {% csrf_token %}
+          <button type="submit" class="icone-action {% if p.actif %}icone-danger{% endif %}" title="{% if p.actif %}Désactiver{% else %}Activer{% endif %}">
+            {% if p.actif %}
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="8" y1="8" x2="16" y2="16"/><line x1="16" y1="8" x2="8" y2="16"/></svg>
+            {% else %}
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            {% endif %}
+          </button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+<p class="aucun-resultat" id="aucun-resultat">Aucun produit ne correspond à votre recherche.</p>
+{% else %}
+<p class="vide-liste">Aucun produit enregistré. <a href="{% url 'admin_produit_nouveau' %}">Créer le premier</a>.</p>
+{% endif %}
+
+<div class="pied"><a href="{% url 'admin_accueil' %}#produits" class="bouton-secondaire">← Retour administration</a></div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+initFiltre({
+  tableId: 'table-produits',
+  inputId: 'recherche',
+  selects: [
+    { selectId: 'filtre-categorie', colonne: 2 },
+    { selectId: 'filtre-statut',    colonne: 5 },
+  ],
+});
+</script>
+{% endblock %}

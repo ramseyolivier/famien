@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block titre %}Notifications{% endblock %}
+{% block lieu %}Notifications{% endblock %}
+
+{% block contenu %}
+<style>
+.notif-magasin    { background:#dbeafe; border-left:4px solid #3b82f6; }
+.notif-ecole      { background:#f3f4f6; border-left:4px solid #9ca3af; }
+.notif-fournisseur{ background:#ffedd5; border-left:4px solid #f97316; }
+.notif-nc         { background:#fee2e2; border-left:4px solid var(--marge); }
+</style>
+
+<div class="admin-entete">
+  <h1>Notifications</h1>
+</div>
+
+{% if notifs %}
+<div style="display:flex;flex-direction:column;gap:10px;margin-top:16px">
+  {% for n in notifs %}
+
+  <div class="fiche {% if n.type == 'NON_CONFORMITE' %}notif-nc{% elif "/ecole/" in n.lien %}notif-ecole{% elif "/magasin/" in n.lien %}notif-magasin{% elif "/fournisseur" in n.lien or "/achats" in n.lien %}notif-fournisseur{% endif %}" style="padding:14px 18px;display:flex;gap:14px;align-items:flex-start">
+    <div style="flex:1;min-width:0">
+      <div style="font-weight:600;color:var(--encre)">{{ n.titre }}</div>
+      {% if n.message %}<div style="font-size:.88rem;color:var(--encre-clair);margin-top:4px">{{ n.message }}</div>{% endif %}
+      <div style="font-size:.78rem;color:var(--encre-clair);margin-top:6px">{{ n.cree_le|date:"d/m/Y à H:i" }}</div>
+    </div>
+    <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px;flex-shrink:0">
+      {# Badge : déterminé par le type #}
+      {% if n.type == "DEMANDE_REJETEE" or n.type == "LIVRAISON_REFUSEE" %}
+        <span style="background:var(--marge);color:#fff;padding:3px 12px;border-radius:20px;font-size:.78rem;font-weight:700;white-space:nowrap">Refusée</span>
+      {% elif n.type == "DEMANDE_VALIDEE" or n.type == "LIVRAISON_CONFIRMEE" or n.type == "TRANSFERT_VALIDE" or n.type == "INVENTAIRE_VALIDE" or n.type == "DEPENSE_VALIDEE" %}
+        <span style="background:#10b981;color:#fff;padding:3px 12px;border-radius:20px;font-size:.78rem;font-weight:700;white-space:nowrap">Validée</span>
+      {% elif n.type == "LIVRAISON_PRETE" %}
+        <span style="background:var(--accent);color:#fff;padding:3px 12px;border-radius:20px;font-size:.78rem;font-weight:700;white-space:nowrap">À réceptionner</span>
+      {% elif n.type == "TRANSFERT_RECU" %}
+        <span style="background:var(--or);color:#fff;padding:3px 12px;border-radius:20px;font-size:.78rem;font-weight:700;white-space:nowrap">En attente d'approbation</span>
+      {% elif n.type == "TRANSFERT_ACCEPTE" %}
+        <span style="background:#10b981;color:#fff;padding:3px 12px;border-radius:20px;font-size:.78rem;font-weight:700;white-space:nowrap">Transfert accepté</span>
+      {% elif n.type == "TRANSFERT_REJETE" %}
+        <span style="background:var(--marge);color:#fff;padding:3px 12px;border-radius:20px;font-size:.78rem;font-weight:700;white-space:nowrap">Transfert rejeté</span>
+      {% elif n.type == "DEMANDE_SOUMISE" or n.type == "DEPENSE_SOUMISE" %}
+        <span style="background:#6b7280;color:#fff;padding:3px 12px;border-radius:20px;font-size:.78rem;font-weight:700;white-space:nowrap">Approbation attendue</span>
+      {% elif n.type == "RUPTURE_STOCK" %}
+        <span style="background:var(--marge);color:#fff;padding:3px 12px;border-radius:20px;font-size:.78rem;font-weight:700;white-space:nowrap">Rupture</span>
+      {% elif n.type == "VENTE_ANNULEE" %}
+        <span style="background:var(--or);color:#fff;padding:3px 12px;border-radius:20px;font-size:.78rem;font-weight:700;white-space:nowrap">Annulée</span>
+      {% elif n.type == "DEMANDE_ANNULATION" %}
+        <span style="background:var(--marge);color:#fff;padding:3px 12px;border-radius:20px;font-size:.78rem;font-weight:700;white-space:nowrap">Approbation requise</span>
+      {% elif n.type == "ANNULATION_REJETEE" %}
+        <span style="background:var(--marge);color:#fff;padding:3px 12px;border-radius:20px;font-size:.78rem;font-weight:700;white-space:nowrap">Rejetée</span>
+      {% elif n.type == "VERSEMENT_RECU" %}
+        <span style="background:var(--or);color:#fff;padding:3px 12px;border-radius:20px;font-size:.78rem;font-weight:700;white-space:nowrap">Approbation attendue</span>
+      {% elif n.type == "VERSEMENT_CONFIRME" %}
+        <span style="background:#10b981;color:#fff;padding:3px 12px;border-radius:20px;font-size:.78rem;font-weight:700;white-space:nowrap">Confirmé</span>
+      {% elif n.type == "VERSEMENT_REJETE" %}
+        <span style="background:var(--marge);color:#fff;padding:3px 12px;border-radius:20px;font-size:.78rem;font-weight:700;white-space:nowrap">Rejeté</span>
+      {% elif n.type == "NON_CONFORMITE" %}
+        <span style="background:var(--marge);color:#fff;padding:3px 12px;border-radius:20px;font-size:.78rem;font-weight:700;white-space:nowrap">Non-conformité</span>
+      {% else %}
+        <span style="background:#6b7280;color:#fff;padding:3px 12px;border-radius:20px;font-size:.78rem;font-weight:700;white-space:nowrap">Info</span>
+      {% endif %}
+      {% if n.lien %}
+      <form method="post" action="{% url 'notification_lire' n.pk %}">{% csrf_token %}
+        <button type="submit" class="bouton-secondaire" style="font-size:.85rem">Voir →</button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+
+  {% endfor %}
+</div>
+{% else %}
+<p class="vide-liste" style="margin-top:20px">Aucune notification.</p>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% block titre %}Inventaires — LEPAD{% endblock %}
+{% block lieu %}Inventaires{% endblock %}
+
+{% block contenu %}
+<div class="admin-entete">
+  <h1>Inventaires{% if depot %} — {{ depot.nom }}{% endif %}</h1>
+  {% if peut_initier %}
+  <a href="{% url 'inventaire_nouveau' %}" class="bouton-secondaire" style="background:var(--accent);color:#fff;border-color:var(--accent)">+ Nouvel inventaire</a>
+  {% endif %}
+</div>
+
+{% if not peut_initier %}
+<p style="font-size:.88rem;color:var(--encre-clair);margin-bottom:20px">
+  Vous consultez les inventaires de votre zone en lecture seule.
+</p>
+{% endif %}
+
+<form method="get" class="finance-filtres">
+  {% if sites_filtre %}
+  <div class="filtre-champ filtre-champ--large">
+    <label>Site</label>
+    <select name="site" onchange="this.form.submit()">
+      <option value="">Tous les sites</option>
+      {% for s in sites_filtre %}
+      <option value="{{ s.pk }}" {% if filtres.site == s.pk|stringformat:"s" %}selected{% endif %}>{{ s.nom }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% endif %}
+  <div class="filtre-champ">
+    <label>Statut</label>
+    <select name="statut" data-no-combobox onchange="this.form.submit()">
+      <option value="" {% if not filtres.statut %}selected{% endif %}>Tous</option>
+      {% for code, libelle in statuts %}
+      <option value="{{ code }}" {% if filtres.statut == code %}selected{% endif %}>{{ libelle }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="filtre-champ filtre-champ--date">
+    <label>Du</label>
+    <input type="date" name="debut" value="{{ filtres.debut }}" onchange="this.form.submit()">
+  </div>
+  <div class="filtre-champ filtre-champ--date">
+    <label>Au</label>
+    <input type="date" name="fin" value="{{ filtres.fin }}" onchange="this.form.submit()">
+  </div>
+  <a href="{% url 'inventaires_liste' %}" class="bouton-secondaire" title="Réinitialiser" style="align-self:flex-end;min-width:0;padding:8px 12px">↺</a>
+  <a href="{% url 'inventaires_liste_export' %}?statut={{ filtres.statut }}&site={{ filtres.site }}&debut={{ filtres.debut }}&fin={{ filtres.fin }}"
+     class="bouton-secondaire" title="Télécharger en Excel" style="align-self:flex-end;min-width:0;padding:8px 12px;margin-left:auto">⬇</a>
+</form>
+
+{% if inventaires %}
+<table class="registre" style="margin-top:8px">
+  <thead>
+    <tr>
+      <th>#</th>
+      <th>Site</th>
+      <th>Statut</th>
+      <th class="nombre">Écarts</th>
+      <th>Créé le</th>
+      <th>Par</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for inv in inventaires %}
+    <tr>
+      <td style="font-family:monospace;font-weight:700;color:var(--encre-clair)">INV-{{ inv.pk }}</td>
+      <td>{{ inv.site.nom }}</td>
+      <td>
+        {% if inv.statut == "VALIDE" %}
+          <span class="badge badge-actif">{{ inv.get_statut_display }}</span>
+        {% elif inv.statut == "ANNULE" %}
+          <span class="badge" style="background:var(--encre-clair);color:#fff">{{ inv.get_statut_display }}</span>
+        {% else %}
+          <span class="badge" style="background:var(--or-clair);color:var(--or)">{{ inv.get_statut_display }}</span>
+        {% endif %}
+      </td>
+      <td class="nombre">
+        {% if inv.nb_ecarts %}
+          <span style="color:var(--marge);font-weight:700">{{ inv.nb_ecarts }}</span>
+        {% else %}
+          <span style="color:var(--encre-pale)">0</span>
+        {% endif %}
+      </td>
+      <td style="font-size:.85rem;color:var(--encre-clair)">{{ inv.cree_le|date:"d/m/Y H:i" }}</td>
+      <td style="font-size:.85rem">{{ inv.cree_par.get_full_name|default:inv.cree_par.username }}</td>
+      <td>
+        {% if inv.statut == "EN_COURS" and peut_initier %}
+        <a href="{% url 'inventaire_saisir' inv.pk %}" class="bouton-secondaire">Saisir</a>
+        {% elif inv.statut == "VALIDE" %}
+        <a href="{% url 'inventaire_detail' inv.pk %}" class="bouton-secondaire">Détail</a>
+        {% elif inv.statut == "ANNULE" %}
+        <a href="{% url 'inventaire_detail' inv.pk %}" class="bouton-secondaire">Détail</a>
+        {% endif %}
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="vide-liste">Aucun inventaire sur ce périmètre.</p>
+{% endif %}
+
+{% if est_dg_manager %}
+<div style="margin-top:24px">
+  <a href="{% url 'inventaires_global' %}" class="bouton-secondaire" style="min-width:180px;text-align:center;background:var(--accent);color:#fff;border-color:var(--accent)">Vue globale →</a>
+</div>
+{% endif %}
+<div class="pied">
+  <a href="{% url 'hub_stock' %}" class="bouton-secondaire" style="min-width:180px;text-align:center">← Retour stock</a>
+</div>
+{% endblock %}

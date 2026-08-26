@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block titre %}Ajustements — LEPAD{% endblock %}
+{% block lieu %}Stock — Ajustements{% endblock %}
+{% block contenu %}
+<div class="admin-entete">
+  <h1>Ajustements de stock</h1>
+  <a href="{% url 'ajustement_nouveau' %}" class="bouton-secondaire">+ Nouvel ajustement</a>
+</div>
+{% if ajustements %}
+<table class="registre">
+  <thead><tr><th>#</th><th>Site</th><th>Motif</th><th>Statut</th><th>Date</th><th></th></tr></thead>
+  <tbody>
+  {% for a in ajustements %}
+    <tr>
+      <td>{{ a.pk }}</td>
+      <td>{{ a.site.nom }}</td>
+      <td>{{ a.motif|truncatechars:50 }}</td>
+      <td>
+        {% if a.statut == "VALIDE" %}<span class="badge badge-actif">Validé</span>
+        {% elif a.statut == "ANNULE" %}<span class="badge" style="background:var(--marge);color:#fff">Annulé</span>
+        {% else %}<span class="badge" style="background:var(--or-clair);color:var(--or)">Brouillon</span>{% endif %}
+      </td>
+      <td style="font-size:.85rem;color:var(--encre-clair)">{{ a.cree_le|date:"d/m/Y H:i" }}</td>
+      <td>
+        {% if a.statut == "BROUILLON" %}
+        <form method="post" action="{% url 'ajustement_valider' a.pk %}" style="display:inline">
+          {% csrf_token %}
+          <button type="submit" class="bouton-secondaire" style="padding:3px 8px"
+            onclick="return confirm('Valider cet ajustement ?')">Valider</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="vide-liste">Aucun ajustement sur votre périmètre.</p>
+{% endif %}
+{% endblock %}

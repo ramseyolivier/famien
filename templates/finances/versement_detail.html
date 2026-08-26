@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block titre %}Versement #{{ v.pk }} — LEPAD{% endblock %}
+{% block lieu %}Finances — Versements{% endblock %}
+
+{% block contenu %}
+<div class="admin-entete">
+  <h1>Versement #{{ v.pk }}</h1>
+  {% if v.statut == "CONFIRME" %}
+    <span class="badge badge-actif" style="font-size:.95rem;padding:6px 14px">Confirmé</span>
+  {% elif v.statut == "REJETE" %}
+    <span class="badge" style="background:var(--marge);color:#fff;font-size:.95rem;padding:6px 14px">Rejeté</span>
+  {% else %}
+    <span class="badge" style="background:var(--or-clair);color:var(--or);font-size:.95rem;padding:6px 14px">En attente</span>
+  {% endif %}
+</div>
+
+<div class="fiche" style="margin:0 0 24px">
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px 24px;font-size:.9rem">
+    <div>
+      <span style="color:var(--encre-clair)">De</span><br>
+      <strong>{{ v.verseur.get_full_name }}</strong>
+      <span style="color:var(--encre-clair);font-size:.82rem"> · {{ v.verseur.get_profil_display }}</span>
+    </div>
+    <div>
+      <span style="color:var(--encre-clair)">À</span><br>
+      {% if v.destinataire %}
+        <strong>{{ v.destinataire.get_full_name }}</strong>
+        <span style="color:var(--encre-clair);font-size:.82rem"> · {{ v.destinataire.get_profil_display }}</span>
+      {% else %}
+        <em style="color:var(--encre-clair)">Banque (sortie directe)</em>
+      {% endif %}
+    </div>
+    <div>
+      <span style="color:var(--encre-clair)">Montant</span><br>
+      <strong style="font-size:1.3rem">{{ v.montant|floatformat:0 }} F CFA</strong>
+    </div>
+    <div>
+      <span style="color:var(--encre-clair)">Date</span><br>
+      <strong>{{ v.date|date:"d/m/Y" }}</strong>
+    </div>
+    <div>
+      <span style="color:var(--encre-clair)">Mode</span><br>
+      <strong>{{ v.get_mode_display }}</strong>
+    </div>
+    {% if v.reference %}
+    <div>
+      <span style="color:var(--encre-clair)">Référence</span><br>
+      <strong>{{ v.reference }}</strong>
+    </div>
+    {% endif %}
+    {% if v.note %}
+    <div style="grid-column:1/-1">
+      <span style="color:var(--encre-clair)">Note</span><br>
+      <span style="font-style:italic">{{ v.note }}</span>
+    </div>
+    {% endif %}
+    <div>
+      <span style="color:var(--encre-clair)">Déclaré le</span><br>
+      <strong>{{ v.cree_le|date:"d/m/Y à H:i" }}</strong>
+    </div>
+    {% if v.traite_le %}
+    <div>
+      <span style="color:var(--encre-clair)">Traité le</span><br>
+      <strong>{{ v.traite_le|date:"d/m/Y à H:i" }}</strong>
+    </div>
+    {% endif %}
+  </div>
+
+  {% if v.recu_banque %}
+  <div style="margin-top:16px">
+    <span style="color:var(--encre-clair);font-size:.88rem">Bordereau / reçu banque</span><br>
+    <a href="{{ v.recu_banque.url }}" target="_blank">
+      <img src="{{ v.recu_banque.url }}" alt="Reçu banque"
+           style="margin-top:8px;max-width:100%;max-height:320px;border-radius:6px;border:1px solid var(--reglure)">
+    </a>
+  </div>
+  {% endif %}
+
+  {% if v.statut == "REJETE" and v.motif_rejet %}
+  <div style="margin-top:16px;padding:10px 14px;background:var(--marge-clair, #fdecea);border-left:3px solid var(--marge);border-radius:4px;font-size:.88rem">
+    <span style="color:var(--marge);font-weight:600">Motif de rejet :</span> {{ v.motif_rejet }}
+  </div>
+  {% endif %}
+</div>
+
+{% if v.statut == "EN_ATTENTE" and request.user == v.destinataire %}
+<a href="{% url 'versement_traiter' v.pk %}" class="bouton-principal" style="min-height:44px;display:inline-flex;align-items:center">Traiter ce versement →</a>
+{% endif %}
+
+<div class="pied">
+  <a href="{% url 'versements_liste' %}" class="bouton-secondaire">← Versements</a>
+</div>
+{% endblock %}

@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% block titre %}NC #{{ nc.pk }} — {{ nc.titre }}{% endblock %}
+{% block lieu %}Non-conformités{% endblock %}
+
+{% block contenu %}
+<div class="admin-entete">
+  <h1 style="color:var(--marge)">Non-conformité #{{ nc.pk }}</h1>
+</div>
+
+<div class="fiche" style="padding:20px 24px;border-left:4px solid var(--marge)">
+  <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;align-items:flex-start">
+    <div>
+      <span class="badge" style="background:var(--marge-clair);color:var(--marge);margin-bottom:8px;display:inline-block">{{ nc.get_type_display }}</span>
+      <h2 style="margin:0;font-size:1.2rem">{{ nc.titre }}</h2>
+      <p style="margin:6px 0 0;font-size:.88rem;color:var(--encre-clair)">
+        {% if nc.site %}{{ nc.site.nom }} · {% endif %}Déclarée le {{ nc.cree_le|date:"d/m/Y à H:i" }} par <strong>{{ nc.cree_par.get_full_name|default:nc.cree_par.username }}</strong>
+      </p>
+      {% if nc.reference_document %}
+      <p style="margin:4px 0 0;font-size:.82rem;color:var(--encre-clair)">Réf. {{ nc.reference_document }}</p>
+      {% endif %}
+    </div>
+    <div>
+      {% if nc.statut == 'OUVERTE' %}<span class="badge" style="background:var(--marge);color:#fff;font-size:.9rem;padding:4px 14px">Ouverte</span>
+      {% elif nc.statut == 'EN_COURS' %}<span class="badge" style="background:var(--or);color:#fff;font-size:.9rem;padding:4px 14px">En cours</span>
+      {% elif nc.statut == 'CLOTUREE' %}<span class="badge" style="background:var(--valide);color:#fff;font-size:.9rem;padding:4px 14px">Clôturée</span>
+      {% else %}<span class="badge badge-inactif" style="font-size:.9rem;padding:4px 14px">Annulée</span>{% endif %}
+    </div>
+  </div>
+  <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--reglure);white-space:pre-line;font-size:.95rem;line-height:1.6">{{ nc.description }}</div>
+  {% if nc.image %}
+  <div style="margin-top:16px">
+    <a href="{{ nc.image.url }}" target="_blank">
+      <img src="{{ nc.image.url }}" alt="Photo jointe" style="max-width:100%;max-height:400px;border-radius:6px;border:1px solid var(--reglure)">
+    </a>
+  </div>
+  {% endif %}
+  {% if nc.cloture_le %}
+  <div style="margin-top:12px;font-size:.82rem;color:var(--encre-clair)">
+    Clôturée le {{ nc.cloture_le|date:"d/m/Y à H:i" }} par {{ nc.cloture_par.get_full_name|default:nc.cloture_par.username }}
+  </div>
+  {% endif %}
+</div>
+
+<div class="etiquette" style="margin-top:24px">Actions correctives / explications ({{ nc.actions.count }})</div>
+
+{% for action in nc.actions.all %}
+<div class="fiche" style="padding:12px 16px;margin-top:8px">
+  <div style="white-space:pre-line;font-size:.93rem;line-height:1.5">{{ action.description }}</div>
+  <div style="margin-top:6px;font-size:.78rem;color:var(--encre-clair)">
+    {{ action.cree_par.get_full_name|default:action.cree_par.username }} · {{ action.cree_le|date:"d/m/Y à H:i" }}
+  </div>
+</div>
+{% empty %}
+<p style="font-size:.88rem;color:var(--encre-clair);margin-top:8px">Aucune action encore enregistrée.</p>
+{% endfor %}
+
+{% if nc.est_ouverte %}
+<form method="post" style="margin-top:20px">
+  {% csrf_token %}
+  <input type="hidden" name="action" value="ajouter_action">
+  <label style="display:block;font-size:.85rem;color:var(--encre-clair);margin-bottom:4px">Ajouter une action corrective ou une explication</label>
+  <textarea name="description" rows="3" required
+    placeholder="Décrire l'action prise ou l'explication apportée…"
+    style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid var(--reglure);border-radius:6px;font-family:inherit;font-size:.95rem;resize:vertical;margin-bottom:10px"></textarea>
+  <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+    <button type="submit" class="bouton" style="background:var(--marge);border-color:var(--marge)">Enregistrer</button>
+    {% if peut_cloturer %}
+    <button type="submit" form="form-cloturer" class="bouton-secondaire" style="color:var(--valide);border-color:var(--valide)">Clôturer</button>
+    <button type="submit" form="form-annuler" class="bouton-secondaire" style="color:var(--encre-clair);border-color:var(--reglure)" onclick="return confirm('Annuler définitivement cette non-conformité ?')">Annuler la NC</button>
+    {% endif %}
+    <a href="{% url 'nc_exporter_word' nc.pk %}" class="bouton-secondaire" style="margin-left:auto" title="Télécharger en Word">⬇</a>
+  </div>
+</form>
+{% if peut_cloturer %}
+<form id="form-cloturer" method="post">{% csrf_token %}<input type="hidden" name="action" value="cloturer"></form>
+<form id="form-annuler" method="post">{% csrf_token %}<input type="hidden" name="action" value="annuler"></form>
+{% endif %}
+{% endif %}
+
+{% if peut_relancer and utilisateurs_zone %}
+<div style="margin-top:24px;padding:16px 20px;background:var(--fond-clair,#f9fafb);border:1px solid var(--reglure);border-radius:8px">
+  <div class="etiquette" style="margin-bottom:10px">Relancer une personne</div>
+  <form method="post" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="relancer">
+    <div style="flex:1;min-width:220px">
+      <label style="display:block;font-size:.82rem;color:var(--encre-clair);margin-bottom:4px">Destinataire</label>
+      <select name="destinataire" required style="width:100%;padding:8px 10px;border:1.5px solid var(--reglure);border-radius:6px;font-size:.9rem;font-family:inherit">
+        <option value="">— Choisir une personne —</option>
+        {% for u in utilisateurs_zone %}
+        <option value="{{ u.pk }}">{{ u.get_full_name|default:u.username }}{% if u.profil %} ({{ u.get_profil_display }}){% endif %}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <button type="submit" class="bouton" style="background:var(--or,#d97706);border-color:var(--or,#d97706);white-space:nowrap">Relancer</button>
+  </form>
+</div>
+{% endif %}
+
+<div style="margin-top:24px;padding-top:12px;border-top:var(--filet);display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+  <a href="{% url 'nc_liste' %}" class="bouton-secondaire" style="background:#374151;color:#fff;border-color:#374151">← Retour non-conformités</a>
+  {% if not nc.est_ouverte %}
+  <a href="{% url 'nc_exporter_word' nc.pk %}" class="bouton-secondaire" style="margin-left:auto" title="Télécharger en Word">⬇</a>
+  {% endif %}
+  {% if peut_supprimer %}
+  <form method="post" action="{% url 'nc_supprimer' nc.pk %}" {% if nc.est_ouverte %}style="margin-left:auto"{% endif %}>
+    {% csrf_token %}
+    <button type="submit" class="bouton-secondaire" style="color:var(--marge);border-color:var(--reglure)"
+            onclick="return confirm('Supprimer définitivement cette non-conformité ?')">Supprimer</button>
+  </form>
+  {% endif %}
+</div>
+
+<div class="pied">
+  <a href="{% url 'hub_stock' %}#nonconformites" class="bouton" style="background:var(--or,#d97706);border-color:var(--or,#d97706)">← Retour stock</a>
+</div>
+{% endblock %}

@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block titre %}{{ titre }} — Administration{% endblock %}
+{% block lieu %}Administration › Catégories{% endblock %}
+
+{% block contenu %}
+<div class="admin-entete">
+  <h1>{{ titre }}</h1>
+</div>
+
+<form method="post" class="formulaire">
+  {% csrf_token %}
+  {% for champ in form %}
+  <div class="champ">
+    <label for="{{ champ.id_for_label }}">{{ champ.label }}</label>
+    {{ champ }}
+    {% if champ.errors %}<p class="erreur-champ">{{ champ.errors|join:" " }}</p>{% endif %}
+  </div>
+  {% endfor %}
+  <div class="actions-formulaire">
+    <button type="submit" class="bouton-primaire">Enregistrer</button>
+    <a href="{% url 'admin_categories' %}" class="bouton-secondaire">Annuler</a>
+  </div>
+</form>
+{% endblock %}

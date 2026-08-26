@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% block titre %}Commande #{{ commande.pk }} — LEPAD{% endblock %}
+{% block lieu %}Achats — Commande{% endblock %}
+{% block contenu %}
+<div class="admin-entete">
+  <h1 style="color:var(--valide)">Commande #{{ commande.pk }} — {{ commande.fournisseur.raison_sociale }}</h1>
+  {% if commande.statut == "VALIDE" %}<span class="badge badge-actif">Validée</span>
+  {% elif commande.statut == "SOUMIS" %}<span class="badge" style="background:var(--or-clair);color:var(--or)">Soumise</span>
+  {% elif commande.statut == "CLOTURE" %}<span class="badge" style="background:var(--encre);color:#fff">Clôturée</span>
+  {% elif commande.statut == "REJETE" %}<span class="badge" style="background:var(--marge);color:#fff">Rejetée</span>
+  {% elif commande.statut == "ANNULE" %}<span class="badge" style="background:var(--marge);color:#fff">Annulée</span>
+  {% else %}<span class="badge" style="background:var(--craie);color:var(--encre-clair)">Brouillon</span>{% endif %}
+</div>
+<p style="font-size:.85rem;color:var(--encre-clair)">
+  Site : <strong>{{ commande.site_destination.nom }}</strong> · Créé le {{ commande.cree_le|date:"d/m/Y" }} par {{ commande.cree_par.get_full_name|default:commande.cree_par.username }}
+  {% if commande.soumis_par %} · Soumise par {{ commande.soumis_par.get_full_name|default:commande.soumis_par.username }}{% endif %}
+  {% if commande.modifie_par %} · Modifiée par {{ commande.modifie_par.get_full_name|default:commande.modifie_par.username }} le {{ commande.modifie_le|date:"d/m/Y H:i" }}{% endif %}
+  {% if commande.valide_par %} · Validée par {{ commande.valide_par.get_full_name|default:commande.valide_par.username }}{% endif %}
+</p>
+{% if commande.motif_rejet %}<p style="background:var(--marge-clair);padding:8px 12px;border-radius:6px;color:var(--marge)">Rejet : {{ commande.motif_rejet }}</p>{% endif %}
+
+<div class="etiquette" style="margin-top:16px">Lignes commandées</div>
+<table class="registre">
+  <thead><tr><th>Produit</th><th class="nombre" style="width:90px">Qté</th></tr></thead>
+  <tbody>
+  {% for l in lignes %}
+    <tr>
+      <td>{{ l.produit.code }} — {{ l.produit.designation }}</td>
+      <td class="nombre chiffre">{{ l.quantite }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+<div style="margin-top:20px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+  {% if commande.statut == "BROUILLON" %}
+  <form method="post" action="{% url 'commande_soumettre' commande.pk %}">{% csrf_token %}
+    <button type="submit" class="bouton-secondaire" style="background:var(--or);color:#fff;border-color:var(--or)">Soumettre</button>
+  </form>
+  <form method="post" action="{% url 'commande_supprimer' commande.pk %}" onsubmit="return confirm('Supprimer cette commande ? Cette action est irréversible.')">{% csrf_token %}
+    <button type="submit" class="bouton-secondaire" style="color:var(--marge)">Supprimer</button>
+  </form>
+  {% endif %}
+  {% if peut_modifier %}
+  <a href="{% url 'commande_modifier' commande.pk %}" class="bouton-secondaire">Modifier</a>
+  {% endif %}
+  {% if peut_valider_n1 %}
+  <form method="post" action="{% url 'commande_valider_n1' commande.pk %}">{% csrf_token %}
+    <button type="submit" class="bouton-secondaire" style="background:var(--accent);color:#fff;border-color:var(--accent)">Valider</button>
+  </form>
+  {% endif %}
+  {% if peut_valider %}
+  <form method="post" action="{% url 'commande_valider' commande.pk %}">{% csrf_token %}
+    <button type="submit" class="bouton-secondaire" style="background:var(--valide);color:#fff;border-color:var(--valide)">Valider</button>
+  </form>
+  {% endif %}
+  {% if commande.statut == "VALIDE" %}
+  <a href="{% url 'reception_nouvelle' commande.pk %}" class="bouton-secondaire" style="background:var(--accent);color:#fff;border-color:var(--accent)">+ Réceptionner</a>
+  {% endif %}
+  {% if peut_cloturer %}
+  <form method="post" action="{% url 'commande_cloturer' commande.pk %}" onsubmit="return confirm('Clôturer cette commande ? Aucune nouvelle réception ne sera possible.')">{% csrf_token %}
+    <button type="submit" class="bouton-secondaire" style="background:var(--encre);color:#fff;border-color:var(--encre)">Clôturer</button>
+  </form>
+  {% endif %}
+  {% if peut_rejeter %}
+  <button type="button" class="bouton-secondaire" style="color:var(--marge)" onclick="document.getElementById('modal-rejet').style.display='flex'">Rejeter</button>
+  {% endif %}
+  <a href="{% url 'export_commande_detail' commande.pk %}" class="bouton-secondaire" style="margin-left:auto" title="Exporter en Excel">⬇</a>
+</div>
+
+{% if peut_rejeter %}
+<div id="modal-rejet" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:10px;padding:28px 24px;width:min(480px,90vw);box-shadow:0 8px 32px rgba(0,0,0,.18)">
+    <h2 style="margin:0 0 6px;font-size:1.1rem;color:var(--encre)">Rejeter la commande #{{ commande.pk }}</h2>
+    <p style="font-size:.85rem;color:var(--encre-clair);margin:0 0 16px">Le motif sera enregistré et visible par le créateur de la commande.</p>
+    <form method="post" action="{% url 'commande_rejeter' commande.pk %}">
+      {% csrf_token %}
+      <label style="display:block;font-size:.88rem;font-weight:600;margin-bottom:6px;color:var(--encre)">Motif de rejet <span style="color:var(--marge)">*</span></label>
+      <textarea name="motif" required minlength="10" rows="4" placeholder="Expliquez la raison du rejet (minimum 10 caractères)…" style="width:100%;padding:10px;border:1.5px solid var(--reglure);border-radius:6px;font:inherit;font-size:.9rem;resize:vertical;box-sizing:border-box"></textarea>
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px">
+        <button type="button" class="bouton-secondaire" onclick="document.getElementById('modal-rejet').style.display='none'">Annuler</button>
+        <button type="submit" class="bouton-secondaire" style="background:var(--marge);color:#fff;border-color:var(--marge)">Confirmer le rejet</button>
+      </div>
+    </form>
+  </div>
+</div>
+<script>
+document.getElementById('modal-rejet').addEventListener('click', function(e) {
+  if (e.target === this) this.style.display = 'none';
+});
+</script>
+{% endif %}
+
+{% if receptions %}
+<div class="etiquette" style="margin-top:20px">Réceptions</div>
+<table class="registre">
+  <thead><tr><th>#</th><th>Statut</th><th>Date</th><th>Par</th><th></th></tr></thead>
+  <tbody>
+  {% for r in receptions %}
+    <tr>
+      <td>{{ r.pk }}</td>
+      <td>
+        {% if commande.statut == "CLOTURE" %}
+          <span class="badge" style="background:var(--encre);color:#fff">Clôturée</span>
+        {% elif r.statut == "VALIDE" %}
+          <span class="badge badge-actif">Validée</span>
+        {% else %}
+          <span class="badge" style="background:var(--or-clair);color:var(--or)">Brouillon</span>
+        {% endif %}
+      </td>
+      <td style="font-size:.85rem">{{ r.cree_le|date:"d/m/Y" }}</td>
+      <td style="font-size:.85rem">{{ r.cree_par.get_full_name|default:r.cree_par.username }}</td>
+      <td><a href="{% url 'reception_detail' r.pk %}" class="bouton-secondaire">Détail</a></td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+<div style="margin-top:32px;padding-top:16px;border-top:var(--filet);display:flex;gap:10px;flex-wrap:wrap">
+  <a href="{% url 'commandes_liste' %}" class="bouton-secondaire" style="background:var(--valide);color:#fff;border-color:var(--valide)">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+    Retour aux commandes
+  </a>
+  <a href="{% url 'receptions_liste' %}" class="bouton-secondaire" style="background:var(--valide);color:#fff;border-color:var(--valide)">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+    Retour aux réceptions
+  </a>
+</div>
+
+<div class="pied">
+  <a href="{% url 'hub_approvisionnement' %}#depot" class="bouton-secondaire" style="min-width:180px;text-align:center">← Retour approvisionnement</a>
+</div>
+{% endblock %}

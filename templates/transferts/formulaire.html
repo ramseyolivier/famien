@@ -1,0 +1,262 @@
+{% extends "base.html" %}
+{% block titre %}Nouveau transfert — LEPAD{% endblock %}
+{% block lieu %}Transferts — Nouveau{% endblock %}
+
+{% block contenu %}
+<div class="admin-entete">
+  <h1>Nouveau transfert</h1>
+</div>
+
+<p style="font-size:.88rem;color:var(--encre-clair);margin-bottom:20px">
+  Le stock est débité immédiatement à l'envoi. Le destinataire recevra une notification pour accepter ou rejeter.
+</p>
+
+<form method="post" id="form-transfert">
+{% csrf_token %}
+
+<div class="etiquette">Origine</div>
+<div class="indicateur" style="margin-bottom:16px;display:inline-flex;flex-direction:column;min-width:200px">
+  <div class="valeur" style="font-size:1rem">{{ site_origine.nom }}</div>
+  <div class="libelle">{{ site_origine.get_type_display }}</div>
+</div>
+
+<div class="etiquette">Destination</div>
+<div style="margin-bottom:20px;max-width:420px">
+  <select name="site_destination" required style="width:100%">
+    <option value="">— Choisir un destinataire —</option>
+    {% for s in destinations %}
+    <option value="{{ s.pk }}">{{ s.nom }} ({{ s.get_type_display }})</option>
+    {% endfor %}
+  </select>
+  {% if not destinations %}
+  <p style="color:var(--marge);font-size:.85rem;margin-top:6px">Aucun site autorisé disponible comme destination.</p>
+  {% endif %}
+</div>
+
+<div class="etiquette">Articles à transférer</div>
+<table class="registre" style="margin-bottom:8px">
+  <thead>
+    <tr>
+      <th>Produit</th>
+      <th class="nombre" style="width:150px">Stock disponible</th>
+      <th class="nombre" style="width:130px">Quantité</th>
+      <th style="width:40px"></th>
+    </tr>
+  </thead>
+  <tbody id="lignes-body">
+    <tr class="ligne-transfert">
+      <td>
+        <select name="produit_id" style="width:100%" id="select-produit-0">
+          <option value="">— Produit —</option>
+          {% for p in produits %}
+          <option value="{{ p.pk }}">{{ p.code }} — {{ p.designation }}</option>
+          {% endfor %}
+        </select>
+      </td>
+      <td class="nombre">
+        <span class="dispo-affichage" style="font-weight:700;color:var(--encre-clair)">—</span>
+      </td>
+      <td>
+        <input type="number" name="quantite" min="1" value=""
+               style="width:100%;height:40px;padding:0 8px;border:1px solid var(--reglure);border-radius:4px;font:inherit;text-align:right">
+      </td>
+      <td style="text-align:center">
+        <button type="button" class="btn-supprimer-ligne"
+                style="background:none;border:none;color:var(--marge);cursor:pointer;font-size:1.2rem;line-height:1">✕</button>
+      </td>
+    </tr>
+  </tbody>
+</table>
+<button type="button" class="bouton-secondaire" id="btn-ajouter">+ Ligne</button>
+
+<div style="margin-top:16px;max-width:420px">
+  <label style="display:block;font-size:.85rem;color:var(--encre-clair);margin-bottom:4px">Observations (facultatif)</label>
+  <textarea name="observations" rows="2"
+            style="width:100%;padding:8px 10px;border:1.5px solid var(--reglure);border-radius:var(--rayon);font:inherit;resize:vertical"></textarea>
+</div>
+
+<div style="margin-top:24px;display:flex;gap:10px">
+  <button type="submit" class="bouton-secondaire"
+          style="background:var(--accent);color:#fff;border-color:var(--accent);min-height:44px"
+          id="btn-envoyer">
+    ↑ Envoyer le transfert
+  </button>
+  <a href="{% url 'transferts_liste' %}" class="bouton-secondaire">Annuler</a>
+</div>
+</form>
+
+<div class="pied"></div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+/* ── Données ───────────────────────────────────────────────────────────── */
+const STOCKS = {{ stocks_json|safe }};
+
+/* Construire PRODUITS via les options du premier select (déjà dans le DOM) */
+let PRODUITS = [];
+
+function chargerProduits() {
+  const sel = document.getElementById('select-produit-0');
+  if (!sel) return;
+  PRODUITS = Array.from(sel.options)
+    .filter(o => o.value)
+    .map(o => ({ pk: o.value, label: o.text }));
+}
+
+/* ── Mise à jour du stock disponible ──────────────────────────────────── */
+function mettreAJourDispo(select) {
+  const tr = select.closest('tr');
+  if (!tr) return;
+  const val = select.value;
+  const span = tr.querySelector('.dispo-affichage');
+  const input = tr.querySelector('input[name="quantite"]');
+  if (!val) {
+    span.textContent = '—';
+    span.style.color = 'var(--encre-clair)';
+    input.removeAttribute('max');
+    return;
+  }
+  const dispo = (val in STOCKS) ? STOCKS[val] : null;
+  if (dispo === null) {
+    span.textContent = '0';
+    span.style.color = 'var(--marge)';
+    input.max = 0;
+  } else {
+    span.textContent = dispo;
+    span.style.color = dispo === 0 ? 'var(--marge)' : 'var(--valide)';
+    input.max = dispo;
+    if (!input.value || parseInt(input.value) > dispo) {
+      input.value = dispo > 0 ? 1 : 0;
+    }
+  }
+}
+
+/* ── Attacher les événements à une ligne ──────────────────────────────── */
+function attacherLigne(tr) {
+  const select = tr.querySelector('select[name="produit_id"]');
+  if (select) {
+    select.addEventListener('change', function () { mettreAJourDispo(this); });
+  }
+  const btnSuppr = tr.querySelector('.btn-supprimer-ligne');
+  if (btnSuppr) {
+    btnSuppr.addEventListener('click', function () {
+      const tbody = document.getElementById('lignes-body');
+      if (tbody.querySelectorAll('tr.ligne-transfert').length > 1) tr.remove();
+    });
+  }
+  const inputQt = tr.querySelector('input[name="quantite"]');
+  if (inputQt) {
+    inputQt.addEventListener('input', function () {
+      const max = this.max ? parseInt(this.max) : null;
+      const val = parseInt(this.value);
+      if (!isNaN(val) && max !== null && val > max) this.value = max;
+    });
+    inputQt.addEventListener('blur', function () {
+      const max = this.max ? parseInt(this.max) : null;
+      const val = parseInt(this.value);
+      if (isNaN(val) || val < 1) this.value = 1;
+      if (max !== null && val > max) this.value = max;
+    });
+  }
+}
+
+/* ── Créer une nouvelle ligne ─────────────────────────────────────────── */
+function ajouterLigne() {
+  const tr = document.createElement('tr');
+  tr.className = 'ligne-transfert';
+
+  /* td produit */
+  const td1 = document.createElement('td');
+  const select = document.createElement('select');
+  select.name = 'produit_id';
+  select.style.width = '100%';
+  const opt0 = document.createElement('option');
+  opt0.value = ''; opt0.textContent = '— Produit —';
+  select.appendChild(opt0);
+  PRODUITS.forEach(function (p) {
+    const opt = document.createElement('option');
+    opt.value = p.pk; opt.textContent = p.label;
+    select.appendChild(opt);
+  });
+  td1.appendChild(select);
+
+  /* td dispo */
+  const td2 = document.createElement('td');
+  td2.className = 'nombre';
+  const span = document.createElement('span');
+  span.className = 'dispo-affichage';
+  span.style.cssText = 'font-weight:700;color:var(--encre-clair)';
+  span.textContent = '—';
+  td2.appendChild(span);
+
+  /* td quantité */
+  const td3 = document.createElement('td');
+  const input = document.createElement('input');
+  input.type = 'number'; input.name = 'quantite'; input.min = '1'; input.value = '';
+  input.style.cssText = 'width:100%;height:40px;padding:0 8px;border:1px solid var(--reglure);border-radius:4px;font:inherit;text-align:right';
+  td3.appendChild(input);
+
+  /* td suppression */
+  const td4 = document.createElement('td');
+  td4.style.textAlign = 'center';
+  const btn = document.createElement('button');
+  btn.type = 'button'; btn.className = 'btn-supprimer-ligne';
+  btn.style.cssText = 'background:none;border:none;color:var(--marge);cursor:pointer;font-size:1.2rem;line-height:1';
+  btn.textContent = '✕';
+  td4.appendChild(btn);
+
+  tr.appendChild(td1); tr.appendChild(td2); tr.appendChild(td3); tr.appendChild(td4);
+
+  document.getElementById('lignes-body').appendChild(tr);
+  attacherLigne(tr);
+  if (window.initCombobox) window.initCombobox(select);
+}
+
+/* ── Validation avant envoi ───────────────────────────────────────────── */
+function validerAvantEnvoi(e) {
+  const lignes = document.querySelectorAll('.ligne-transfert');
+
+  /* Vérification des doublons */
+  const vus = {};
+  for (const tr of lignes) {
+    const select = tr.querySelector('select[name="produit_id"]');
+    if (!select || !select.value) continue;
+    if (vus[select.value]) {
+      e.preventDefault();
+      alert('Le produit « ' + select.options[select.selectedIndex].text + ' » est sélectionné plusieurs fois.\nSupprimez la ligne en double ou augmentez la quantité.');
+      select.focus();
+      return;
+    }
+    vus[select.value] = true;
+  }
+
+  /* Vérification des quantités */
+  for (const tr of lignes) {
+    const select = tr.querySelector('select[name="produit_id"]');
+    const input  = tr.querySelector('input[name="quantite"]');
+    if (!select || !select.value) continue;
+    const max = input.max ? parseInt(input.max) : null;
+    const val = parseInt(input.value);
+    if (max !== null && val > max) {
+      e.preventDefault();
+      alert('Quantité (' + val + ') supérieure au stock disponible (' + max + ').');
+      input.focus();
+      return;
+    }
+  }
+
+  if (!confirm('Envoyer ce transfert ? Le stock sera débité immédiatement.')) {
+    e.preventDefault();
+  }
+}
+
+/* ── Init ─────────────────────────────────────────────────────────────── */
+document.addEventListener('DOMContentLoaded', function () {
+  chargerProduits();
+  document.querySelectorAll('#lignes-body tr.ligne-transfert').forEach(attacherLigne);
+  document.getElementById('btn-ajouter').addEventListener('click', ajouterLigne);
+  document.getElementById('btn-envoyer').addEventListener('click', validerAvantEnvoi);
+});
+</script>
+{% endblock %}

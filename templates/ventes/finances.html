@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+{% block titre %}Finances — LEPAD{% endblock %}
+{% block lieu %}Finances — Entrées{% endblock %}
+
+{% block contenu %}
+<div class="admin-entete">
+  <h1>Finances · Entrées</h1>
+  <p style="font-size:.85rem;color:var(--encre-clair);margin-top:4px">Périmètre : {{ perimetre }}</p>
+</div>
+
+<!-- ── Filtres ──────────────────────────────────────────────────────── -->
+<form method="get" class="finance-filtres">
+  {% if multi_communes %}
+  <div class="filtre-champ">
+    <label>Commune</label>
+    <select name="commune" data-no-combobox>
+      <option value="">Toutes</option>
+      {% for c in communes %}
+      <option value="{{ c.pk }}"{% if filtres.commune == c.pk|stringformat:"s" %} selected{% endif %}>{{ c.nom }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% endif %}
+  {% if ecole_unique %}
+  <span class="badge" style="background:var(--reglure);color:var(--encre);padding:6px 12px;font-size:.88rem;align-self:center">{{ ecole_unique.nom }}</span>
+  {% else %}
+  <div class="filtre-champ">
+    <label>École</label>
+    <select name="ecole" data-no-combobox>
+      <option value="">Toutes</option>
+      {% for e in ecoles %}
+      <option value="{{ e.pk }}"{% if filtres.ecole == e.pk|stringformat:"s" %} selected{% endif %}>{{ e.nom }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% endif %}
+  <div class="filtre-champ">
+    <label for="ff-debut">Du</label>
+    <input type="date" id="ff-debut" name="debut" value="{{ filtres.debut }}">
+  </div>
+  <div class="filtre-champ">
+    <label for="ff-fin">Au</label>
+    <input type="date" id="ff-fin" name="fin" value="{{ filtres.fin }}">
+  </div>
+  <div class="filtre-champ">
+    <label for="ff-mode">Mode de paiement</label>
+    <select id="ff-mode" name="mode" data-no-combobox>
+      <option value="">Tous les modes</option>
+      {% for code, libelle in modes_paiement %}
+      <option value="{{ code }}"{% if filtres.mode == code %} selected{% endif %}>{{ libelle }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="filtre-champ">
+    <label for="ff-type">Type de produit</label>
+    <select id="ff-type" name="type" data-no-combobox>
+      <option value="">Tous</option>
+      <option value="kit"{% if filtres.type == "kit" %} selected{% endif %}>Kits uniquement</option>
+      <option value="article"{% if filtres.type == "article" %} selected{% endif %}>Articles uniquement</option>
+    </select>
+  </div>
+  <button type="submit" class="bouton-secondaire" style="align-self:flex-end">Filtrer</button>
+  {% if filtres.debut or filtres.fin or filtres.mode or filtres.type or filtres.commune or filtres.ecole %}
+  <a href="{% url 'finances_ventes' %}" class="bouton-secondaire" title="Réinitialiser" style="align-self:flex-end;min-width:0;padding:8px 12px">↺</a>
+  {% endif %}
+</form>
+
+<!-- ── Résumé par mode ──────────────────────────────────────────────── -->
+<div class="hub-stats" style="margin-top:20px">
+  <div class="indicateur">
+    <div class="valeur chiffre" id="tot-esp">{{ totaux.esp|floatformat:0 }}</div>
+    <div class="libelle">Espèces (F)</div>
+  </div>
+  <div class="indicateur">
+    <div class="valeur chiffre" id="tot-mob">{{ totaux.mob|floatformat:0 }}</div>
+    <div class="libelle">Mobile money (F)</div>
+  </div>
+  <div class="indicateur">
+    <div class="valeur chiffre" id="tot-aut">{{ totaux.aut|floatformat:0 }}</div>
+    <div class="libelle">Autre (F)</div>
+  </div>
+  <div class="indicateur valide">
+    <div class="valeur chiffre" id="tot-global">{{ totaux.total|floatformat:0 }}</div>
+    <div class="libelle">Total encaissé (F)</div>
+  </div>
+</div>
+
+<!-- ── Tableau ──────────────────────────────────────────────────────── -->
+<div class="etiquette" style="margin-top:24px">
+  Entrées{% if finances|length == 100 %} — 100 premières{% endif %}
+</div>
+<table class="registre" id="tbl-finances">
+  <thead>
+    <tr>
+      <th>Date</th>
+      <th>École</th>
+      <th>N° vente</th>
+      <th>Articles vendus</th>
+      <th class="nombre" style="width:105px">Espèces</th>
+      <th class="nombre" style="width:105px">Mobile</th>
+      <th class="nombre" style="width:105px">Autre</th>
+      <th class="nombre" style="width:115px">Total payé</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for v in finances %}
+    <tr class="finance-ligne"
+        data-esp="{{ v.m_esp|default:0|floatformat:0 }}"
+        data-mob="{{ v.m_mob|default:0|floatformat:0 }}"
+        data-aut="{{ v.m_aut|default:0|floatformat:0 }}"
+        data-total="{{ v.montant_total|floatformat:0 }}">
+      <td class="chiffre" style="white-space:nowrap">{{ v.horodatage|date:"d/m/Y H:i" }}</td>
+      <td>{{ v.ecole.nom }}</td>
+      <td><a href="{% url 'facture_vente' v.uuid %}" style="color:var(--encre)">{{ v.numero }}</a></td>
+      <td style="font-size:.82rem">
+        {% for l in v.lignes.all %}{{ l.quantite }}× {{ l.libelle }}{% if not forloop.last %}, {% endif %}{% endfor %}
+      </td>
+      <td class="nombre chiffre">
+        {% if v.m_esp %}<strong>{{ v.m_esp|floatformat:0 }}</strong>{% else %}<span style="color:var(--encre-pale)">—</span>{% endif %}
+      </td>
+      <td class="nombre chiffre">
+        {% if v.m_mob %}<strong>{{ v.m_mob|floatformat:0 }}</strong>{% else %}<span style="color:var(--encre-pale)">—</span>{% endif %}
+      </td>
+      <td class="nombre chiffre">
+        {% if v.m_aut %}<strong>{{ v.m_aut|floatformat:0 }}</strong>{% else %}<span style="color:var(--encre-pale)">—</span>{% endif %}
+      </td>
+      <td class="nombre chiffre" style="font-weight:700">{{ v.montant_total|floatformat:0 }}</td>
+    </tr>
+  {% empty %}
+    <tr>
+      <td colspan="8" style="color:var(--encre-clair);text-align:center;padding:20px">
+        Aucune entrée pour cette période.
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+  {% if finances %}
+  <tfoot>
+    <tr style="background:var(--craie);font-weight:700">
+      <td colspan="4">
+        Total{% if finances|length == 100 %} (100 premières lignes){% endif %}
+      </td>
+      <td class="nombre chiffre" id="tf-esp">{{ totaux.esp|floatformat:0 }}</td>
+      <td class="nombre chiffre" id="tf-mob">{{ totaux.mob|floatformat:0 }}</td>
+      <td class="nombre chiffre" id="tf-aut">{{ totaux.aut|floatformat:0 }}</td>
+      <td class="nombre chiffre" id="tf-total">{{ totaux.total|floatformat:0 }}</td>
+    </tr>
+  </tfoot>
+  {% endif %}
+</table>
+
+<div style="margin-top:16px;display:flex;gap:8px">
+  <a href="{% url 'finances_sorties' %}" class="bouton-secondaire">Sorties →</a>
+  <a href="{% url 'finances_bilan' %}" class="bouton-secondaire">Bilan →</a>
+  <a href="{% url 'hub_finances' %}" class="bouton-secondaire">← Retour aux finances</a>
+</div>
+{% endblock %}

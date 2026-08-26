@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+{% block titre %}Livraison #{{ commande.numero }} — LEPAD{% endblock %}
+{% block lieu %}Approvisionnement{% endblock %}
+
+{% block contenu %}
+<div class="admin-entete">
+  <h1 style="color:var(--accent)">Livraison #{{ commande.numero }} — {{ commande.ecole.nom }}</h1>
+</div>
+
+<p style="color:var(--encre-clair);font-size:.9rem;margin-bottom:20px">
+  Indiquez les quantités effectivement préparées pour chaque article. Le stock sera définitivement débité du magasin lors de la réception par le chef d'équipe.
+  La colonne <em>Reste</em> indique ce qui restera à livrer après cette tournée.
+</p>
+
+<form method="post" id="form-livraison">
+{% csrf_token %}
+<div class="table-scroll">
+<table class="registre">
+  <thead>
+    <tr>
+      <th>Produit</th>
+      <th class="nombre">À livrer</th>
+      <th class="nombre" style="color:var(--accent)">Stock disponible</th>
+      <th class="nombre">Qté à livrer</th>
+      <th class="nombre" style="color:var(--marge)">Reste</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for item in lignes_avec_dispo %}
+  {% with l=item.ligne dispo=item.dispo max_livrable=item.max_livrable qr=item.quantite_restante %}
+    <tr data-restante="{{ qr }}"
+        {% if dispo == 0 %}style="background:var(--marge-clair)"{% elif dispo < qr %}style="background:var(--or-clair)"{% endif %}>
+      <td>{{ l.produit.code }} — {{ l.produit.designation }}
+        {% if l.quantite_deja_recue %}<small style="color:var(--encre-clair);font-size:.78rem"> (déjà reçu : {{ l.quantite_deja_recue }})</small>{% endif %}
+      </td>
+      <td class="nombre chiffre">{{ qr }}</td>
+      <td class="nombre chiffre" style="font-weight:700;color:{% if dispo == 0 %}var(--marge){% elif dispo < qr %}var(--or){% else %}var(--accent){% endif %}">{{ dispo }}</td>
+      <td class="nombre">
+        <input type="number"
+               name="quantite_livree_{{ l.produit_id }}"
+               min="0"
+               max="{{ qr }}"
+               value="{{ qr }}"
+               data-max="{{ qr }}"
+               data-code="{{ l.produit.code }}"
+               style="width:80px;padding:6px;border:1px solid var(--reglure);border-radius:4px;font:inherit;text-align:right;min-height:44px">
+      </td>
+      <td class="nombre chiffre reste-cell" style="font-weight:700;color:var(--encre-pale)">—</td>
+    </tr>
+  {% endwith %}
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+
+{% if commande.observations %}
+<p style="margin-top:12px;color:var(--encre-clair);font-size:.9rem;font-style:italic">
+  Observations : {{ commande.observations }}
+</p>
+{% endif %}
+
+<label style="display:flex;align-items:center;gap:10px;margin-top:16px;padding:12px 14px;border:1.5px solid var(--reglure);border-radius:8px;cursor:pointer;font-size:.9rem;color:var(--encre);max-width:480px">
+  <input type="checkbox" name="clore_livraison" value="1"
+         style="width:20px;height:20px;cursor:pointer;flex-shrink:0">
+  Clôturer définitivement cette commande
+</label>
+
+<div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap">
+  <button type="submit" class="bouton-secondaire"
+          style="background:var(--valide);color:#fff;border-color:var(--valide);min-height:44px">
+    Valider
+  </button>
+  <button type="button" class="bouton-secondaire"
+          style="color:var(--marge);min-height:44px"
+          onclick="document.getElementById('modal-refus').style.display='flex'">
+    Rejeter
+  </button>
+</div>
+</form>
+
+{# Modal de refus #}
+<div id="modal-refus" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:10px;padding:28px 24px;width:min(480px,90vw);box-shadow:0 8px 32px rgba(0,0,0,.18)">
+    <h2 style="margin:0 0 6px;font-size:1.1rem;color:var(--encre)">Rejeter la livraison #{{ commande.numero }}</h2>
+    <p style="font-size:.85rem;color:var(--encre-clair);margin:0 0 16px">La réservation de stock sera libérée. Le motif sera visible par le chef d'équipe.</p>
+    <form method="post" action="{% url 'commande_ecole_refuser_livraison' commande.pk %}">
+      {% csrf_token %}
+      <label style="display:block;font-size:.88rem;font-weight:600;margin-bottom:6px;color:var(--encre)">
+        Motif de rejet <span style="color:var(--marge)">*</span>
+      </label>
+      <textarea name="motif" required minlength="10" rows="4"
+                placeholder="Expliquez la raison du rejet (minimum 10 caractères)…"
+                style="width:100%;padding:10px;border:1.5px solid var(--reglure);border-radius:6px;font:inherit;font-size:.9rem;resize:vertical;box-sizing:border-box"></textarea>
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px">
+        <button type="button" class="bouton-secondaire"
+                onclick="document.getElementById('modal-refus').style.display='none'">Annuler</button>
+        <button type="submit" class="bouton-secondaire"
+                style="background:var(--marge);color:#fff;border-color:var(--marge)">Confirmer le rejet</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+document.getElementById('modal-refus').addEventListener('click', function(e) {
+  if (e.target === this) this.style.display = 'none';
+});
+</script>
+
+<div style="margin-top:32px;padding-top:12px;border-top:var(--filet)">
+  <a href="{% url 'livraisons_liste' %}" class="bouton-secondaire"
+     style="background:var(--accent);color:#fff;border-color:var(--accent);min-width:180px;text-align:center">← Retour aux livraisons</a>
+</div>
+
+<div class="pied">
+  <a href="{% url 'hub_approvisionnement' %}#ecole" class="bouton-secondaire" style="min-width:180px;text-align:center">← Retour approvisionnement</a>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.querySelectorAll('input[type="number"]').forEach(function(input) {
+  function majReste() {
+    var tr = input.closest('tr');
+    if (!tr) return;
+    var restante = parseInt(tr.dataset.restante, 10) || 0;
+    var val = parseInt(input.value, 10);
+    if (isNaN(val) || val < 0) val = 0;
+    var reste = Math.max(0, restante - val);
+    var cell = tr.querySelector('.reste-cell');
+    if (!cell) return;
+    if (reste === 0) {
+      cell.textContent = '—';
+      cell.style.color = 'var(--encre-pale)';
+    } else {
+      cell.textContent = reste;
+      cell.style.color = 'var(--marge)';
+    }
+  }
+  input.addEventListener('input', majReste);
+  majReste();
+});
+
+document.getElementById('form-livraison').addEventListener('submit', function(e) {
+  var inputs = document.querySelectorAll('input[type="number"]');
+  for (var i = 0; i < inputs.length; i++) {
+    var inp = inputs[i];
+    var val = parseInt(inp.value) || 0;
+    var max = parseInt(inp.dataset.max) || 0;
+    if (val < 0) {
+      alert('La quantité ne peut pas être négative (' + inp.dataset.code + ').');
+      inp.focus();
+      e.preventDefault();
+      return;
+    }
+    if (val > max) {
+      alert('Quantité trop élevée pour ' + inp.dataset.code + ' : commandé ' + max + ', saisi ' + val + '.');
+      inp.focus();
+      e.preventDefault();
+      return;
+    }
+  }
+  if (!confirm('Confirmer la livraison ?')) {
+    e.preventDefault();
+  }
+});
+</script>
+{% endblock %}

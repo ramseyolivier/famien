@@ -1,0 +1,13 @@
+{% comment %}Paramètres : champ, label, filtres{% endcomment %}
+{% if filtres.tri == champ %}
+  {% if filtres.sens == "asc" %}
+    <a href="?date={{ filtres.date }}&site={{ filtres.site }}&commune={{ filtres.commune }}&tri={{ champ }}&sens=desc"
+       style="text-decoration:none;color:inherit;white-space:nowrap">{{ label }} ↑</a>
+  {% else %}
+    <a href="?date={{ filtres.date }}&site={{ filtres.site }}&commune={{ filtres.commune }}&tri={{ champ }}&sens=asc"
+       style="text-decoration:none;color:inherit;white-space:nowrap">{{ label }} ↓</a>
+  {% endif %}
+{% else %}
+  <a href="?date={{ filtres.date }}&site={{ filtres.site }}&commune={{ filtres.commune }}&tri={{ champ }}&sens=asc"
+     style="text-decoration:none;color:var(--encre-clair);white-space:nowrap">{{ label }} ↕</a>
+{% endif %}

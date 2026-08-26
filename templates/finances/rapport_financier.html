@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+{% block titre %}Rapport journalier financier — LEPAD{% endblock %}
+{% block lieu %}Finances — Rapport journalier{% endblock %}
+
+{% block contenu %}
+<div class="admin-entete">
+  <h1>Rapport journalier financier</h1>
+</div>
+
+<form method="get" class="finance-filtres">
+  <div class="filtre-champ filtre-champ--date">
+    <label>Du</label>
+    <input type="date" name="debut" value="{{ filtres.debut }}" onchange="this.form.submit()">
+  </div>
+  <div class="filtre-champ filtre-champ--date">
+    <label>Au</label>
+    <input type="date" name="fin" value="{{ filtres.fin }}" onchange="this.form.submit()">
+  </div>
+  <div style="display:flex;align-items:flex-end;padding-bottom:2px">
+    <a href="{% url 'rapport_financier' %}" class="bouton-secondaire" title="Réinitialiser" style="min-width:0;padding:8px 12px">↺</a>
+  </div>
+  <a href="{% url 'rapport_financier_export' %}?debut={{ filtres.debut }}&fin={{ filtres.fin }}"
+     class="bouton-secondaire" title="Télécharger en Excel" style="align-self:flex-end;min-width:0;padding:8px 12px;margin-left:auto">⬇</a>
+</form>
+
+<!-- ── Écoles ─────────────────────────────────────── -->
+<details open style="margin-top:20px">
+  <summary style="cursor:pointer;list-style:none;display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:2px solid var(--reglure)">
+    <span style="font-weight:700;font-size:1rem;flex:1">Écoles</span>
+    <span style="font-size:.82rem;color:var(--encre-clair)">Période :</span>
+    <span class="chiffre" style="font-size:.9rem">Encaissé&nbsp;<strong>{{ synt_ecoles.encaisse|floatformat:0 }}</strong> F</span>
+    <span style="color:var(--encre-pale)">·</span>
+    <span class="chiffre" style="font-size:.9rem">Versé&nbsp;<strong>{{ synt_ecoles.verse|floatformat:0 }}</strong> F</span>
+    <span style="color:var(--encre-pale)">·</span>
+    <span class="chiffre" style="font-size:.9rem;color:{% if synt_ecoles.en_main > 0 %}var(--encre){% else %}var(--encre-pale){% endif %}">En main&nbsp;<strong>{{ synt_ecoles.en_main|floatformat:0 }}</strong> F</span>
+    <span style="font-size:.78rem;color:var(--encre-pale);margin-left:4px">(cumul)</span>
+  </summary>
+  {% if detail_ecoles %}
+  <div style="overflow-x:auto;margin-top:4px">
+  <table class="registre" style="min-width:560px">
+    <thead>
+      <tr>
+        <th>École</th>
+        <th style="font-size:.78rem;color:var(--encre-pale)">Commune</th>
+        <th class="nombre">Encaissé</th>
+        <th class="nombre">Versé</th>
+        <th class="nombre">En main</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for d in detail_ecoles %}
+      <tr>
+        <td>{{ d.nom }}</td>
+        <td style="font-size:.82rem;color:var(--encre-clair)">{{ d.commune }}</td>
+        <td class="nombre chiffre" style="color:{% if d.encaisse %}var(--valide){% else %}var(--encre-pale){% endif %}">
+          {% if d.encaisse %}+{{ d.encaisse|floatformat:0 }}{% else %}—{% endif %}
+        </td>
+        <td class="nombre chiffre" style="color:{% if d.verse %}var(--marge){% else %}var(--encre-pale){% endif %}">
+          {% if d.verse %}-{{ d.verse|floatformat:0 }}{% else %}—{% endif %}
+        </td>
+        <td class="nombre chiffre" style="font-weight:700;color:{% if d.en_main < 0 %}var(--marge){% elif d.en_main > 0 %}var(--encre){% else %}var(--encre-pale){% endif %}">
+          {{ d.en_main|floatformat:0 }}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <p style="color:var(--encre-clair);font-size:.88rem;padding:12px 0">Aucune activité sur cette période.</p>
+  {% endif %}
+</details>
+
+<!-- ── Superviseurs ───────────────────────────────── -->
+{% if a_sups %}
+<details style="margin-top:12px">
+  <summary style="cursor:pointer;list-style:none;display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:2px solid var(--reglure)">
+    <span style="font-weight:700;font-size:1rem;flex:1">Superviseurs</span>
+    <span style="font-size:.82rem;color:var(--encre-clair)">Période :</span>
+    <span class="chiffre" style="font-size:.9rem">Reçu&nbsp;<strong>{{ synt_sups.recu|floatformat:0 }}</strong> F</span>
+    <span style="color:var(--encre-pale)">·</span>
+    <span class="chiffre" style="font-size:.9rem">Remonté&nbsp;<strong>{{ synt_sups.verse|floatformat:0 }}</strong> F</span>
+    <span style="color:var(--encre-pale)">·</span>
+    <span class="chiffre" style="font-size:.9rem;color:{% if synt_sups.en_main > 0 %}var(--encre){% else %}var(--encre-pale){% endif %}">En main&nbsp;<strong>{{ synt_sups.en_main|floatformat:0 }}</strong> F</span>
+    <span style="font-size:.78rem;color:var(--encre-pale);margin-left:4px">(cumul)</span>
+  </summary>
+  {% if detail_sups %}
+  <div style="overflow-x:auto;margin-top:4px">
+  <table class="registre" style="min-width:560px">
+    <thead>
+      <tr>
+        <th>Superviseur</th>
+        <th style="font-size:.78rem;color:var(--encre-pale)">Commune</th>
+        <th class="nombre">Reçu des écoles</th>
+        <th class="nombre">Remonté</th>
+        <th class="nombre">En main</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for d in detail_sups %}
+      <tr>
+        <td>{{ d.nom }}</td>
+        <td style="font-size:.82rem;color:var(--encre-clair)">{{ d.commune }}</td>
+        <td class="nombre chiffre" style="color:{% if d.recu %}var(--valide){% else %}var(--encre-pale){% endif %}">
+          {% if d.recu %}+{{ d.recu|floatformat:0 }}{% else %}—{% endif %}
+        </td>
+        <td class="nombre chiffre" style="color:{% if d.verse %}var(--marge){% else %}var(--encre-pale){% endif %}">
+          {% if d.verse %}-{{ d.verse|floatformat:0 }}{% else %}—{% endif %}
+        </td>
+        <td class="nombre chiffre" style="font-weight:700;color:{% if d.en_main < 0 %}var(--marge){% elif d.en_main > 0 %}var(--encre){% else %}var(--encre-pale){% endif %}">
+          {{ d.en_main|floatformat:0 }}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <p style="color:var(--encre-clair);font-size:.88rem;padding:12px 0">Aucune activité sur cette période.</p>
+  {% endif %}
+</details>
+{% endif %}
+
+<!-- ── Direction ─────────────────────────────────── -->
+{% if a_dg %}
+<details style="margin-top:12px">
+  <summary style="cursor:pointer;list-style:none;display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:2px solid var(--reglure)">
+    <span style="font-weight:700;font-size:1rem;flex:1">Direction</span>
+    <span style="font-size:.82rem;color:var(--encre-clair)">Période :</span>
+    <span class="chiffre" style="font-size:.9rem">Reçu&nbsp;<strong>{{ synt_dg.recu|floatformat:0 }}</strong> F</span>
+    <span style="color:var(--encre-pale)">·</span>
+    <span class="chiffre" style="font-size:.9rem;color:{% if synt_dg.en_main > 0 %}var(--encre){% else %}var(--encre-pale){% endif %}">En main&nbsp;<strong>{{ synt_dg.en_main|floatformat:0 }}</strong> F</span>
+    <span style="font-size:.78rem;color:var(--encre-pale);margin-left:4px">(cumul)</span>
+  </summary>
+  {% if detail_dg %}
+  <div style="overflow-x:auto;margin-top:4px">
+  <table class="registre" style="min-width:420px">
+    <thead>
+      <tr>
+        <th>Responsable</th>
+        <th class="nombre">Reçu des superviseurs</th>
+        <th class="nombre">En main</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for d in detail_dg %}
+      <tr>
+        <td>{{ d.nom }}</td>
+        <td class="nombre chiffre" style="color:{% if d.recu %}var(--valide){% else %}var(--encre-pale){% endif %}">
+          {% if d.recu %}+{{ d.recu|floatformat:0 }}{% else %}—{% endif %}
+        </td>
+        <td class="nombre chiffre" style="font-weight:700;color:{% if d.en_main < 0 %}var(--marge){% elif d.en_main > 0 %}var(--encre){% else %}var(--encre-pale){% endif %}">
+          {{ d.en_main|floatformat:0 }}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <p style="color:var(--encre-clair);font-size:.88rem;padding:12px 0">Aucune activité sur cette période.</p>
+  {% endif %}
+</details>
+{% endif %}
+
+<div class="pied">
+  <a href="{% url 'hub_finances' %}" class="bouton-secondaire">← Finances</a>
+</div>
+{% endblock %}

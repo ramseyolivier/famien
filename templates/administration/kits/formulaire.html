@@ -1,0 +1,210 @@
+{% extends "base.html" %}
+{% block titre %}{{ titre }} — Administration{% endblock %}
+{% block lieu %}Administration › Kits{% endblock %}
+
+{% block contenu %}
+<div class="admin-entete">
+  <h1>{{ titre }}</h1>
+  {% if kit_existant %}
+  <p style="font-size:.85rem;color:var(--encre-clair);margin-top:6px">
+    Version actuelle : <strong>v{{ kit_existant.version }}</strong> — enregistrer créera la version v{{ kit_existant.version|add:1 }}.
+  </p>
+  {% endif %}
+</div>
+
+<form method="post" class="formulaire" id="form-kit" style="max-width:760px">
+  {% csrf_token %}
+
+  <div class="etiquette">Identification du kit</div>
+
+  {% if kit_existant %}
+  <div class="kit-info-lecture">
+    <span><strong>École :</strong> {{ kit_existant.ecole.nom }}</span>
+    <span style="margin-left:20px"><strong>Classe :</strong> {{ kit_existant.classe.libelle }}</span>
+  </div>
+  {% for champ in prix_form %}
+  <div class="champ" style="max-width:280px">
+    <label for="{{ champ.id_for_label }}">{{ champ.label }}</label>
+    {{ champ }}
+    {% if champ.errors %}<p class="erreur-champ">{{ champ.errors|join:" " }}</p>{% endif %}
+  </div>
+  {% endfor %}
+  {% else %}
+  {% for champ in creation_form %}
+  <div class="champ{% if champ.html_name == 'prix_vente' %}" style="max-width:280px{% endif %}">
+    <label for="{{ champ.id_for_label }}">{{ champ.label }}</label>
+    {{ champ }}
+    {% if champ.errors %}<p class="erreur-champ">{{ champ.errors|join:" " }}</p>{% endif %}
+  </div>
+  {% endfor %}
+  {% endif %}
+
+  <div class="etiquette" style="margin-top:24px">Composition du kit</div>
+
+  <div id="calcul-kit" class="kit-calcul" style="display:flex;flex-wrap:wrap;gap:20px;align-items:center">
+    <span>Coût de revient : <strong id="cout-revient">0</strong> F CFA</span>
+    <span id="bloc-prix-separe" style="color:var(--encre-clair);font-size:.88rem;display:none">
+      Prix de vente séparé : <strong id="prix-separe" style="color:var(--accent)">—</strong> F CFA
+    </span>
+  </div>
+
+  {{ formset.management_form }}
+  <div id="lignes-kit">
+    {% for f in formset %}
+    <div class="kit-ligne" id="kit-ligne-{{ forloop.counter0 }}">
+      <div style="display:none">{{ f.DELETE }}</div>
+      <div class="kit-ligne-inner">
+        <div class="champ" style="flex:2;margin-bottom:0">
+          {{ f.produit }}
+          {% if f.produit.errors %}<p class="erreur-champ">{{ f.produit.errors|join:" " }}</p>{% endif %}
+        </div>
+        <div class="champ" style="flex:0 0 90px;margin-bottom:0">
+          {{ f.quantite }}
+          {% if f.quantite.errors %}<p class="erreur-champ">{{ f.quantite.errors|join:" " }}</p>{% endif %}
+        </div>
+        <button type="button" class="bouton-retirer" onclick="retirerLigne(this)" title="Retirer">✕</button>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  {# Ligne modèle clonée par JS, cachée #}
+  <div id="kit-ligne-modele" class="kit-ligne" style="display:none" aria-hidden="true">
+    <div style="display:none"><input type="checkbox" name="ligne-__prefix__-DELETE" id="id_ligne-__prefix__-DELETE"></div>
+    <div class="kit-ligne-inner">
+      <div class="champ" style="flex:2;margin-bottom:0">
+        <select name="ligne-__prefix__-produit" id="id_ligne-__prefix__-produit"></select>
+      </div>
+      <div class="champ" style="flex:0 0 90px;margin-bottom:0">
+        <input type="number" name="ligne-__prefix__-quantite" id="id_ligne-__prefix__-quantite" value="1" min="1">
+      </div>
+      <button type="button" class="bouton-retirer" onclick="retirerLigne(this)" title="Retirer">✕</button>
+    </div>
+  </div>
+
+  <button type="button" class="bouton-secondaire" style="margin-top:10px" onclick="ajouterLigne()">+ Ajouter un article</button>
+
+  <div class="actions-formulaire">
+    <button type="submit" class="bouton-primaire">Enregistrer le kit</button>
+    <a href="{% url 'admin_kits' %}" class="bouton-secondaire">Annuler</a>
+  </div>
+</form>
+
+<style>
+.kit-info-lecture {
+  padding: 10px 12px; background: var(--craie); border: var(--filet);
+  border-radius: var(--rayon); margin-bottom: 14px; font-size: .92rem;
+}
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const PRODUITS = {{ produits_json|safe }};
+const CLASSES = {{ classes_json|safe }};
+const ECOLE_FIXE = "{{ kit_existant.ecole.pk|default:'' }}";
+
+// Cascade école → classe lors de la création d'un nouveau kit
+(function() {
+  const ecoleSelect = document.getElementById('id_ecole');
+  const classeSelect = document.getElementById('id_classe');
+  if (!ecoleSelect || !classeSelect) return;
+
+  function filtrerClasses() {
+    const ecoleId = String(ecoleSelect.value);
+    const classes = CLASSES[ecoleId] || [];
+    const valActuelle = classeSelect.value;
+    classeSelect.innerHTML = '<option value="">— Choisir une classe —</option>';
+    classes.forEach(function(c) {
+      const opt = document.createElement('option');
+      opt.value = c.id;
+      opt.textContent = c.libelle;
+      if (String(c.id) === valActuelle) opt.selected = true;
+      classeSelect.appendChild(opt);
+    });
+    if (window.initCombobox) window.initCombobox(classeSelect);
+  }
+
+  ecoleSelect.addEventListener('change', function() { filtrerClasses(); recalculer(); });
+  if (ecoleSelect.value) filtrerClasses();
+})();
+
+// Options produits pour les nouvelles lignes (clonées depuis la première existante)
+function copierOptions(sel) {
+  const ref = document.querySelector('#lignes-kit .kit-ligne:not([style*="none"]) select');
+  if (ref) {
+    sel.innerHTML = ref.innerHTML;
+  } else {
+    sel.innerHTML = '<option value="">— Choisir —</option>';
+    for (const [id, d] of Object.entries(PRODUITS)) {
+      const o = document.createElement('option');
+      o.value = id; o.textContent = id;
+      sel.appendChild(o);
+    }
+  }
+}
+
+function ajouterLigne() {
+  const total = parseInt(document.getElementById('id_ligne-TOTAL_FORMS').value);
+  const modele = document.getElementById('kit-ligne-modele');
+  const clone = modele.cloneNode(true);
+  clone.id = 'kit-ligne-' + total;
+  clone.style.display = '';
+  clone.removeAttribute('aria-hidden');
+  clone.innerHTML = clone.innerHTML.replaceAll('__prefix__', total);
+  const sel = clone.querySelector('select');
+  if (sel) { copierOptions(sel); sel.addEventListener('change', recalculer); }
+  const qte = clone.querySelector('input[type="number"]');
+  if (qte) qte.addEventListener('input', recalculer);
+  document.getElementById('lignes-kit').appendChild(clone);
+  document.getElementById('id_ligne-TOTAL_FORMS').value = total + 1;
+  recalculer();
+}
+
+function retirerLigne(btn) {
+  const ligne = btn.closest('.kit-ligne');
+  const chk = ligne.querySelector('input[type="checkbox"]');
+  if (chk) chk.checked = true;
+  ligne.style.display = 'none';
+  recalculer();
+}
+
+function ecoleSelectionnee() {
+  if (ECOLE_FIXE) return ECOLE_FIXE;
+  const sel = document.getElementById('id_ecole');
+  return sel ? String(sel.value) : '';
+}
+
+function recalculer() {
+  let cout = 0, prixSepare = 0;
+  const ecoleId = ecoleSelectionnee();
+  document.querySelectorAll('#lignes-kit .kit-ligne').forEach(ligne => {
+    if (ligne.style.display === 'none') return;
+    const chk = ligne.querySelector('input[type="checkbox"]');
+    if (chk && chk.checked) return;
+    const sel = ligne.querySelector('select');
+    const qteEl = ligne.querySelector('input[type="number"]');
+    if (!sel || !qteEl) return;
+    const id = sel.value, qte = parseInt(qteEl.value) || 0;
+    if (id && PRODUITS[id]) {
+      cout += PRODUITS[id].cout * qte;
+      const prixEcole = ecoleId && PRODUITS[id].prix_ecoles[ecoleId];
+      const prixUnit  = prixEcole !== undefined ? prixEcole : PRODUITS[id].prix_detail;
+      prixSepare += prixUnit * qte;
+    }
+  });
+  document.getElementById('cout-revient').textContent = Math.round(cout).toLocaleString('fr-FR');
+  const bloc = document.getElementById('bloc-prix-separe');
+  if (prixSepare > 0) {
+    document.getElementById('prix-separe').textContent = Math.round(prixSepare).toLocaleString('fr-FR');
+    bloc.style.display = '';
+  } else {
+    bloc.style.display = 'none';
+  }
+}
+
+document.querySelectorAll('#lignes-kit select').forEach(s => s.addEventListener('change', recalculer));
+document.querySelectorAll('#lignes-kit input[type="number"]').forEach(i => i.addEventListener('input', recalculer));
+recalculer();
+</script>
+{% endblock %}

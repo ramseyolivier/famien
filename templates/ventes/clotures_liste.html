@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block titre %}Clôtures de caisse — LEPAD{% endblock %}
+{% block lieu %}Clôtures de caisse{% endblock %}
+{% block contenu %}
+<div class="admin-entete">
+  <h1>Clôtures de caisse</h1>
+  {% if peut_cloturer %}<a href="{% url 'cloturer_caisse' %}" class="bouton-secondaire">+ Nouvelle clôture</a>{% endif %}
+</div>
+{% if clotures %}
+<table class="registre" style="width:100%">
+  <thead>
+    <tr>
+      <th>École</th>
+      <th style="white-space:nowrap">Date</th>
+      <th class="nombre" style="white-space:nowrap">Espèces</th>
+      <th class="nombre" style="white-space:nowrap">Mobile</th>
+      <th class="nombre" style="white-space:nowrap">Autre</th>
+      <th class="nombre" style="white-space:nowrap">Total</th>
+      <th class="nombre" style="white-space:nowrap">Ventes</th>
+      <th>Clôturé par</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for c in clotures %}
+    <tr>
+      <td>{{ c.ecole.nom }}</td>
+      <td style="white-space:nowrap">{{ c.date|date:"d/m/Y" }}</td>
+      <td class="nombre chiffre" style="white-space:nowrap">{{ c.montant_especes|floatformat:0 }}</td>
+      <td class="nombre chiffre" style="white-space:nowrap">{{ c.montant_mobile|floatformat:0 }}</td>
+      <td class="nombre chiffre" style="white-space:nowrap">{% if c.montant_autre %}{{ c.montant_autre|floatformat:0 }}{% else %}<span style="color:var(--encre-pale)">—</span>{% endif %}</td>
+      <td class="nombre chiffre" style="white-space:nowrap;font-weight:700">{{ c.montant_total|floatformat:0 }}</td>
+      <td class="nombre" style="white-space:nowrap">{{ c.nb_ventes }}</td>
+      <td style="font-size:.85rem">{{ c.cloture_par.get_full_name|default:c.cloture_par.username }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="vide-liste">Aucune clôture enregistrée.</p>
+{% endif %}
+{% endblock %}

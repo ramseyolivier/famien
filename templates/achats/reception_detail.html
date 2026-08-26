@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block titre %}{{ reception.titre }} — LEPAD{% endblock %}
+{% block lieu %}Achats — Réception{% endblock %}
+{% block contenu %}
+
+<div class="admin-entete">
+  <h1 style="color:var(--marge)">{{ reception.titre }}</h1>
+  {% if reception.statut == "CLOTURE" %}
+    <span class="badge" style="background:var(--encre);color:#fff">Clôturée</span>
+  {% elif reception.statut == "VALIDE" %}
+    <span class="badge badge-actif">Validée</span>
+  {% else %}
+    <span class="badge" style="background:var(--or-clair);color:var(--or)">Brouillon</span>
+  {% endif %}
+</div>
+
+<p style="font-size:.85rem;color:var(--encre-clair)">
+  {% if reception.commande_id %}
+    Commande <a href="{% url 'commande_detail' reception.commande.pk %}">CF #{{ reception.commande.pk }}</a>
+    · Fournisseur : <strong>{{ reception.commande.fournisseur.raison_sociale }}</strong>
+    · Site : <strong>{{ reception.commande.site_destination.nom }}</strong>
+  {% else %}
+    Réception directe
+    {% if reception.fournisseur %} · Fournisseur : <strong>{{ reception.fournisseur.raison_sociale }}</strong>{% endif %}
+    {% if reception.site_destination %} · Site : <strong>{{ reception.site_destination.nom }}</strong>{% endif %}
+  {% endif %}
+  <br>
+  Créée le {{ reception.cree_le|date:"d/m/Y à H:i" }} par {{ reception.cree_par.get_full_name|default:reception.cree_par.username }}
+  {% if reception.valide_par %}
+    · Validée le {{ reception.valide_le|date:"d/m/Y à H:i" }} par {{ reception.valide_par.get_full_name|default:reception.valide_par.username }}
+  {% endif %}
+</p>
+
+{% if reception.observations %}
+<p style="background:var(--craie);padding:8px 12px;border-radius:6px;font-size:.88rem;color:var(--encre-clair)">
+  {{ reception.observations }}
+</p>
+{% endif %}
+
+<div class="etiquette" style="margin-top:16px">Détail des lignes</div>
+<table class="registre">
+  <thead>
+    <tr>
+      <th>Produit</th>
+      {% if reception.commande_id %}<th class="nombre" style="width:100px">Commandé</th>{% endif %}
+      <th class="nombre" style="width:100px">Reçu</th>
+      {% if reception.commande_id %}
+      <th class="nombre" style="width:90px">Écart</th>
+      <th>Justification</th>
+      {% endif %}
+    </tr>
+  </thead>
+  <tbody>
+  {% for l in lignes %}
+    {% with ecart=l.ecart %}
+    <tr {% if reception.commande_id and ecart < 0 %}style="background:var(--marge-clair)"{% elif reception.commande_id and ecart > 0 %}style="background:var(--or-clair)"{% endif %}>
+      <td>
+        <code style="font-family:monospace;font-weight:700;color:var(--accent)">{{ l.produit.code }}</code>
+        — {{ l.produit.designation }}
+      </td>
+      {% if reception.commande_id %}<td class="nombre chiffre">{{ l.quantite_attendue }}</td>{% endif %}
+      <td class="nombre chiffre"><strong>{{ l.quantite_recue }}</strong></td>
+      {% if reception.commande_id %}
+      <td class="nombre chiffre" style="font-weight:700;{% if ecart < 0 %}color:var(--marge){% elif ecart > 0 %}color:var(--or){% else %}color:var(--encre-clair){% endif %}">
+        {% if ecart == 0 %}—{% elif ecart > 0 %}+{{ ecart }}{% else %}{{ ecart }}{% endif %}
+      </td>
+      <td style="font-size:.85rem;color:var(--encre-clair)">{{ l.justification_ecart|default:"—" }}</td>
+      {% endif %}
+    </tr>
+    {% endwith %}
+  {% endfor %}
+  </tbody>
+  <tfoot>
+    <tr style="background:var(--craie)">
+      <td style="font-weight:700;font-size:.88rem;padding:10px">Total</td>
+      {% if reception.commande_id %}<td class="nombre chiffre" style="font-weight:700">{{ total_attendu }}</td>{% endif %}
+      <td class="nombre chiffre" style="font-weight:800;color:var(--encre)">{{ total_recu }}</td>
+      {% if reception.commande_id %}
+      <td class="nombre chiffre" style="font-weight:700;{% if ecart_total < 0 %}color:var(--marge){% elif ecart_total > 0 %}color:var(--or){% else %}color:var(--encre-clair){% endif %}">
+        {% if ecart_total == 0 %}—{% elif ecart_total > 0 %}+{{ ecart_total }}{% else %}{{ ecart_total }}{% endif %}
+      </td>
+      <td></td>
+      {% endif %}
+    </tr>
+  </tfoot>
+</table>
+
+<div style="margin-top:20px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+  {% if reception.statut == "BROUILLON" and peut_gerer %}
+  <form method="post" action="{% url 'reception_valider' reception.pk %}">{% csrf_token %}
+    <button type="submit" class="bouton-secondaire" style="background:var(--valide);color:#fff;border-color:var(--valide)">Valider</button>
+  </form>
+  <form method="post" action="{% url 'reception_supprimer' reception.pk %}" onsubmit="return confirm('Supprimer cette réception ? Cette action est irréversible.')">{% csrf_token %}
+    <button type="submit" class="bouton-secondaire" style="color:var(--marge);border-color:var(--reglure)">Supprimer</button>
+  </form>
+  <a href="{% url 'reception_modifier' reception.pk %}" class="bouton-secondaire">Modifier</a>
+  {% endif %}
+  <a href="{% url 'export_reception_detail' reception.pk %}" class="bouton-secondaire" style="margin-left:auto" title="Exporter en Excel">⬇</a>
+</div>
+
+<div style="margin-top:32px;padding-top:16px;border-top:var(--filet)">
+  <a href="{% url 'receptions_liste' %}" class="bouton-secondaire" style="background:var(--valide);color:#fff;border-color:var(--valide)">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+    Retour aux réceptions
+  </a>
+</div>
+
+<div class="pied">
+  <a href="{% url 'hub_approvisionnement' %}#depot" class="bouton-secondaire" style="min-width:180px;text-align:center">← Retour approvisionnement</a>
+</div>
+{% endblock %}

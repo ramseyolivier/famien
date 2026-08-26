@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block titre %}Dernières connexions — Administration{% endblock %}
+{% block lieu %}Administration › Dernières connexions{% endblock %}
+
+{% block contenu %}
+<div class="admin-entete">
+  <h1>Comptes actifs — dernière connexion</h1>
+</div>
+
+<form method="get" class="finance-filtres" data-live-filter>
+  <div class="filtre-champ filtre-champ--large">
+    <label>Recherche</label>
+    <input type="search" name="q" value="{{ filtres.q }}" placeholder="Nom ou identifiant…" autocomplete="off">
+  </div>
+  <div class="filtre-champ filtre-champ--large">
+    <label>Profil</label>
+    <select name="profil" data-no-combobox onchange="this.form.submit()">
+      <option value="">Tous</option>
+      {% for code, libelle in profils %}
+      <option value="{{ code }}" {% if filtres.profil == code %}selected{% endif %}>{{ libelle }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <input type="hidden" name="tri" value="{{ filtres.tri }}">
+  <a href="{% url 'admin_utilisateurs_connexions' %}" class="bouton-secondaire" title="Réinitialiser" style="align-self:flex-end;min-width:0;padding:8px 12px">↺</a>
+</form>
+
+{% if utilisateurs %}
+<table class="registre" style="margin-top:8px">
+  <thead>
+    <tr>
+      <th>Nom</th>
+      <th>Identifiant</th>
+      <th>Profil</th>
+      <th>Site</th>
+      <th>
+        Dernière connexion
+        {% if filtres.tri == "asc" %}
+          <a href="?q={{ filtres.q }}&profil={{ filtres.profil }}&tri=desc" title="Trier décroissant" style="margin-left:6px;text-decoration:none">↑</a>
+        {% else %}
+          <a href="?q={{ filtres.q }}&profil={{ filtres.profil }}&tri=asc" title="Trier croissant" style="margin-left:6px;text-decoration:none">↓</a>
+        {% endif %}
+      </th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for u in utilisateurs %}
+    <tr>
+      <td>{{ u.get_full_name|default:"—" }}</td>
+      <td style="font-family:monospace;color:var(--encre-clair)">{{ u.username }}</td>
+      <td>{{ u.get_profil_display }}</td>
+      <td>{{ u.site|default:u.commune|default:"—" }}</td>
+      <td style="color:var(--encre-clair);font-size:.85rem">{{ u.derniere_activite|date:"d/m/Y à H:i"|default:"jamais" }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="vide-liste">Aucun compte actif.</p>
+{% endif %}
+
+<div class="pied"><a href="{% url 'admin_accueil' %}#acces" class="bouton-secondaire">← Retour administration</a></div>
+{% endblock %}

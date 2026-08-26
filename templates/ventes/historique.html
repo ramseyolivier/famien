@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% block titre %}Historique des ventes{% endblock %}
+{% block lieu %}Ventes — {{ perimetre }}{% endblock %}
+
+{% block contenu %}
+<div class="admin-entete">
+  <h1>Historique des ventes</h1>
+</div>
+
+<form method="get" class="finance-filtres" id="form-historique">
+  {% if not caissiere %}
+  {% if multi_communes %}
+  <div class="filtre-champ filtre-champ--large">
+    <label>Commune</label>
+    <select name="commune" onchange="var s=this.form.querySelector('[name=ecole]');if(s)s.value='';this.form.submit()">
+      <option value="">Toutes</option>
+      {% for c in communes %}
+      <option value="{{ c.pk }}" {% if filtres.commune == c.pk|stringformat:"s" %}selected{% endif %}>{{ c.nom }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% endif %}
+  <div class="filtre-champ filtre-champ--large">
+    <label>École</label>
+    <select name="ecole" onchange="this.form.submit()">
+      <option value="">Toutes les écoles</option>
+      {% for e in ecoles %}
+      <option value="{{ e.pk }}" {% if filtres.ecole == e.pk|stringformat:"s" %}selected{% endif %}>{{ e.nom }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% endif %}
+
+  <div class="filtre-champ">
+    <label>Statut</label>
+    <select name="statut" data-no-combobox onchange="this.form.submit()">
+      <option value="">Tous statuts</option>
+      {% for code, libelle in statuts %}
+      <option value="{{ code }}" {% if filtres.statut == code %}selected{% endif %}>{{ libelle }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="filtre-champ" style="flex:0 0 118px">
+    <label>Du</label>
+    <input type="date" name="debut" value="{{ filtres.debut }}" onchange="this.form.submit()">
+  </div>
+  <div class="filtre-champ" style="flex:0 0 118px">
+    <label>Au</label>
+    <input type="date" name="fin" value="{{ filtres.fin }}" onchange="this.form.submit()">
+  </div>
+  <div style="display:flex;align-items:flex-end;padding-bottom:2px">
+    <a href="{% url 'historique_ventes' %}" class="bouton-secondaire" title="Réinitialiser" style="min-width:0;padding:6px 12px">↺</a>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:6px;margin-left:auto;align-items:flex-end">
+    <div style="display:flex;gap:0;align-items:center">
+      <span style="background:var(--accent);color:#fff;font-size:.82rem;font-weight:600;padding:0 12px;height:38px;display:flex;align-items:center;border-radius:var(--rayon) 0 0 var(--rayon);white-space:nowrap">
+        {{ nb }} vente{{ nb|pluralize }} · {{ total|floatformat:0 }} F CFA
+      </span>
+      <a href="{% url 'export_ventes' %}?{% if filtres.debut %}debut={{ filtres.debut }}&{% endif %}{% if filtres.fin %}fin={{ filtres.fin }}&{% endif %}{% if filtres.statut %}statut={{ filtres.statut }}&{% endif %}{% if filtres.commune %}commune={{ filtres.commune }}&{% endif %}{% if filtres.ecole %}ecole={{ filtres.ecole }}{% endif %}" class="bouton-secondaire" title="Exporter en Excel" style="min-width:0;padding:8px 12px;border-radius:0 var(--rayon) var(--rayon) 0;border-left:none">⬇</a>
+    </div>
+  </div>
+</form>
+
+{% if page.object_list %}
+<table class="registre" style="margin-top:8px">
+  <thead>
+    <tr>
+      <th>N°</th>
+      {% if not caissiere %}<th>École</th>{% endif %}
+      <th>Vendeuse</th>
+      <th>Date</th>
+      <th>Heure</th>
+      <th>Paiement</th>
+      <th class="nombre">Montant</th>
+      <th class="nombre">Remise</th>
+      <th>Statut</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for v in page %}
+    <tr{% if v.statut == 'ANNULEE' %} style="background:var(--marge-clair);opacity:.8"{% endif %}>
+      <td><code style="font-family:monospace;font-weight:700;color:{% if v.statut == 'ANNULEE' %}var(--marge){% else %}var(--accent){% endif %}">{{ v.numero }}</code></td>
+      {% if not caissiere %}<td>{{ v.ecole.nom }}</td>{% endif %}
+      <td style="color:var(--encre-clair);font-size:.88rem">{{ v.vendeuse.get_full_name|default:v.vendeuse.username }}</td>
+      <td style="white-space:nowrap">{{ v.horodatage|date:"d/m/Y" }}</td>
+      <td style="color:var(--encre-clair);font-size:.88rem;white-space:nowrap">{{ v.horodatage|time:"H:i" }}</td>
+      <td style="font-size:.82rem">{{ v.get_mode_paiement_display }}</td>
+      <td class="nombre chiffre">
+        {% if v.statut == 'ANNULEE' %}
+        <s style="color:var(--marge)">{{ v.montant_total|floatformat:0 }}</s>
+        {% else %}
+        <strong>{{ v.montant_total|floatformat:0 }}</strong>
+        {% endif %}
+      </td>
+      <td class="nombre" style="color:var(--encre-clair);font-size:.85rem">
+        {% if v.remise %}−{{ v.remise|floatformat:0 }}{% else %}—{% endif %}
+      </td>
+      <td>
+        {% if v.statut == 'LIVREE' %}<span class="badge badge-actif">Payée</span>
+        {% elif v.statut == 'EN_ATTENTE' %}<span class="badge" style="background:var(--or-clair);color:var(--or)">Payée non livrée</span>
+        {% elif v.statut == 'PARTIELLE' %}<span class="badge" style="background:var(--marge-clair);color:var(--marge)">Partielle</span>
+        {% else %}<span class="badge" style="background:var(--marge);color:#fff">Annulée</span>{% endif %}
+      </td>
+      <td style="white-space:nowrap;text-align:right">
+        <a href="{% url 'facture_vente' v.uuid %}" class="lien-action">Facture</a>
+        <a href="{% url 'recu' v.uuid %}" class="lien-action">Reçu</a>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{% else %}
+<p class="vide-liste" style="margin-top:20px">Aucune vente ne correspond à vos critères.</p>
+{% endif %}
+
+<div class="pied" style="display:flex;align-items:center;justify-content:space-between">
+  <a href="{% url 'hub_ventes' %}" class="bouton-secondaire">← Retour ventes</a>
+  {% if page.has_other_pages %}
+  <div style="display:flex;gap:8px;align-items:center">
+    {% if page.has_previous %}
+    <a href="?debut={{ filtres.debut }}&fin={{ filtres.fin }}&statut={{ filtres.statut }}&ecole={{ filtres.ecole }}&commune={{ filtres.commune }}&page={{ page.previous_page_number }}" class="bouton-secondaire" style="min-width:0;padding:8px 14px">&lt;</a>
+    {% endif %}
+    <span style="font-size:.85rem;color:var(--encre-clair)">{{ page.number }} / {{ page.paginator.num_pages }}</span>
+    {% if page.has_next %}
+    <a href="?debut={{ filtres.debut }}&fin={{ filtres.fin }}&statut={{ filtres.statut }}&ecole={{ filtres.ecole }}&commune={{ filtres.commune }}&page={{ page.next_page_number }}" class="bouton-secondaire" style="min-width:0;padding:8px 14px">&gt;</a>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

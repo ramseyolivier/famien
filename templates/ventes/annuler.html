@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block titre %}Annuler {{ v.numero }}{% endblock %}
+{% block lieu %}Annulation de vente{% endblock %}
+
+{% block contenu %}
+<div style="max-width:540px;margin:32px auto">
+  <div class="fiche manque" style="padding:20px 24px">
+    <div class="etiquette" style="margin-bottom:8px">Annulation définitive</div>
+    <h2 style="margin:0 0 4px;font-size:1.3rem">{{ v.numero }}</h2>
+    <p style="margin:0;font-size:.88rem;color:var(--encre-clair)">
+      {{ v.ecole.nom }} · {{ v.horodatage|date:"d/m/Y à H:i" }} · {{ v.montant_total|floatformat:0 }} F CFA
+    </p>
+  </div>
+
+  <div class="message warning" style="margin-top:16px">
+    Cette action est irréversible. Les articles seront restitués en stock par mouvements compensatoires.
+  </div>
+
+  <form method="post" style="margin-top:20px">
+    {% csrf_token %}
+    <label class="etiquette" for="motif">Motif d'annulation <span style="color:var(--marge)">*</span></label>
+    <select id="motif" name="motif" required data-no-combobox
+      style="width:100%;padding:10px 12px;border:1.5px solid var(--reglure);border-radius:var(--rayon);font:inherit;font-size:.95rem;margin-top:4px">
+      <option value="">— Choisir un motif —</option>
+      <option>Erreur de saisie</option>
+      <option>Article incorrect</option>
+      <option>Client a changé d'avis</option>
+      <option>Doublon de vente</option>
+      <option>Problème de paiement</option>
+      <option>Demande du client</option>
+      <option>Autre</option>
+    </select>
+    <div style="display:flex;gap:10px;margin-top:16px;justify-content:flex-end">
+      <a href="{% url 'facture_vente' v.uuid %}" class="bouton-secondaire">Annuler</a>
+      <button type="submit" class="bouton bouton-danger">Confirmer l'annulation</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

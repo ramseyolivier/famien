@@ -1,0 +1,185 @@
+{% extends "base.html" %}
+{% block titre %}Commande #{{ commande.numero }} — LEPAD{% endblock %}
+{% block lieu %}Approvisionnement — Commandes magasin{% endblock %}
+
+{% block contenu %}
+<div class="admin-entete">
+  <h1 style="color:var(--accent)">Commande #{{ commande.numero }} — {{ commande.magasin.nom }}</h1>
+  {% if commande.statut == "BROUILLON" %}
+    <span class="badge" style="background:var(--craie);color:var(--encre-clair)">Brouillon</span>
+  {% elif commande.statut == "SOUMISE" %}
+    <span class="badge" style="background:var(--or-clair);color:var(--or)">Soumise</span>
+  {% elif commande.statut == "VALIDEE" %}
+    {% if has_partial %}
+      <span class="badge" style="background:var(--or);color:#fff">Livrée partiellement — reliquat en attente</span>
+    {% else %}
+      <span class="badge" style="background:#dbeafe;color:var(--accent)">Validée — en attente de livraison</span>
+    {% endif %}
+  {% elif commande.statut == "LIVREE" %}
+    <span class="badge" style="background:var(--encre);color:#fff">En transit — réception en attente</span>
+  {% elif commande.statut == "RECUE" %}
+    {% if toutes_recues %}
+      <span class="badge" style="background:var(--valide);color:#fff">Reçue — totalement</span>
+    {% else %}
+      <span class="badge" style="background:var(--or);color:#fff">Clôturée — livrée partiellement</span>
+    {% endif %}
+  {% elif commande.statut == "REJETEE" %}
+    {% if has_livraison %}
+      <span class="badge" style="background:var(--marge);color:#fff">Rejetée — livrée partiellement</span>
+    {% else %}
+      <span class="badge" style="background:var(--marge);color:#fff">Rejetée — sans livraison</span>
+    {% endif %}
+  {% endif %}
+</div>
+
+<p style="font-size:.85rem;color:var(--encre-clair)">
+  Magasin : <strong>{{ commande.magasin.nom }}</strong>
+  · Créé le {{ commande.cree_le|date:"d/m/Y" }} par {{ commande.cree_par.get_full_name|default:commande.cree_par.username }}
+  {% if commande.soumise_par %} · Soumise par {{ commande.soumise_par.get_full_name|default:commande.soumise_par.username }}{% elif commande.soumise_le %} · Soumise le {{ commande.soumise_le|date:"d/m/Y" }}{% endif %}
+  {% if commande.validee_par %} · Validée par {{ commande.validee_par.get_full_name|default:commande.validee_par.username }}{% endif %}
+  {% if commande.livree_par %} · Livrée par {{ commande.livree_par.get_full_name|default:commande.livree_par.username }}{% endif %}
+  {% if commande.recue_par %} · Reçue par {{ commande.recue_par.get_full_name|default:commande.recue_par.username }}{% endif %}
+</p>
+
+{% if commande.motif_rejet %}
+<div style="background:var(--marge-clair);padding:10px 14px;border-radius:6px;border-left:4px solid var(--marge);margin-bottom:16px">
+  <div style="font-size:.82rem;color:var(--marge);margin-bottom:4px;font-weight:600">
+    Rejeté{% if commande.rejete_le %} le {{ commande.rejete_le|date:"d/m/Y à H:i" }}{% endif %}{% if commande.rejete_par %} par <strong>{{ commande.rejete_par.get_full_name|default:commande.rejete_par.username }}</strong>{% endif %}
+  </div>
+  <div style="color:var(--marge);font-size:.9rem">{{ commande.motif_rejet }}</div>
+</div>
+{% endif %}
+
+{% if commande.statut == "VALIDEE" %}
+<div style="background:#dbeafe;padding:10px 14px;border-radius:6px;color:var(--accent);margin-bottom:16px;border-left:4px solid var(--accent)">
+  En attente de livraison par le dépôt (DG ou Manager).
+</div>
+{% endif %}
+
+{% if commande.statut == "LIVREE" and commande.livree_par %}
+<div style="background:#d1fae5;padding:10px 14px;border-radius:6px;border-left:4px solid #10b981;margin-bottom:16px">
+  <div style="font-size:.82rem;color:#065f46;font-weight:600">
+    Livraison confirmée{% if commande.livree_le %} le {{ commande.livree_le|date:"d/m/Y à H:i" }}{% endif %} par <strong>{{ commande.livree_par.get_full_name|default:commande.livree_par.username }}</strong>
+  </div>
+</div>
+{% endif %}
+
+{% if commande.observations %}
+<p style="color:var(--encre-clair);font-size:.9rem;margin-bottom:20px;font-style:italic">{{ commande.observations }}</p>
+{% endif %}
+
+<div class="etiquette" style="margin-top:16px">Lignes commandées</div>
+<table class="registre">
+  <thead>
+    <tr>
+      <th>Produit</th>
+      <th class="nombre" style="width:90px">Demandé</th>
+      {% if show_livraison %}
+      <th class="nombre" style="width:90px">Livré</th>
+      <th class="nombre" style="width:90px">Reçu</th>
+      {% endif %}
+    </tr>
+  </thead>
+  <tbody>
+  {% for l in lignes %}
+    <tr>
+      <td>
+        {{ l.produit.code }} — {{ l.produit.designation }}
+        {% if l.motif_ecart %}<div style="font-size:.8rem;color:var(--or);margin-top:2px">{{ l.motif_ecart }}</div>{% endif %}
+      </td>
+      <td class="nombre chiffre">{{ l.quantite }}</td>
+      {% if show_livraison %}
+      <td class="nombre chiffre">{% if l.quantite_deja_livree %}{{ l.quantite_deja_livree }}{% else %}—{% endif %}</td>
+      <td class="nombre chiffre" style="color:{% if l.quantite_deja_recue %}var(--valide){% else %}var(--encre-pale){% endif %}">
+        {% if l.quantite_deja_recue %}{{ l.quantite_deja_recue }}{% else %}—{% endif %}
+      </td>
+      {% endif %}
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+<div style="margin-top:20px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+  {% if commande.statut == "BROUILLON" and peut_soumettre %}
+  <form method="post" action="{% url 'commande_magasin_soumettre' commande.pk %}" style="display:inline">
+    {% csrf_token %}
+    <button type="submit" class="bouton-secondaire" style="background:var(--or);color:#fff;border-color:var(--or)"
+            onclick="return confirm('Soumettre cette commande au dépôt principal ?')">Soumettre</button>
+  </form>
+  {% endif %}
+  {% if peut_supprimer %}
+  <form method="post" action="{% url 'commande_magasin_supprimer' commande.pk %}" style="display:inline"
+        onsubmit="return confirm('Supprimer cette commande ? Cette action est irréversible.')">
+    {% csrf_token %}
+    <button type="submit" class="bouton-secondaire" style="color:var(--marge)">Supprimer</button>
+  </form>
+  {% endif %}
+  {% if peut_modifier %}
+  <a href="{% url 'commande_magasin_modifier' commande.pk %}" class="bouton-secondaire">Modifier</a>
+  {% endif %}
+  {% if peut_valider %}
+  <form method="post" action="{% url 'commande_magasin_valider' commande.pk %}" style="display:inline">
+    {% csrf_token %}
+    <button type="submit" class="bouton-secondaire" style="background:var(--valide);color:#fff;border-color:var(--valide)"
+            onclick="return confirm('Valider cette commande ?')">Valider</button>
+  </form>
+  {% endif %}
+  {% if peut_livrer %}
+  <a href="{% url 'commande_magasin_livraison' commande.pk %}" class="bouton-secondaire"
+     style="background:var(--accent);color:#fff;border-color:var(--accent)">Livrer depuis le dépôt</a>
+  {% endif %}
+  {% if peut_receptionner %}
+  <a href="{% url 'commande_magasin_reception' commande.pk %}" class="bouton-secondaire"
+     style="background:var(--encre);color:#fff;border-color:var(--encre)">Réceptionner</a>
+  {% endif %}
+  {% if peut_rejeter %}
+  <button type="button" class="bouton-secondaire" style="color:var(--marge)"
+          onclick="document.getElementById('modal-rejet').style.display='flex'">Rejeter</button>
+  {% endif %}
+  <a href="{% url 'export_commande_magasin_detail' commande.pk %}" class="bouton-secondaire" style="margin-left:auto" title="Exporter en Excel">⬇</a>
+</div>
+
+<div style="margin-top:32px;padding-top:16px;border-top:var(--filet);display:flex;gap:10px;flex-wrap:wrap">
+  <a href="{% url 'commandes_magasin_liste' %}" class="bouton-secondaire" style="background:var(--accent);color:#fff;border-color:var(--accent)">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+    Retour aux commandes
+  </a>
+  <a href="{% url 'receptions_magasin_liste' %}" class="bouton-secondaire" style="background:var(--accent);color:#fff;border-color:var(--accent)">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+    Retour aux réceptions
+  </a>
+</div>
+
+<div class="pied">
+  <a href="{% url 'hub_approvisionnement' %}#magasins" class="bouton-secondaire" style="min-width:180px;text-align:center">← Retour approvisionnement</a>
+</div>
+
+{% if peut_rejeter %}
+<div id="modal-rejet" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:10px;padding:28px 24px;width:min(480px,90vw);box-shadow:0 8px 32px rgba(0,0,0,.18)">
+    <h2 style="margin:0 0 6px;font-size:1.1rem;color:var(--encre)">Rejeter la commande #{{ commande.numero }}</h2>
+    <p style="font-size:.85rem;color:var(--encre-clair);margin:0 0 16px">Le motif sera enregistré et visible par le gestionnaire.</p>
+    <form method="post" action="{% url 'commande_magasin_rejeter' commande.pk %}">
+      {% csrf_token %}
+      <label style="display:block;font-size:.88rem;font-weight:600;margin-bottom:6px;color:var(--encre)">
+        Motif de rejet <span style="color:var(--marge)">*</span>
+      </label>
+      <textarea name="motif" required minlength="10" rows="4"
+                placeholder="Expliquez la raison du rejet (minimum 10 caractères)…"
+                style="width:100%;padding:10px;border:1.5px solid var(--reglure);border-radius:6px;font:inherit;font-size:.9rem;resize:vertical;box-sizing:border-box"></textarea>
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px">
+        <button type="button" class="bouton-secondaire"
+                onclick="document.getElementById('modal-rejet').style.display='none'">Annuler</button>
+        <button type="submit" class="bouton-secondaire"
+                style="background:var(--marge);color:#fff;border-color:var(--marge)">Confirmer le rejet</button>
+      </div>
+    </form>
+  </div>
+</div>
+<script>
+document.getElementById('modal-rejet').addEventListener('click', function(e) {
+  if (e.target === this) this.style.display = 'none';
+});
+</script>
+{% endif %}
+{% endblock %}

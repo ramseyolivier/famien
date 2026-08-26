@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% block titre %}Réception — LEPAD{% endblock %}
+{% block lieu %}Achats — Réception{% endblock %}
+{% block contenu %}
+<div class="admin-entete">
+  <h1 style="color:var(--marge)">{% if reception %}Réception #{{ reception.pk }} (brouillon){% else %}Nouvelle réception{% endif %} — {{ commande.fournisseur.raison_sociale }}</h1>
+</div>
+<p style="color:var(--encre-clair)">Commande #{{ commande.pk }} · Destination : {{ commande.site_destination.nom }}</p>
+
+<form method="post" action="{% if reception %}{% url 'reception_modifier' reception.pk %}{% else %}{% url 'reception_nouvelle' commande.pk %}{% endif %}">
+{% csrf_token %}
+<div class="etiquette" style="margin-top:16px">Quantités reçues</div>
+<table class="registre">
+  <thead>
+    <tr>
+      <th>Produit</th>
+      <th class="nombre" style="width:100px">Commandé</th>
+      <th class="nombre" style="width:110px">Reçu</th>
+      <th class="nombre" style="width:80px">Écart</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for l in lignes %}
+    <tr>
+      <td>
+        {{ l.produit.code }} — {{ l.produit.designation }}
+        <div class="justif-row" style="{% if l.justification %}display:block{% else %}display:none{% endif %};margin-top:6px">
+          <input type="text" name="justification_ecart"
+            value="{{ l.justification }}"
+            placeholder="Justification de l'écart (obligatoire)…"
+            {% if l.justification %}required{% endif %}
+            style="width:100%;padding:6px 8px;border:1.5px solid var(--or);border-radius:4px;font:inherit;font-size:.85rem;box-sizing:border-box">
+        </div>
+      </td>
+      <td class="nombre chiffre">{{ l.quantite_commandee }}</td>
+      <td class="nombre">
+        <input type="hidden" name="produit_id" value="{{ l.produit.pk }}">
+        <input type="hidden" name="quantite_attendue" value="{{ l.quantite_commandee|stringformat:'d' }}">
+        <input type="number" name="quantite_recue"
+          value="{{ l.quantite_recue|stringformat:'d' }}"
+          min="0"
+          data-attendu="{{ l.quantite_commandee|stringformat:'d' }}"
+          style="width:80px;padding:6px 8px;border:1px solid var(--reglure);border-radius:4px;font:inherit;text-align:center">
+      </td>
+      <td class="nombre chiffre ecart-cell" style="font-weight:700">—</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+<div>
+  <label style="display:block;font-size:.85rem;color:var(--encre-clair);margin-top:12px;margin-bottom:4px">Observations</label>
+  <textarea name="observations" rows="2" style="width:100%;padding:8px;border:1px solid var(--reglure);border-radius:6px;font:inherit">{{ reception.observations|default:"" }}</textarea>
+</div>
+
+<div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap">
+  <button type="submit" name="action" value="brouillon" class="bouton-secondaire" style="background:var(--accent);color:#fff;border-color:var(--accent)">Enregistrer</button>
+  {% if reception %}
+  <a href="{% url 'reception_detail' reception.pk %}" class="bouton-secondaire">Annuler</a>
+  {% else %}
+  <a href="{% url 'commande_detail' commande.pk %}" class="bouton-secondaire">Annuler</a>
+  {% endif %}
+</div>
+</form>
+
+<div style="margin-top:32px;padding-top:16px;border-top:var(--filet)">
+  <a href="{% url 'receptions_liste' %}" class="bouton-secondaire" style="background:var(--valide);color:#fff;border-color:var(--valide)">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+    Retour aux réceptions
+  </a>
+</div>
+
+<div class="pied">
+  <a href="{% url 'hub_approvisionnement' %}#depot" class="bouton-secondaire" style="min-width:180px;text-align:center">← Retour approvisionnement</a>
+</div>
+
+<script>
+document.querySelectorAll('input[name="quantite_recue"]').forEach(function(input) {
+  // Forcer la valeur depuis l'attribut HTML (garde-fou contre les bugs navigateur)
+  if (input.getAttribute('value') && input.value === '') {
+    input.value = input.getAttribute('value');
+  }
+  function majEcart() {
+    var tr = input.closest('tr');
+    if (!tr) return;
+    var attendu = parseInt(input.dataset.attendu, 10) || 0;
+    var recu = parseInt(input.value, 10);
+    if (isNaN(recu)) recu = attendu;
+    var ecart = recu - attendu;
+    var cell = tr.querySelector('.ecart-cell');
+    var justifRow = tr.querySelector('.justif-row');
+    if (!cell || !justifRow) return;
+    var justifInput = justifRow.querySelector('input[type="text"]');
+    if (ecart === 0) {
+      cell.textContent = '—';
+      cell.style.color = '';
+      justifRow.style.display = 'none';
+      if (justifInput) justifInput.removeAttribute('required');
+    } else {
+      cell.textContent = (ecart > 0 ? '+' : '') + ecart;
+      cell.style.color = ecart > 0 ? 'var(--valide)' : 'var(--marge)';
+      justifRow.style.display = 'block';
+      if (justifInput) justifInput.setAttribute('required', 'required');
+    }
+  }
+  input.addEventListener('input', majEcart);
+  majEcart();
+});
+</script>
+{% endblock %}

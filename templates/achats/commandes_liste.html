@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block titre %}Commandes fournisseur — LEPAD{% endblock %}
+{% block lieu %}Achats — Commandes{% endblock %}
+{% block contenu %}
+<div class="admin-entete">
+  <h1 style="color:var(--valide)">Commandes fournisseur</h1>
+  {% if request.user.profil != "SUPERVISEUR" %}
+  <a href="{% url 'commande_nouvelle' %}" class="bouton-secondaire"
+     style="background:var(--valide);color:#fff;border-color:var(--valide);min-height:44px">
+    + Nouvelle commande
+  </a>
+  {% endif %}
+</div>
+
+<form method="get" class="finance-filtres" data-live-filter>
+  <div class="filtre-champ filtre-champ--large">
+    <label>Commande</label>
+    <select name="commande">
+      <option value="">Toutes</option>
+      {% for c in commandes_filtre %}
+      <option value="{{ c.pk }}" {% if filtre_commande == c.pk|stringformat:"s" %}selected{% endif %}>CF #{{ c.pk }} — {{ c.fournisseur.raison_sociale }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="filtre-champ">
+    <label>Statut</label>
+    <select name="statut" data-no-combobox>
+      <option value="">Tous</option>
+      <option value="BROUILLON" {% if filtre_statut == "BROUILLON" %}selected{% endif %}>Brouillon</option>
+      <option value="SOUMIS" {% if filtre_statut == "SOUMIS" %}selected{% endif %}>Soumise</option>
+      <option value="VALIDE" {% if filtre_statut == "VALIDE" %}selected{% endif %}>Validée</option>
+      <option value="CLOTURE" {% if filtre_statut == "CLOTURE" %}selected{% endif %}>Clôturée</option>
+      <option value="REJETE" {% if filtre_statut == "REJETE" %}selected{% endif %}>Rejetée</option>
+    </select>
+  </div>
+  <div class="filtre-champ filtre-champ--date">
+    <label for="cf-debut">Du</label>
+    <input type="date" id="cf-debut" name="debut" value="{{ filtre_debut }}">
+  </div>
+  <div class="filtre-champ filtre-champ--date">
+    <label for="cf-fin">Au</label>
+    <input type="date" id="cf-fin" name="fin" value="{{ filtre_fin }}">
+  </div>
+  <a href="{% url 'commandes_liste' %}" class="bouton-secondaire" title="Réinitialiser" style="align-self:flex-end;min-width:0;padding:8px 12px">↺</a>
+  <a href="{% url 'export_commandes_fournisseur' %}{% if filtre_commande or filtre_statut or filtre_debut or filtre_fin %}?{% if filtre_commande %}commande={{ filtre_commande }}&{% endif %}{% if filtre_statut %}statut={{ filtre_statut }}&{% endif %}{% if filtre_debut %}debut={{ filtre_debut }}&{% endif %}{% if filtre_fin %}fin={{ filtre_fin }}{% endif %}{% endif %}" class="bouton-secondaire" style="margin-left:auto" title="Exporter en Excel" title="Exporter en Excel">⬇</a>
+</form>
+
+{% if commandes %}
+<table class="registre">
+  <thead>
+    <tr>
+      <th>Commande</th>
+      <th>Statut</th>
+      <th>Date</th>
+      <th>Créé par</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for cf in commandes %}
+    <tr data-statut="{{ cf.statut }}" data-date="{{ cf.cree_le|date:'Y-m-d' }}">
+      <td><a href="{% url 'commande_detail' cf.pk %}" style="text-decoration:none">CF #{{ cf.pk }} — {{ cf.fournisseur.raison_sociale }}</a></td>
+      <td>
+        {% if cf.statut == "SOUMIS" %}
+          <span class="badge" style="background:#dbeafe;color:var(--accent)">Soumise</span>
+        {% elif cf.statut == "VALIDE_N1" %}
+          <span class="badge" style="background:#dbeafe;color:var(--accent)">Validée superviseur</span>
+        {% elif cf.statut == "VALIDE" %}
+          <span class="badge" style="background:var(--encre);color:#fff">Validée</span>
+        {% elif cf.statut == "CLOTURE" %}
+          <span class="badge" style="background:var(--encre);color:#fff">Clôturée</span>
+        {% elif cf.statut == "REJETE" %}
+          <span class="badge" style="background:var(--marge);color:#fff">Rejetée</span>
+        {% elif cf.statut == "ANNULE" %}
+          <span class="badge" style="background:var(--marge);color:#fff">Annulée</span>
+        {% else %}
+          <span class="badge" style="background:var(--craie);color:var(--encre-clair)">Brouillon</span>
+        {% endif %}
+      </td>
+      <td style="font-size:.85rem;white-space:nowrap">{{ cf.cree_le|date:"d/m/Y" }}</td>
+      <td style="font-size:.85rem">{{ cf.cree_par.get_full_name|default:cf.cree_par.username|default:"—" }}</td>
+      <td><a href="{% url 'commande_detail' cf.pk %}" class="bouton-secondaire" style="font-size:.8rem;padding:5px 10px">Détail</a></td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="vide-liste">Aucune commande.</p>
+{% endif %}
+
+<div class="pied">
+  <a href="{% url 'hub_approvisionnement' %}#depot" class="bouton-secondaire" style="min-width:180px;text-align:center">← Retour approvisionnement</a>
+</div>
+{% endblock %}

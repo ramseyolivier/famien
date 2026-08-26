@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block titre %}Magasins — Administration{% endblock %}
+{% block lieu %}Administration › Magasins{% endblock %}
+
+{% block contenu %}
+<div class="admin-entete">
+  <h1>Magasins</h1>
+  <a href="{% url 'admin_magasin_nouveau' %}" class="bouton-secondaire">+ Nouveau magasin</a>
+</div>
+
+{% if magasins %}
+<div class="barre-filtre">
+  <div class="champ-recherche">
+    <input type="search" id="recherche" placeholder="Rechercher par nom, commune…" autocomplete="off">
+  </div>
+  <select id="filtre-commune"><option value="">Toutes les communes</option></select>
+  <select id="filtre-statut"><option value="">Tous statuts</option></select>
+  <span class="compteur-resultats" id="compteur-resultats"></span>
+</div>
+
+<table class="registre" id="table-magasins" style="margin-top:8px">
+  <thead>
+    <tr>
+      <th>Nom</th>
+      <th>Commune</th>
+      <th>Adresse</th>
+      <th>Statut</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for m in magasins %}
+    <tr>
+      <td><strong>{{ m.nom }}</strong></td>
+      <td>{{ m.commune|default:"—" }}</td>
+      <td style="color:var(--encre-clair)">{{ m.adresse|default:"—" }}</td>
+      <td>
+        {% if m.actif %}<span class="badge badge-actif">Actif</span>
+        {% else %}<span class="badge badge-inactif">Inactif</span>{% endif %}
+      </td>
+      <td style="text-align:right;white-space:nowrap">
+        <a href="{% url 'admin_magasin_modifier' m.pk %}" class="icone-action" title="Modifier">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        </a>
+        <form method="post" action="{% url 'admin_magasin_activer' m.pk %}" style="display:inline">
+          {% csrf_token %}
+          <button type="submit" class="icone-action {% if m.actif %}icone-danger{% endif %}" title="{% if m.actif %}Désactiver{% else %}Activer{% endif %}">
+            {% if m.actif %}
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="8" y1="8" x2="16" y2="16"/><line x1="16" y1="8" x2="8" y2="16"/></svg>
+            {% else %}
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            {% endif %}
+          </button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+<p class="aucun-resultat" id="aucun-resultat">Aucun magasin ne correspond à votre recherche.</p>
+{% else %}
+<p class="vide-liste">Aucun magasin enregistré. <a href="{% url 'admin_magasin_nouveau' %}">Créer le premier</a>.</p>
+{% endif %}
+
+<div class="pied"><a href="{% url 'admin_accueil' %}#zone" class="bouton-secondaire">← Retour administration</a></div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+initFiltre({
+  tableId: 'table-magasins',
+  inputId: 'recherche',
+  selects: [
+    { selectId: 'filtre-commune', colonne: 1 },
+    { selectId: 'filtre-statut',  colonne: 3 },
+  ],
+});
+</script>
+{% endblock %}

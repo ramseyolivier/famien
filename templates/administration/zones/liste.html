@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block titre %}Zones — Administration{% endblock %}
+{% block lieu %}Administration › Zones{% endblock %}
+
+{% block contenu %}
+<div class="admin-entete">
+  <h1>Zones</h1>
+  <a href="{% url 'admin_zone_nouvelle' %}" class="bouton-secondaire">+ Nouvelle zone</a>
+</div>
+
+{% if supprimer %}
+<div class="message warning">
+  Supprimer la zone <strong>{{ supprimer.nom }}</strong> ?
+  <form method="post" action="{% url 'admin_zone_supprimer' supprimer.pk %}" style="display:inline;margin-left:12px">
+    {% csrf_token %}
+    <button type="submit" class="bouton-danger">Confirmer</button>
+  </form>
+  <a href="{% url 'admin_zones' %}" style="margin-left:10px;color:var(--encre-clair)">Annuler</a>
+</div>
+{% endif %}
+
+{% if zones %}
+<div class="barre-filtre">
+  <div class="champ-recherche">
+    <input type="search" id="recherche" placeholder="Rechercher une zone…" autocomplete="off">
+  </div>
+  <span class="compteur-resultats" id="compteur-resultats"></span>
+</div>
+
+<table class="registre" id="table-zones" style="margin-top:8px">
+  <thead>
+    <tr>
+      <th>Zone</th>
+      <th class="nombre">Sites rattachés</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for z in zones %}
+    <tr>
+      <td><strong>{{ z.nom }}</strong></td>
+      <td class="nombre chiffre">{{ z.sites.count }}</td>
+      <td style="text-align:right;white-space:nowrap">
+        <a href="{% url 'admin_zone_modifier' z.pk %}" class="lien-action">Modifier</a>
+        <a href="{% url 'admin_zone_supprimer' z.pk %}" class="lien-action lien-danger">Supprimer</a>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+<p class="aucun-resultat" id="aucun-resultat">Aucune zone ne correspond à votre recherche.</p>
+{% else %}
+<p class="vide-liste">Aucune zone enregistrée. <a href="{% url 'admin_zone_nouvelle' %}">Créer la première</a>.</p>
+{% endif %}
+
+<div class="pied"><a href="{% url 'admin_accueil' %}#zone" class="bouton-secondaire">← Retour administration</a></div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+initFiltre({ tableId: 'table-zones', inputId: 'recherche' });
+</script>
+{% endblock %}

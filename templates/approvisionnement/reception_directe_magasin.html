@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+{% block titre %}Réception directe magasin — LEPAD{% endblock %}
+{% block lieu %}Réceptions magasin — Directe{% endblock %}
+
+{% block fil_ariane %}
+<nav class="fil-ariane" aria-label="Fil d'Ariane">
+  <a href="{% url 'hub_stock' %}">Stock</a>
+  <span class="sep">›</span>
+  <a href="{% url 'receptions_magasin_liste' %}">Réceptions magasin</a>
+  <span class="sep">›</span>
+  <span aria-current="page">Réception directe</span>
+</nav>
+{% endblock %}
+
+{% block contenu %}
+<div class="admin-entete">
+  <h1 style="color:#7c3aed">Nouvelle réception directe</h1>
+  <p style="font-size:.85rem;color:var(--encre-clair);margin-top:4px">Sans commande préalable.</p>
+</div>
+
+<form method="post">
+  {% csrf_token %}
+
+  <div class="groupe-champ">
+    <label>Magasin réceptionnaire</label>
+    <input type="hidden" name="site_destination" value="{{ site_fixe.pk }}">
+    <span class="badge" style="background:var(--reglure);color:var(--encre);padding:8px 10px;font-size:.88rem;display:inline-block;border-radius:6px;font-weight:normal;text-transform:none;letter-spacing:0">{{ site_fixe }}</span>
+  </div>
+
+  <div class="groupe-champ">
+    <label>Fournisseur (optionnel)</label>
+    <select name="fournisseur" data-combobox style="width:100%;padding:10px 12px;border:1.5px solid var(--reglure);border-radius:var(--rayon);font:inherit">
+      <option value="">— Inconnu —</option>
+      {% for f in fournisseurs %}<option value="{{ f.pk }}">{{ f.raison_sociale }}</option>{% endfor %}
+    </select>
+  </div>
+
+  <div class="groupe-champ">
+    <label>Observations</label>
+    <textarea name="observations" rows="2" style="width:100%;padding:10px 12px;border:1.5px solid var(--reglure);border-radius:var(--rayon);font:inherit;resize:vertical"></textarea>
+  </div>
+
+  <div class="etiquette" style="margin-top:20px">Articles reçus</div>
+  <table class="registre" id="tbl-lignes">
+    <thead>
+      <tr>
+        <th>Article</th>
+        <th class="nombre" style="width:110px">Quantité reçue</th>
+        <th class="nombre" style="width:130px">Prix u. (F CFA)</th>
+        <th style="width:36px"></th>
+      </tr>
+    </thead>
+    <tbody id="lignes-body">
+      <tr id="ligne-vide"><td colspan="4" style="color:var(--encre-clair);text-align:center;padding:14px">Ajoutez au moins un article.</td></tr>
+    </tbody>
+  </table>
+
+  <div style="display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap">
+    <select id="sel-produit" style="flex:1;padding:9px 12px;border:1.5px solid var(--reglure);border-radius:var(--rayon);font:inherit;min-width:0">
+      <option value="">— Choisir un article —</option>
+      {% for p in produits %}<option value="{{ p.pk }}" data-libelle="{{ p.code }} — {{ p.designation }}">{{ p.code }} — {{ p.designation }}</option>{% endfor %}
+    </select>
+    <button type="button" id="btn-ajouter" class="bouton-secondaire">+ Ajouter</button>
+  </div>
+
+  <div style="margin-top:24px;display:flex;gap:10px;flex-wrap:wrap">
+    <button type="submit" name="action" value="brouillon" class="bouton-secondaire">Enregistrer (brouillon)</button>
+    <button type="submit" name="action" value="valider" class="bouton-secondaire" style="background:var(--valide);color:#fff;border-color:var(--valide)">Valider la réception</button>
+    <a href="{% url 'receptions_magasin_liste' %}" class="bouton-secondaire">Annuler</a>
+  </div>
+</form>
+
+<div class="pied">
+  <a href="{% url 'hub_approvisionnement' %}#magasins" class="bouton-secondaire" style="min-width:180px;text-align:center">← Retour approvisionnement</a>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(() => {
+  const body = document.getElementById("lignes-body");
+  const vide = document.getElementById("ligne-vide");
+  const sel  = document.getElementById("sel-produit");
+  const btn  = document.getElementById("btn-ajouter");
+  const ids  = new Set();
+  const CTRL = 'padding:6px 8px;border:1.5px solid var(--reglure);border-radius:4px;font:inherit;box-sizing:border-box';
+
+  function mettreAJourVide() {
+    vide.style.display = ids.size === 0 ? "" : "none";
+  }
+
+  function ajouterLigneDOM(pid, libelle, qte, prix) {
+    ids.add(String(pid));
+    const tr = document.createElement("tr");
+    tr.dataset.pid = String(pid);
+    tr.innerHTML =
+      `<td>${libelle}<input type="hidden" name="produit_id" value="${pid}"></td>` +
+      `<td class="nombre"><input type="number" name="quantite_recue" value="${qte || 1}" min="1" required style="width:80px;text-align:right;${CTRL}"></td>` +
+      `<td class="nombre"><input type="number" name="prix_unitaire" value="${prix || 0}" min="0" style="width:110px;text-align:right;${CTRL}"></td>` +
+      `<td><button type="button" class="btn-sup" style="background:none;border:0;color:var(--marge);cursor:pointer;font-size:1.1rem" aria-label="Supprimer">✕</button></td>`;
+    tr.querySelector(".btn-sup").addEventListener("click", () => {
+      ids.delete(String(pid));
+      tr.remove();
+      mettreAJourVide();
+    });
+    body.appendChild(tr);
+    mettreAJourVide();
+  }
+
+  btn.addEventListener("click", () => {
+    const pid = sel.value;
+    if (!pid || ids.has(pid)) return;
+    const libelle = sel.options[sel.selectedIndex].dataset.libelle;
+    ajouterLigneDOM(pid, libelle, 1, 0);
+    sel.value = "";
+    sel._comboReset?.();
+  });
+
+  mettreAJourVide();
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block titre %}Finances — LEPAD{% endblock %}
+{% block lieu %}Finances{% endblock %}
+
+{% block contenu %}
+<div class="admin-entete" style="margin-top:28px">
+  <h1>Finances</h1>
+</div>
+
+<div class="hub-stats">
+  <div class="indicateur valide">
+    <div class="valeur chiffre">{{ entrees_total|floatformat:0 }}</div>
+    <div class="libelle">Entrées totales</div>
+  </div>
+  <div class="indicateur">
+    <div class="valeur chiffre">{{ sorties_total|floatformat:0 }}</div>
+    <div class="libelle">Sorties totales</div>
+  </div>
+</div>
+
+<!-- ── Entrées / Sorties ───────────────────────────────── -->
+<div class="hub-section">
+  <div class="etiquette" style="margin-bottom:10px">Entrées / Sorties</div>
+  <div class="hub-grille">
+    <a href="{% url 'finances_entrees_sorties' %}" class="hub-carte">
+      <span class="hub-carte-icone">
+        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/><polyline points="17 18 23 18 23 12"/></svg>
+      </span>
+      <strong class="hub-carte-titre">Finances entrées / sorties</strong>
+      <span class="hub-carte-desc">Ventes · Dépenses · Solde net par période</span>
+      {% if nb_depenses %}
+      <span class="hub-carte-badge">{{ nb_depenses }} dépense{{ nb_depenses|pluralize }} à valider</span>
+      {% endif %}
+      {% if nb_depenses_confirmer %}
+      <span class="hub-carte-badge" style="background:var(--or);color:#fff">{{ nb_depenses_confirmer }} à confirmer</span>
+      {% endif %}
+    </a>
+  </div>
+</div>
+
+<!-- ── Versements ─────────────────────────────────────── -->
+{% if request.user.profil == 'CHEF_EQUIPE' or request.user.profil == 'SUPERVISEUR' or request.user.profil == 'DG' or request.user.profil == 'MANAGER' or request.user.is_superuser %}
+<div class="hub-section">
+  <div class="etiquette" style="margin-bottom:10px">Versements</div>
+  <div class="hub-grille">
+    <a href="{% url 'versements_liste' %}" class="hub-carte{% if nb_versements_attente %} hub-carte-principale{% endif %}">
+      <span class="hub-carte-icone">
+        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+      </span>
+      <strong class="hub-carte-titre">Versements{% if nb_versements_attente %} <span style="background:var(--marge);color:#fff;border-radius:10px;padding:1px 8px;font-size:.78rem;font-weight:700;vertical-align:middle">{{ nb_versements_attente }}</span>{% endif %}</strong>
+      <span class="hub-carte-desc">{% if nb_versements_attente %}{{ nb_versements_attente }} versement{{ nb_versements_attente|pluralize }} à approuver{% else %}Remontées d'argent vers la trésorerie{% endif %}</span>
+    </a>
+  </div>
+</div>
+{% endif %}
+
+<!-- ── Rapports ───────────────────────────────────────── -->
+{% if request.user.profil == 'DG' or request.user.profil == 'MANAGER' or request.user.is_superuser %}
+<div class="hub-section">
+  <div class="etiquette" style="margin-bottom:10px">Rapports</div>
+  <div class="hub-grille">
+    <a href="{% url 'finances_benefices' %}" class="hub-carte">
+      <span class="hub-carte-icone">
+        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+      </span>
+      <strong class="hub-carte-titre">Bénéfices</strong>
+      <span class="hub-carte-desc">Recettes · Coût marchandises · Dépenses · Marge nette</span>
+    </a>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}

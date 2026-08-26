@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+{% block titre %}Tous les versements{% endblock %}
+{% block lieu %}Finances — Versements (vue globale){% endblock %}
+
+{% block contenu %}
+<div class="admin-entete" style="margin-top:28px">
+  <h1>Tous les versements</h1>
+</div>
+
+<!-- Indicateurs -->
+<div class="indicateurs" style="margin-bottom:28px">
+  <div class="indicateur valide">
+    <div class="valeur chiffre">{{ total_confirme|floatformat:0 }}</div>
+    <div class="libelle">F confirmés</div>
+  </div>
+  <div class="indicateur">
+    <div class="valeur chiffre">{{ total_banque|floatformat:0 }}</div>
+    <div class="libelle">F versés en banque</div>
+  </div>
+  <div class="indicateur {% if en_attente_nb %}manque{% endif %}">
+    <div class="valeur chiffre">{{ total_attente|floatformat:0 }}</div>
+    <div class="libelle">F en attente{% if en_attente_nb %} ({{ en_attente_nb }}){% endif %}</div>
+  </div>
+</div>
+
+<form method="get" class="finance-filtres" style="margin-bottom:8px">
+  <div class="filtre-champ">
+    <label>Statut</label>
+    <select name="statut" data-no-combobox onchange="this.form.submit()">
+      <option value="">Tous</option>
+      <option value="EN_ATTENTE" {% if filtres.statut == "EN_ATTENTE" %}selected{% endif %}>En attente</option>
+      <option value="CONFIRME"   {% if filtres.statut == "CONFIRME"   %}selected{% endif %}>Confirmé</option>
+      <option value="REJETE"     {% if filtres.statut == "REJETE"     %}selected{% endif %}>Rejeté</option>
+    </select>
+  </div>
+  <div class="filtre-champ" style="flex:0 0 118px">
+    <label>Du</label>
+    <input type="date" name="debut" value="{{ filtres.debut }}" onchange="this.form.submit()">
+  </div>
+  <div class="filtre-champ" style="flex:0 0 118px">
+    <label>Au</label>
+    <input type="date" name="fin" value="{{ filtres.fin }}" onchange="this.form.submit()">
+  </div>
+  <div class="filtre-champ filtre-champ--large">
+    <label>De</label>
+    <select name="de" data-no-combobox onchange="this.form.submit()">
+      <option value="">Tous</option>
+      {% for v in verseurs %}
+      <option value="{{ v.pk }}"{% if filtres.de == v.pk|stringformat:"s" %} selected{% endif %}>{{ v.get_full_name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="filtre-champ filtre-champ--large">
+    <label>Vers</label>
+    <select name="vers" data-no-combobox onchange="this.form.submit()">
+      <option value="">Tous</option>
+      <option value="__banque__"{% if filtres.vers == "__banque__" %} selected{% endif %}>Banque</option>
+      {% for d in destinataires %}
+      <option value="{{ d.pk }}"{% if filtres.vers == d.pk|stringformat:"s" %} selected{% endif %}>{{ d.get_full_name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div style="display:flex;align-items:flex-end;padding-bottom:2px">
+    <a href="{% url 'versements_global' %}" class="bouton-secondaire" title="Réinitialiser" style="min-width:0;padding:6px 12px">↺</a>
+  </div>
+  <a href="{% url 'versements_export' %}?section=global{% if filtres.statut %}&statut={{ filtres.statut }}{% endif %}{% if filtres.debut %}&debut={{ filtres.debut }}{% endif %}{% if filtres.fin %}&fin={{ filtres.fin }}{% endif %}" class="bouton-secondaire" title="Télécharger" style="min-width:0;padding:6px 12px;margin-left:auto;align-self:flex-end">⬇</a>
+</form>
+
+{% if versements %}
+<div style="overflow-x:auto">
+<table class="registre">
+  <thead>
+    <tr>
+      <th>Date</th>
+      <th>De</th>
+      <th>Vers</th>
+      <th class="nombre">Montant</th>
+      <th>Mode</th>
+      <th>Référence</th>
+      <th>Note</th>
+      <th>Statut</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for v in versements %}
+    <tr>
+      <td style="white-space:nowrap">{{ v.date|date:"d/m/Y" }}</td>
+      <td>{{ v.verseur.get_full_name }}</td>
+      <td>{% if v.destinataire %}{{ v.destinataire.get_full_name }}{% else %}<em style="color:var(--encre-clair)">Banque</em>{% endif %}</td>
+      <td class="nombre chiffre"><strong>{{ v.montant|floatformat:0 }}</strong></td>
+      <td style="font-size:.85rem">{{ v.get_mode_display }}</td>
+      <td style="font-size:.82rem;color:var(--encre-clair)">{{ v.reference|default:"—" }}</td>
+      <td style="font-size:.82rem;color:var(--encre-clair)">{{ v.note|truncatechars:50|default:"—" }}</td>
+      <td>
+        {% if v.statut == "CONFIRME" %}
+          <span class="badge badge-actif">Confirmé</span>
+        {% elif v.statut == "REJETE" %}
+          <span class="badge" style="background:var(--marge);color:#fff" title="{{ v.motif_rejet }}">Rejeté</span>
+        {% else %}
+          <span class="badge" style="background:var(--or-clair);color:var(--or)">En attente</span>
+        {% endif %}
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<p class="vide-liste" style="margin-top:12px">Aucun versement{% if filtres.statut or filtres.debut or filtres.fin %} pour ces critères{% endif %}.</p>
+{% endif %}
+
+<div style="margin-top:24px">
+  <a href="{% url 'versements_liste' %}" class="bouton-secondaire" style="min-width:180px;text-align:center;background:var(--accent);color:#fff;border-color:var(--accent)">← Mes versements</a>
+</div>
+<div class="pied">
+  <a href="{% url 'hub_finances' %}" class="bouton-secondaire">← Finances</a>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  var PAR_PAGE = 10;
+
+  function paginer(table) {
+    var lignes = Array.from(table.querySelectorAll("tbody tr")).filter(function (tr) {
+      return !tr.querySelector("td[colspan]");
+    });
+    if (lignes.length <= PAR_PAGE) return;
+
+    var nbPages = Math.ceil(lignes.length / PAR_PAGE);
+
+    var nav = document.createElement("div");
+    nav.style.cssText = "display:flex;gap:6px;justify-content:center;margin:10px 0 18px";
+
+    function afficher(page) {
+      lignes.forEach(function (tr, i) {
+        tr.style.display = (i >= (page - 1) * PAR_PAGE && i < page * PAR_PAGE) ? "" : "none";
+      });
+      Array.from(nav.children).forEach(function (btn, i) {
+        var actif = (i + 1) === page;
+        btn.style.background = actif ? "var(--encre)" : "var(--craie)";
+        btn.style.color = actif ? "#fff" : "var(--encre)";
+        btn.style.borderColor = actif ? "var(--encre)" : "var(--reglure)";
+      });
+    }
+
+    for (var p = 1; p <= nbPages; p++) {
+      (function (page) {
+        var btn = document.createElement("button");
+        btn.type = "button";
+        btn.textContent = page;
+        btn.style.cssText = "width:28px;height:28px;border-radius:50%;border:1.5px solid var(--reglure);background:var(--craie);color:var(--encre);font-size:.78rem;font-weight:700;cursor:pointer;line-height:1;padding:0";
+        btn.addEventListener("click", function () { afficher(page); });
+        nav.appendChild(btn);
+      })(p);
+    }
+
+    table.parentNode.insertBefore(nav, table.nextSibling);
+    afficher(1);
+  }
+
+  document.addEventListener("DOMContentLoaded", function () {
+    document.querySelectorAll("table.registre").forEach(paginer);
+  });
+})();
+</script>
+{% endblock %}
