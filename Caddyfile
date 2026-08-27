@@ -1,6 +1,6 @@
-# Caddy obtient et renouvelle le certificat Let's Encrypt tout seul.
-# Remplacez le domaine par le vôtre ; c'est la seule ligne à changer.
-gestion.lepad.ci {
+# Accès par IP directe (HTTP). Remplacer l'adresse par un domaine
+# pour obtenir HTTPS automatique via Let's Encrypt.
+:80 {
     encode gzip
     reverse_proxy web:8000
 }
