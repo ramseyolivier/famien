@@ -428,7 +428,7 @@ def stock_articles(request):
     soldes = (
         SoldeStock.objects.filter(site__in=sites)
         .select_related("site", "produit", "produit__categorie")
-        .order_by("produit__code", "site__nom")
+        .order_by("produit__categorie__nom", "produit__code", "site__nom")
     )
 
     all_sites = list(sites.order_by("nom"))

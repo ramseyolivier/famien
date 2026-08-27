@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load i18n %}
 {% block titre %}Produits — Administration{% endblock %}
 {% block lieu %}Administration › Produits{% endblock %}
 
@@ -40,7 +41,14 @@
     </tr>
   </thead>
   <tbody>
-    {% for p in produits %}
+    {% regroup produits by categorie as produits_par_categorie %}
+    {% for groupe in produits_par_categorie %}
+    <tr>
+      <td colspan="7" style="background:var(--craie);font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--encre-clair);padding:8px 12px;border-top:2px solid var(--reglure)">
+        {{ groupe.grouper|default:"Sans catégorie" }}
+      </td>
+    </tr>
+    {% for p in groupe.list %}
     <tr>
       <td><code style="font-family:monospace;font-weight:700;color:var(--accent)">{{ p.code }}</code></td>
       <td>{{ p.designation }}</td>
@@ -67,6 +75,7 @@
         </form>
       </td>
     </tr>
+    {% endfor %}
     {% endfor %}
   </tbody>
 </table>

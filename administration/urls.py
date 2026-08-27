@@ -12,6 +12,7 @@ urlpatterns = [
     path("sites/<int:pk>/modifier/", views.site_formulaire, name="admin_site_modifier"),
     path("sites/<int:pk>/activer/", views.site_activer, name="admin_site_activer"),
     path("sites/<int:pk>/tarifs/", views.site_tarifs, name="admin_site_tarifs"),
+    path("sites/<int:pk>/tarifs/export/", views.export_site_tarifs_excel, name="admin_site_tarifs_export"),
 
     # Catégories produit
     path("categories/", views.categories_liste, name="admin_categories"),

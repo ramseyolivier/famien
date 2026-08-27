@@ -154,6 +154,54 @@ def site_tarifs(request, pk):
     })
 
 
+@admin_requis
+def export_site_tarifs_excel(request, pk):
+    import io
+    import openpyxl
+    from openpyxl.styles import Alignment, Font, PatternFill
+    from openpyxl.utils import get_column_letter
+
+    site = get_object_or_404(Site, pk=pk)
+    produits = list(Produit.objects.filter(actif=True).select_related("categorie").order_by("categorie__nom", "code"))
+    prix_existants = {pe.produit_id: pe.prix_detail for pe in PrixEcole.objects.filter(ecole=site)}
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Tarifs"
+    ws.freeze_panes = "A2"
+
+    entetes = ["Code", "Désignation", "Catégorie", "Prix achat (F CFA)", "Prix vente (F CFA)", "Marge (F CFA)"]
+    for col, titre in enumerate(entetes, 1):
+        cell = ws.cell(row=1, column=col, value=titre)
+        cell.font = Font(bold=True, color="FFFFFF", size=11)
+        cell.fill = PatternFill("solid", fgColor="16233F")
+        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    ws.row_dimensions[1].height = 30
+
+    for row, p in enumerate(produits, 2):
+        pv = prix_existants.get(p.pk)
+        marge = (pv - p.cout_achat) if pv is not None else None
+        ws.cell(row=row, column=1, value=p.code)
+        ws.cell(row=row, column=2, value=p.designation)
+        ws.cell(row=row, column=3, value=p.categorie.nom if p.categorie_id else "")
+        ws.cell(row=row, column=4, value=int(p.cout_achat))
+        ws.cell(row=row, column=5, value=int(pv) if pv is not None else "")
+        ws.cell(row=row, column=6, value=int(marge) if marge is not None else "")
+
+    for col in ws.columns:
+        max_len = max(len(str(c.value or "")) for c in col)
+        ws.column_dimensions[get_column_letter(col[0].column)].width = min(max_len + 4, 50)
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    nom = f"tarifs_{site.nom.lower().replace(' ', '_')}_{timezone.localdate().isoformat()}.xlsx"
+    from django.http import HttpResponse
+    response = HttpResponse(buf.read(), content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    response["Content-Disposition"] = f'attachment; filename="{nom}"'
+    return response
+
+
 # ─── Catégories produit ───────────────────────────────────────────────────────
 
 
@@ -239,7 +287,7 @@ def marque_supprimer(request, pk):
 
 @admin_requis
 def produits_liste(request):
-    produits = Produit.objects.select_related("marque", "categorie").all()
+    produits = Produit.objects.select_related("marque", "categorie").order_by("categorie__nom", "code")
     return render(request, "administration/produits/liste.html", {"produits": produits})
 
 

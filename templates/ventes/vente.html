@@ -15,36 +15,8 @@
     style="width:220px;padding:10px;border:1.5px solid var(--reglure);border-radius:var(--rayon);font:inherit">
 </div>
 
-<!-- ── Kits ─────────────────────────────────────────────────────────── -->
-<div class="etiquette" style="color:#e07020;font-size:1rem;font-weight:800">Kits de l'établissement</div>
-<div class="table-caisse-scroll">
-<table class="registre" id="tbl-kits">
-  <thead>
-    <tr>
-      <th style="color:#e07020;font-size:.95rem;font-weight:800">Kit</th>
-      <th style="width:130px;text-align:center;color:#e07020;font-size:.95rem;font-weight:800">Mode</th>
-      <th style="width:90px;text-align:center;color:#e07020;font-size:.95rem;font-weight:800">Qté</th>
-      <th style="width:70px;text-align:center;color:#e07020;font-size:.95rem;font-weight:800">Dispo</th>
-      <th id="th-avoir-kit-col" class="col-avoir-th" style="width:70px;text-align:center;color:var(--marge);font-size:.95rem;font-weight:800">Dû</th>
-      <th class="nombre" style="width:110px;color:#e07020;font-size:.95rem;font-weight:800">Total</th>
-      <th style="width:36px"></th>
-    </tr>
-  </thead>
-  <tbody id="kits-body">
-    <tr id="kits-vide">
-      <td colspan="7" style="color:var(--encre-clair);text-align:center;padding:14px">
-        Aucun kit sélectionné.
-      </td>
-    </tr>
-  </tbody>
-</table>
-</div>
-<div style="margin-top:8px">
-  <button type="button" id="btn-ajouter-kit" class="bouton-secondaire" style="background:#e07020;color:#fff;border-color:#e07020">+ Ajouter une ligne kit</button>
-</div>
-
 <!-- ── Articles ──────────────────────────────────────────────────────── -->
-<div class="etiquette" style="margin-top:64px;color:#228B22;font-size:1rem;font-weight:800">Articles à l'unité</div>
+<div class="etiquette" style="color:#228B22;font-size:1rem;font-weight:800">Articles à l'unité</div>
 <div class="table-caisse-scroll">
 <table class="registre" id="tbl-articles">
   <thead>
@@ -69,6 +41,34 @@
 </div>
 <div style="margin-top:8px">
   <button type="button" id="btn-ajouter-article" class="bouton-secondaire" style="background:#228B22;color:#fff;border-color:#228B22">+ Ajouter une ligne article</button>
+</div>
+
+<!-- ── Kits ─────────────────────────────────────────────────────────── -->
+<div class="etiquette" style="margin-top:64px;color:#e07020;font-size:1rem;font-weight:800">Kits de l'établissement</div>
+<div class="table-caisse-scroll">
+<table class="registre" id="tbl-kits">
+  <thead>
+    <tr>
+      <th style="color:#e07020;font-size:.95rem;font-weight:800">Kit</th>
+      <th style="width:130px;text-align:center;color:#e07020;font-size:.95rem;font-weight:800">Mode</th>
+      <th style="width:90px;text-align:center;color:#e07020;font-size:.95rem;font-weight:800">Qté</th>
+      <th style="width:70px;text-align:center;color:#e07020;font-size:.95rem;font-weight:800">Dispo</th>
+      <th id="th-avoir-kit-col" class="col-avoir-th" style="width:70px;text-align:center;color:var(--marge);font-size:.95rem;font-weight:800">Dû</th>
+      <th class="nombre" style="width:110px;color:#e07020;font-size:.95rem;font-weight:800">Total</th>
+      <th style="width:36px"></th>
+    </tr>
+  </thead>
+  <tbody id="kits-body">
+    <tr id="kits-vide">
+      <td colspan="7" style="color:var(--encre-clair);text-align:center;padding:14px">
+        Aucun kit sélectionné.
+      </td>
+    </tr>
+  </tbody>
+</table>
+</div>
+<div style="margin-top:8px">
+  <button type="button" id="btn-ajouter-kit" class="bouton-secondaire" style="background:#e07020;color:#fff;border-color:#e07020">+ Ajouter une ligne kit</button>
 </div>
 
 {% if True %}
@@ -649,8 +649,8 @@ document.getElementById("remise").addEventListener("change", function() {
     });
   });
 
-  ajouterLigne(true);
   ajouterLigne(false);
+  ajouterLigne(true);
 }());
 </script>
 {% endblock %}

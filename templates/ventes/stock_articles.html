@@ -90,6 +90,13 @@
   </thead>
   <tbody>
     {% for s in soldes %}
+    {% ifchanged s.produit.categorie.nom %}
+    <tr data-sep="1" style="background:var(--craie);pointer-events:none">
+      <td colspan="10" style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--encre-clair);padding:8px 12px;border-top:2px solid var(--reglure)">
+        {{ s.produit.categorie.nom|default:"Sans catégorie" }}
+      </td>
+    </tr>
+    {% endifchanged %}
     <tr {% if s.en_rupture %}style="background:var(--marge-clair)"{% elif s.sous_seuil %}style="background:var(--or-clair)"{% elif s.en_surstock %}style="background:#ede9fe"{% endif %}>
       <td><code style="font-family:monospace;font-weight:700;color:var(--accent)">{{ s.produit.code }}</code></td>
       <td>{{ s.produit.designation }}</td>
@@ -163,7 +170,7 @@
       table.querySelectorAll('th[data-tri] .tri-icone').forEach(function(ic) { ic.textContent = '↕'; });
       th.querySelector('.tri-icone').textContent = asc ? '↑' : '↓';
 
-      var rows = Array.from(tbody.querySelectorAll('tr'));
+      var rows = Array.from(tbody.querySelectorAll('tr')).filter(function(r){ return !r.dataset.sep; });
       rows.sort(function(a, b) {
         var av = a.cells[col] ? a.cells[col].textContent.trim() : '';
         var bv = b.cells[col] ? b.cells[col].textContent.trim() : '';

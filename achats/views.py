@@ -716,14 +716,16 @@ def _sauvegarder_lignes_libre(rec, produit_ids, qtes_recues):
             o.produit_id: o.prix_achat
             for o in ProduitFournisseur.objects.filter(fournisseur=fournisseur, produit_id__in=qtés)
         }
+    couts = {p.pk: p.cout_achat for p in Produit.objects.filter(pk__in=qtés)}
     rec.lignes.all().delete()
     for pid_int, q in qtés.items():
+        prix = offres.get(pid_int) or couts.get(pid_int, 0)
         ReceptionLigne.objects.create(
             reception=rec,
             produit_id=pid_int,
             quantite_attendue=q,
             quantite_recue=q,
-            prix_unitaire=offres.get(pid_int, 0),
+            prix_unitaire=prix,
             conforme=True,
         )
 

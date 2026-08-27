@@ -5,6 +5,7 @@
 {% block contenu %}
 <div class="admin-entete">
   <h1>Tarifs au détail — {{ site.nom }}</h1>
+  <a href="{% url 'admin_site_tarifs_export' site.pk %}" class="bouton-secondaire" title="Exporter en Excel" style="min-width:0;padding:8px 12px">⬇</a>
 </div>
 
 <div class="barre-filtre">
