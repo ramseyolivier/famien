@@ -67,19 +67,15 @@ def soumettre_commande_ecole(commande, *, par):
         raise ValidationError("Seule une commande en brouillon peut être soumise.")
     if not commande.lignes.exists():
         raise ValidationError("La commande ne contient aucune ligne.")
-    if commande.ecole.magasin_rattachement is None:
-        raise ValidationError("Cette école n'a pas de magasin rattaché.")
     commande.statut = StatutCommandeEcole.SOUMISE
     commande.soumise_le = tz.now()
     commande.soumise_par = par
     commande.save(update_fields=["statut", "soumise_le", "soumise_par"])
-    magasin = commande.ecole.magasin_rattachement
     lien = f"/approvisionnement/ecole/commande/{commande.pk}/"
-    titre = f"Commande école #{commande.numero} à valider — {commande.ecole.nom}"
+    titre = f"Commande site #{commande.numero} à valider — {commande.ecole.nom}"
     message = f"{par.get_full_name() or par.username} a soumis une commande. En attente de votre validation."
-    for gest in Utilisateur.objects.filter(is_active=True, profil=Profil.GEST_MAGASIN):
-        if gest.site_id == magasin.pk:
-            creer_notification(gest, type=TypeNotification.DEMANDE_SOUMISE, titre=titre, message=message, lien=lien)
+    for dg in Utilisateur.objects.filter(is_active=True, profil=Profil.DG):
+        creer_notification(dg, type=TypeNotification.DEMANDE_SOUMISE, titre=titre, message=message, lien=lien)
     return commande
 
 
@@ -95,34 +91,18 @@ def valider_commande_ecole(commande, *, par):
     """
     if commande.statut != StatutCommandeEcole.SOUMISE:
         raise ValidationError("Seule une commande soumise peut être validée.")
-    magasin = commande.ecole.magasin_rattachement
-    if magasin is None:
-        raise ValidationError("Cette école n'a pas de magasin rattaché.")
 
     lignes = list(commande.lignes.select_related("produit").order_by("produit__code"))
-    produit_ids = [l.produit_id for l in lignes]
-
-    # Verrou sur les soldes pour éviter deux validations simultanées sur les mêmes produits.
-    SoldeStock.objects.select_for_update().filter(
-        site=magasin, produit_id__in=produit_ids
-    ).order_by("produit__code")
 
     commande.statut = StatutCommandeEcole.VALIDEE
     commande.validee_le = tz.now()
     commande.validee_par = par
     commande.save(update_fields=["statut", "validee_le", "validee_par"])
-    for ligne in lignes:
-        StockReserve.objects.create(
-            magasin=magasin,
-            ecole=commande.ecole,
-            commande=commande,
-            produit=ligne.produit,
-            quantite=ligne.quantite_demandee,
-        )
+    # Modèle FAMIEN plat : pas de magasin intermédiaire, pas de StockReserve à créer ici.
     lien_notif = f"/approvisionnement/ecole/commande/{commande.pk}/"
-    # Purge la notification de soumission côté gests (ils ont déjà traité la demande)
+    # Purge les notifications de soumission envoyées aux DG (ils ont déjà traité la demande)
     Notification.objects.filter(
-        destinataire__in=Utilisateur.objects.filter(is_active=True, profil=Profil.GEST_MAGASIN, site=magasin),
+        destinataire__in=Utilisateur.objects.filter(is_active=True, profil=Profil.DG),
         lien=lien_notif, lue=False, type=TypeNotification.DEMANDE_SOUMISE,
     ).delete()
     creer_notification(
@@ -148,12 +128,11 @@ def rejeter_commande_ecole(commande, *, par, motif):
     commande.rejete_par = par
     commande.save(update_fields=["statut", "motif_rejet", "rejete_le", "rejete_par"])
     lien_notif = f"/approvisionnement/ecole/commande/{commande.pk}/"
-    magasin = commande.ecole.magasin_rattachement
-    if magasin:
-        Notification.objects.filter(
-            destinataire__in=Utilisateur.objects.filter(is_active=True, profil=Profil.GEST_MAGASIN, site=magasin),
-            lien=lien_notif, lue=False, type=TypeNotification.DEMANDE_SOUMISE,
-        ).delete()
+    # Purge les notifications de soumission envoyées aux DG
+    Notification.objects.filter(
+        destinataire__in=Utilisateur.objects.filter(is_active=True, profil=Profil.DG),
+        lien=lien_notif, lue=False, type=TypeNotification.DEMANDE_SOUMISE,
+    ).delete()
     _purger_notifs_obsoletes(commande.cree_par, lien_notif, [TypeNotification.DEMANDE_VALIDEE])
     creer_notification(
         commande.cree_par,
@@ -179,7 +158,6 @@ def livrer_commande_ecole(commande, lignes_livrees: dict, *, par, clore=False):
     """
     if commande.statut != StatutCommandeEcole.VALIDEE:
         raise ValidationError("Seule une commande validée peut être livrée.")
-    magasin = commande.ecole.magasin_rattachement
     lignes = list(commande.lignes.select_related("produit").order_by("produit__code"))
 
     qty_total_restant = 0
@@ -190,13 +168,7 @@ def livrer_commande_ecole(commande, lignes_livrees: dict, *, par, clore=False):
         ligne.quantite_deja_livree = (ligne.quantite_deja_livree or 0) + qty
         qty_total_restant += max(0, restant - qty)
         ligne.save(update_fields=["quantite_livree", "quantite_deja_livree"])
-        if qty > 0:
-            StockReserve.objects.update_or_create(
-                commande=commande, produit=ligne.produit,
-                defaults={"quantite": qty, "magasin": magasin, "ecole": commande.ecole},
-            )
-        else:
-            StockReserve.objects.filter(commande=commande, produit=ligne.produit).delete()
+        # Modèle FAMIEN plat : pas de magasin intermédiaire, pas de StockReserve à ajuster.
 
     commande.statut = StatutCommandeEcole.LIVREE
     commande.livree_le = tz.now()
@@ -284,13 +256,11 @@ def receptionner_commande_ecole(commande, lignes_recues: dict, motifs_ecart: dic
     if commande.statut != StatutCommandeEcole.LIVREE:
         raise ValidationError("Seule une commande livrée peut être réceptionnée.")
 
-    magasin = commande.ecole.magasin_rattachement
     ecole = commande.ecole
     lignes = list(commande.lignes.select_related("produit").order_by("produit__code"))
     produit_ids = [l.produit_id for l in lignes]
 
-    # Verrous : magasin d'abord, école ensuite — produit.code ASC dans chaque groupe
-    list(SoldeStock.objects.select_for_update().filter(site=magasin, produit_id__in=produit_ids).order_by("produit__code"))
+    # Verrou sur les soldes de l'école — produit.code ASC (modèle FAMIEN plat : pas de magasin intermédiaire)
     list(SoldeStock.objects.select_for_update().filter(site=ecole, produit_id__in=produit_ids).order_by("produit__code"))
 
     ref = f"REC-ECO-{commande.pk}"
@@ -312,15 +282,7 @@ def receptionner_commande_ecole(commande, lignes_recues: dict, motifs_ecart: dic
         ligne.quantite_deja_recue = (ligne.quantite_deja_recue or 0) + qty_recue
 
         if qty_recue > 0:
-            enregistrer_mouvement(
-                site=magasin,
-                produit=ligne.produit,
-                type=TypeMouvement.SORTIE_LIVRAISON_ECOLE,
-                quantite=-qty_recue,
-                auteur=par,
-                reference_document=ref,
-                commentaire=f"Réception école {ecole.nom}",
-            )
+            # Modèle FAMIEN plat : pas de débit magasin intermédiaire — seul le crédit école est enregistré.
             enregistrer_mouvement(
                 site=ecole,
                 produit=ligne.produit,
@@ -390,7 +352,7 @@ def receptionner_commande_ecole(commande, lignes_recues: dict, motifs_ecart: dic
                 ),
                 exclure_pk=par.pk,
             )
-        elif commande.cree_par and commande.cree_par != par and commande.cree_par.profil != Profil.GEST_MAGASIN:
+        elif commande.cree_par and commande.cree_par != par:
             creer_notification(
                 commande.cree_par,
                 type=TypeNotification.LIVRAISON_CONFIRMEE,
@@ -419,12 +381,9 @@ def receptionner_commande_ecole(commande, lignes_recues: dict, motifs_ecart: dic
 
 @transaction.atomic
 def _notifier_dg_manager_partage(commande, *, type, titre, message=""):
-    """Notifie DG/MANAGER avec un groupe partagé — le premier à lire efface chez l'autre."""
+    """Notifie les DG actifs avec un groupe partagé — le premier à lire efface chez l'autre."""
     lien = f"/approvisionnement/magasin/{commande.pk}/"
-    dest = [
-        u for u in Utilisateur.objects.filter(is_active=True, profil__in=[Profil.DG, Profil.MANAGER])
-        if u.acces_national or u.sites_autorises().filter(pk=commande.magasin_id).exists()
-    ]
+    dest = list(Utilisateur.objects.filter(is_active=True, profil=Profil.DG))
     groupe = str(uuid.uuid4()) if len(dest) > 1 else ""
     for u in dest:
         creer_notification(u, type=type, titre=titre, message=message, lien=lien, groupe=groupe)
@@ -441,20 +400,16 @@ def _purger_notifs_obsoletes(destinataire, lien, types_obsoletes):
 
 
 def _notifier_superviseurs_magasin(commande, *, type, titre, message=""):
-    """Notifie les superviseurs ayant accès au magasin concerné."""
+    """Notifie les DG actifs (rôle superviseur dans le modèle FAMIEN plat)."""
     lien = f"/approvisionnement/magasin/{commande.pk}/"
-    for sup in Utilisateur.objects.filter(is_active=True, profil=Profil.SUPERVISEUR):
-        if sup.acces_national or sup.sites_autorises().filter(pk=commande.magasin_id).exists():
-            creer_notification(sup, type=type, titre=titre, message=message, lien=lien)
+    for dg in Utilisateur.objects.filter(is_active=True, profil=Profil.DG):
+        creer_notification(dg, type=type, titre=titre, message=message, lien=lien)
 
 
 def _notifier_gestionnaires_ecole(commande, *, type, titre, message=""):
-    """Notifie les GEST_MAGASIN du magasin rattaché à l'école de la commande."""
-    magasin = commande.ecole.magasin_rattachement
-    if not magasin:
-        return
+    """Notifie les DG actifs (modèle FAMIEN plat — pas de gestionnaire magasin intermédiaire)."""
     lien = f"/approvisionnement/ecole/commande/{commande.pk}/"
-    for u in Utilisateur.objects.filter(is_active=True, profil=Profil.GEST_MAGASIN, site=magasin):
+    for u in Utilisateur.objects.filter(is_active=True, profil=Profil.DG):
         creer_notification(u, type=type, titre=titre, message=message, lien=lien)
 
 
@@ -614,11 +569,11 @@ def livrer_commande_magasin(commande, lignes_livrees: dict, *, par, clore=False)
     if commande.statut != StatutCommandeMagasin.VALIDEE:
         raise ValidationError("Seule une commande validée peut être livrée.")
 
-    from core.models import Site, TypeSite
+    from core.models import Site
 
-    depot = Site.objects.filter(type=TypeSite.DEPOT, actif=True).first()
+    depot = Site.objects.filter(actif=True).first()
     if not depot:
-        raise ValidationError("Aucun dépôt actif trouvé.")
+        raise ValidationError("Aucun site actif trouvé.")
 
     lignes = list(commande.lignes.select_related("produit").order_by("produit__code"))
     produit_ids = [l.produit_id for l in lignes]
@@ -730,11 +685,11 @@ def receptionner_commande_magasin(commande, lignes_recues: dict, motifs_ecart: d
     if commande.statut != StatutCommandeMagasin.LIVREE:
         raise ValidationError("Seule une commande livrée peut être réceptionnée.")
 
-    from core.models import Site, TypeSite
+    from core.models import Site
 
-    depot = Site.objects.filter(type=TypeSite.DEPOT, actif=True).first()
+    depot = Site.objects.filter(actif=True).first()
     if not depot:
-        raise ValidationError("Aucun dépôt actif trouvé.")
+        raise ValidationError("Aucun site actif trouvé.")
 
     magasin = commande.magasin
     lignes = list(commande.lignes.select_related("produit").order_by("produit__code"))
@@ -870,14 +825,14 @@ def sauvegarder_livraison_directe_brouillon(magasin, produit_quantites: dict, ob
 @transaction.atomic
 def valider_livraison_directe(commande, *, par):
     """Valide une livraison directe BROUILLON → LIVREE. Vérifie stock dépôt et crée StockReserveDepot."""
-    from core.models import Site, TypeSite
+    from core.models import Site
 
     if commande.statut != StatutCommandeMagasin.BROUILLON:
         raise ValidationError("Seule une livraison directe en brouillon peut être validée.")
 
-    depot = Site.objects.filter(type=TypeSite.DEPOT, actif=True).first()
+    depot = Site.objects.filter(actif=True).first()
     if not depot:
-        raise ValidationError("Aucun dépôt actif trouvé.")
+        raise ValidationError("Aucun site actif trouvé.")
 
     lignes = list(commande.lignes.select_related("produit").order_by("produit__code"))
     produit_ids = [l.produit_id for l in lignes]
@@ -923,9 +878,9 @@ def valider_livraison_directe(commande, *, par):
     lien = f"/approvisionnement/magasin/{commande.pk}/reception/"
     titre = f"Livraison directe #{commande.numero} à réceptionner — {commande.magasin.nom}"
     message = f"{par.get_full_name() or par.username} vous a envoyé une livraison directe pour {commande.magasin.nom}. Merci de confirmer la réception."
-    for gest in Utilisateur.objects.filter(is_active=True, profil=Profil.GEST_MAGASIN).exclude(pk=par.pk):
-        if gest.sites_autorises().filter(pk=commande.magasin_id).exists():
-            creer_notification(gest, type=TypeNotification.LIVRAISON_PRETE, titre=titre, message=message, lien=lien)
+    for chef in Utilisateur.objects.filter(is_active=True, profil=Profil.CHEF_EQUIPE).exclude(pk=par.pk):
+        if chef.sites_autorises().filter(pk=commande.magasin_id).exists():
+            creer_notification(chef, type=TypeNotification.LIVRAISON_PRETE, titre=titre, message=message, lien=lien)
 
     return commande
 
@@ -944,15 +899,15 @@ def livraison_directe_magasin(magasin, produit_quantites: dict, *, par):
     Section M17 du cahier des charges.
     """
     from catalogue.models import Produit
-    from core.models import Site, TypeSite
+    from core.models import Site
 
     lignes_valides = {pid: qty for pid, qty in produit_quantites.items() if int(qty) > 0}
     if not lignes_valides:
         raise ValidationError("Au moins une quantité doit être supérieure à 0.")
 
-    depot = Site.objects.filter(type=TypeSite.DEPOT, actif=True).first()
+    depot = Site.objects.filter(actif=True).first()
     if not depot:
-        raise ValidationError("Aucun dépôt actif trouvé.")
+        raise ValidationError("Aucun site actif trouvé.")
 
     produit_ids = list(lignes_valides.keys())
 
@@ -1039,37 +994,8 @@ def valider_livraison_directe_ecole(commande, *, par):
     if commande.statut != StatutCommandeEcole.BROUILLON:
         raise ValidationError("Seule une livraison directe en brouillon peut être validée.")
 
-    magasin = commande.ecole.magasin_rattachement
-    if not magasin:
-        raise ValidationError("Cette école n'a pas de magasin rattaché.")
-
+    # Modèle FAMIEN plat : pas de magasin intermédiaire, pas de contrôle de stock ni de StockReserve.
     lignes = list(commande.lignes.select_related("produit").order_by("produit__code"))
-    produit_ids = [l.produit_id for l in lignes]
-
-    soldes = {
-        s.produit_id: s.quantite
-        for s in SoldeStock.objects.select_for_update()
-        .filter(site=magasin, produit_id__in=produit_ids)
-        .order_by("produit__code")
-    }
-    reserves = dict(
-        StockReserve.objects.filter(magasin=magasin, produit_id__in=produit_ids)
-        .exclude(commande=commande)
-        .values("produit_id")
-        .annotate(total=Sum("quantite"))
-        .values_list("produit_id", "total")
-    )
-
-    manques = []
-    for ligne in lignes:
-        dispo = max(0, soldes.get(ligne.produit_id, 0) - reserves.get(ligne.produit_id, 0))
-        if dispo < ligne.quantite_demandee:
-            manques.append(
-                f"{ligne.produit.code} — {ligne.produit.designation} : "
-                f"demandé {ligne.quantite_demandee}, disponible {dispo}"
-            )
-    if manques:
-        raise ValidationError("Stock insuffisant au magasin : " + " | ".join(manques))
 
     commande.statut = StatutCommandeEcole.LIVREE
     commande.livree_le = tz.now()
@@ -1078,13 +1004,6 @@ def valider_livraison_directe_ecole(commande, *, par):
 
     for ligne in lignes:
         CommandeEcoleLigne.objects.filter(pk=ligne.pk).update(quantite_livree=ligne.quantite_demandee)
-        StockReserve.objects.create(
-            magasin=magasin,
-            ecole=commande.ecole,
-            commande=commande,
-            produit=ligne.produit,
-            quantite=ligne.quantite_demandee,
-        )
 
     lien = f"/approvisionnement/ecole/commande/{commande.pk}/"
     titre = f"Livraison directe #{commande.numero} à réceptionner — {commande.ecole.nom}"

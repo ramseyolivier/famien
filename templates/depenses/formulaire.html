@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% load l10n %}
-{% block titre %}{% if mode_edition %}Modifier la dépense #{{ depense.pk }}{% else %}Nouvelle dépense{% endif %} — LEPAD{% endblock %}
+{% block titre %}{% if mode_edition %}Modifier la dépense #{{ depense.pk }}{% else %}Nouvelle dépense{% endif %} — FAMIEN{% endblock %}
 {% block lieu %}Dépenses — {% if mode_edition %}Modifier{% else %}Nouvelle{% endif %}{% endblock %}
 {% block contenu %}
 <div class="admin-entete"><h1>{% if mode_edition %}Modifier la dépense #{{ depense.pk }}{% else %}Nouvelle dépense{% endif %}</h1></div>

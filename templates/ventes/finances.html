@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block titre %}Finances — LEPAD{% endblock %}
+{% block titre %}Finances — FAMIEN{% endblock %}
 {% block lieu %}Finances — Entrées{% endblock %}
 
 {% block contenu %}
@@ -25,7 +25,7 @@
   <span class="badge" style="background:var(--reglure);color:var(--encre);padding:6px 12px;font-size:.88rem;align-self:center">{{ ecole_unique.nom }}</span>
   {% else %}
   <div class="filtre-champ">
-    <label>École</label>
+    <label>Site</label>
     <select name="ecole" data-no-combobox>
       <option value="">Toutes</option>
       {% for e in ecoles %}
@@ -93,7 +93,7 @@
   <thead>
     <tr>
       <th>Date</th>
-      <th>École</th>
+      <th>Site</th>
       <th>N° vente</th>
       <th>Articles vendus</th>
       <th class="nombre" style="width:105px">Espèces</th>

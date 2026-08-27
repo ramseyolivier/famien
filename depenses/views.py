@@ -16,7 +16,7 @@ def _peut_acceder_depense(user, dep):
     """Dépense sans site (niveau superviseur) : accessible par son créateur et Manager/DG."""
     if dep.site_id is None:
         return (dep.cree_par_id == user.pk
-                or user.profil in {Profil.MANAGER, Profil.DG}
+                or user.profil in {Profil.DG, Profil.DG}
                 or user.is_superuser)
     return user.sites_autorises().filter(pk=dep.site_id).exists()
 
@@ -38,13 +38,13 @@ def depenses_liste(request):
 @login_required
 def depense_formulaire(request):
     u = request.user
-    if u.profil not in {Profil.SUPERVISEUR, Profil.MANAGER, Profil.DG} and not u.is_superuser:
-        messages.error(request, "Seuls les superviseurs et la direction peuvent saisir une dépense.")
+    if u.profil not in {Profil.CHEF_EQUIPE, Profil.DG} and not u.is_superuser:
+        messages.error(request, "Seuls les chefs d'équipe et le DG peuvent saisir une dépense.")
         return redirect("depenses_liste")
     sites = request.user.sites_autorises()
     categorie_defaut, _ = CategorieDepense.objects.get_or_create(nom="Générale")
 
-    est_superviseur = u.profil == Profil.SUPERVISEUR
+    est_superviseur = False
 
     if request.method == "POST":
         raw_site = request.POST.get("site", "")
@@ -63,7 +63,7 @@ def depense_formulaire(request):
             messages.error(request, "Le motif est obligatoire.")
         else:
             try:
-                auto_valide = u.profil in {Profil.MANAGER, Profil.DG} or u.is_superuser
+                auto_valide = u.profil in {Profil.DG, Profil.DG} or u.is_superuser
                 dep = Depense.objects.create(
                     site_id=site_id,
                     categorie_id=categorie_id,
@@ -92,7 +92,7 @@ def depense_formulaire(request):
 
     sites_list = list(sites)
     site_unique = sites_list[0] if len(sites_list) == 1 else None
-    libelle_superviseur = u.commune.nom if est_superviseur and u.commune_id else (u.get_full_name() or u.username)
+    libelle_superviseur = u.get_full_name() or u.username
     return render(request, "depenses/formulaire.html", {
         "sites": sites_list,
         "site_unique": site_unique,
@@ -105,7 +105,7 @@ def depense_formulaire(request):
 @login_required
 def depense_modifier(request, pk):
     u = request.user
-    if u.profil not in {Profil.MANAGER, Profil.DG} and not u.is_superuser:
+    if u.profil not in {Profil.DG, Profil.DG} and not u.is_superuser:
         messages.error(request, "Seuls les DG/Managers peuvent modifier une dépense.")
         return redirect("depense_detail", pk=pk)
     sites = u.sites_autorises()
@@ -164,7 +164,7 @@ def depense_detail(request, pk):
     if not _peut_acceder_depense(request.user, dep):
         messages.error(request, "Accès refusé.")
         return redirect("depenses_liste")
-    peut_valider = request.user.profil in {Profil.MANAGER, Profil.DG} or request.user.is_superuser
+    peut_valider = request.user.profil in {Profil.DG, Profil.DG} or request.user.is_superuser
     return render(request, "depenses/detail.html", {
         "depense": dep,
         "peut_valider": peut_valider,
@@ -189,7 +189,7 @@ def depense_soumettre(request, pk):
 @login_required
 def depense_valider(request, pk):
     u = request.user
-    if u.profil not in {Profil.MANAGER, Profil.DG} and not u.is_superuser:
+    if u.profil not in {Profil.DG, Profil.DG} and not u.is_superuser:
         messages.error(request, "Seuls les DG/Managers peuvent valider une dépense.")
         return redirect("depense_detail", pk=pk)
     dep = get_object_or_404(Depense, pk=pk, statut=StatutDepense.SOUMIS)
@@ -205,7 +205,7 @@ def depense_valider(request, pk):
 @login_required
 def depense_rejeter(request, pk):
     u = request.user
-    if u.profil not in {Profil.MANAGER, Profil.DG} and not u.is_superuser:
+    if u.profil not in {Profil.DG, Profil.DG} and not u.is_superuser:
         messages.error(request, "Seuls les DG/Managers peuvent rejeter une dépense.")
         return redirect("depense_detail", pk=pk)
     dep = get_object_or_404(Depense, pk=pk, statut=StatutDepense.SOUMIS)
@@ -238,7 +238,7 @@ def depense_confirmer(request, pk):
         return redirect("depenses_liste")
 
     peut_confirmer = (dep.cree_par_id == u.pk
-                      or u.profil in {Profil.MANAGER, Profil.DG}
+                      or u.profil in {Profil.DG, Profil.DG}
                       or u.is_superuser)
     if not peut_confirmer:
         messages.error(request, "Seul le créateur ou un Manager/DG peut confirmer cette dépense.")
@@ -265,7 +265,7 @@ def depense_confirmer(request, pk):
 @login_required
 def depense_supprimer(request, pk):
     u = request.user
-    if u.profil not in {Profil.MANAGER, Profil.DG} and not u.is_superuser:
+    if u.profil not in {Profil.DG, Profil.DG} and not u.is_superuser:
         messages.error(request, "Accès refusé.")
         return redirect("depense_detail", pk=pk)
     dep = get_object_or_404(Depense, pk=pk)

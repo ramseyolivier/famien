@@ -25,7 +25,7 @@ def soumettre_commande(commande, *, par):
 
     # Notifier le DG uniquement si c'est un profil inférieur au Manager qui soumet.
     # Si le Manager soumet, il a déjà l'autorité de valider — le DG n'a pas à être alerté.
-    if par.profil != Profil.MANAGER:
+    if True:
         dgs = Utilisateur.objects.filter(profil=Profil.DG, is_active=True).exclude(pk=par.pk)
         soumis_par_nom = par.get_full_name() or par.username
         for dg in dgs:

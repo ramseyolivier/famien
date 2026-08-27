@@ -4,17 +4,17 @@
 
 {% block contenu %}
 <div class="admin-entete">
-  <h1>Tarifs par école — {{ produit.code }}</h1>
+  <h1>Tarifs par site — {{ produit.code }}</h1>
   <span style="color:var(--encre-clair);font-size:.9rem">{{ produit.designation }}</span>
 </div>
 <p style="color:var(--encre-clair);font-size:.88rem;margin-bottom:16px">
   Prix de référence : <strong>{{ produit.cout_achat|floatformat:0 }} F CFA</strong> (coût achat) &nbsp;·&nbsp;
-  Laissez un champ vide pour ne pas appliquer de tarif spécifique à cette école.
+  Laissez un champ vide pour ne pas appliquer de tarif spécifique à ce site.
 </p>
 
 <div class="barre-filtre">
   <div class="champ-recherche">
-    <input type="search" id="recherche" placeholder="Rechercher une école…" autocomplete="off">
+    <input type="search" id="recherche" placeholder="Rechercher un site…" autocomplete="off">
   </div>
   <span class="compteur-resultats" id="compteur-resultats"></span>
 </div>
@@ -24,7 +24,7 @@
   <table class="registre" id="table-tarifs" style="margin-top:8px">
     <thead>
       <tr>
-        <th>École</th>
+        <th>Site</th>
         <th>Commune</th>
         <th class="nombre">Prix spécifique</th>
       </tr>
@@ -49,7 +49,7 @@
       {% endfor %}
     </tbody>
   </table>
-  <p class="aucun-resultat" id="aucun-resultat">Aucune école ne correspond à votre recherche.</p>
+  <p class="aucun-resultat" id="aucun-resultat">Aucun site ne correspond à votre recherche.</p>
 
   <div class="pied">
     <a href="{% url 'admin_produits' %}" class="bouton-secondaire">← Retour aux produits</a>

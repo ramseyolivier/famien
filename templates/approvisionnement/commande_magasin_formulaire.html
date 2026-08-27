@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block titre %}{% if commande %}Modifier CM #{{ commande.numero }}{% else %}Nouvelle commande magasin{% endif %} — LEPAD{% endblock %}
+{% block titre %}{% if commande %}Modifier CM #{{ commande.numero }}{% else %}Nouvelle commande magasin{% endif %} — FAMIEN{% endblock %}
 {% block lieu %}Approvisionnement magasin{% endblock %}
 
 
@@ -10,7 +10,7 @@
 
 {% if prefill_from_deficit %}
 <div style="background:#e8f4fd;border:1px solid #b3d7f0;border-radius:6px;padding:10px 14px;margin-bottom:12px;font-size:.85rem;color:#1a5f8a">
-  Pré-rempli depuis les déficits consolidés école — vérifiez les quantités avant de créer.
+  Pré-rempli depuis les déficits consolidés site — vérifiez les quantités avant de créer.
 </div>
 {% endif %}
 

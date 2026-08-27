@@ -1,14 +1,14 @@
 {% extends "base.html" %}
-{% block titre %}Clôture de caisse — LEPAD{% endblock %}
+{% block titre %}Clôture de caisse — FAMIEN{% endblock %}
 {% block lieu %}Clôture de caisse{% endblock %}
 {% block contenu %}
 <div class="admin-entete"><h1>Clôture de caisse</h1></div>
-<p style="color:var(--encre-clair)">Sélectionnez l'école et la date. Le système agrège automatiquement toutes les ventes non annulées.</p>
+<p style="color:var(--encre-clair)">Sélectionnez le site et la date. Le système agrège automatiquement toutes les ventes non annulées.</p>
 <form method="post" style="margin-top:20px">
 {% csrf_token %}
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
   <div>
-    <label style="display:block;font-size:.85rem;color:var(--encre-clair);margin-bottom:4px">École *</label>
+    <label style="display:block;font-size:.85rem;color:var(--encre-clair);margin-bottom:4px">Site *</label>
     {% if site_unique %}
     <input type="hidden" name="ecole" value="{{ site_unique.pk }}">
     <span class="badge" style="background:var(--reglure);color:var(--encre);padding:10px 12px;font-size:.95rem;display:inline-block">{{ site_unique.nom }}</span>

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block titre %}Stock — LEPAD{% endblock %}
+{% block titre %}Stock — FAMIEN{% endblock %}
 {% block lieu %}Stock{% endblock %}
 
 {% block contenu %}
@@ -49,7 +49,7 @@
         <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
       </span>
       <strong class="hub-carte-titre">Kits</strong>
-      <span class="hub-carte-desc">Nombre de kits constructibles par école</span>
+      <span class="hub-carte-desc">Nombre de kits constructibles par site</span>
       {% if nb_kits_nc %}
       <span class="hub-carte-badge">{{ nb_kits_nc }} non constructible{{ nb_kits_nc|pluralize }}</span>
       {% else %}

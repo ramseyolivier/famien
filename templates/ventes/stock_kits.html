@@ -21,12 +21,12 @@
   </div>
   {% endif %}
 
-  {# ── École (masqué si périmètre = une seule école) ── #}
+  {# ── Site (masqué si périmètre = une seule site) ── #}
   {% if not ecole_unique %}
   <div class="filtre-champ filtre-champ--large">
-    <label>École</label>
+    <label>Site</label>
     <select name="ecole" onchange="this.form.submit()">
-      <option value="">Toutes les écoles</option>
+      <option value="">Toutes les sites</option>
       {% for e in toutes_ecoles %}
       <option value="{{ e.pk }}" {% if filtres.ecole == e.pk|stringformat:"s" %}selected{% endif %}>{{ e.nom }}</option>
       {% endfor %}

@@ -22,7 +22,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from achats.models import Reception, ReceptionLigne
 from achats.services import valider_reception as valider_reception_directe
 from catalogue.models import Fournisseur, Produit
-from core.models import Commune, Profil, Site, TypeSite
+from core.models import Profil, Site
 from stock.models import SoldeStock
 
 from .models import (
@@ -38,57 +38,43 @@ from .models import (
 
 
 def _nb_articles_deficit():
-    """Nombre de produits avec déficit (demande VALIDEE > stock dispo dépôt)."""
+    """Nombre de produits avec déficit (demande VALIDEE > stock dispo).
+
+    Dans FAMIEN, pas de dépôt central : on compare les demandes au stock global des sites.
+    """
     from collections import defaultdict
     from django.db.models import Sum
     from stock.models import SoldeStock
-    from core.models import Site, TypeSite
-    depot = Site.objects.filter(type=TypeSite.DEPOT, actif=True).first()
-    if not depot:
-        return 0
-    soldes = {s.produit_id: s.quantite for s in SoldeStock.objects.filter(site=depot)}
-    reserves = {
-        r["produit_id"]: r["total"]
-        for r in StockReserveDepot.objects.values("produit_id").annotate(total=Sum("quantite"))
-    }
+    soldes = {s.produit_id: s.quantite for s in SoldeStock.objects.all()}
     demandes = defaultdict(int)
     for l in CommandeMagasinLigne.objects.filter(commande__statut=StatutCommandeMagasin.VALIDEE).values("produit_id", "quantite", "quantite_deja_recue"):
         demandes[l["produit_id"]] += max(0, l["quantite"] - (l["quantite_deja_recue"] or 0))
     return sum(
         1 for pid, qte in demandes.items()
-        if max(0, qte - max(0, soldes.get(pid, 0) - reserves.get(pid, 0))) > 0
+        if max(0, qte - soldes.get(pid, 0)) > 0
     )
 
 
 def _nb_articles_deficit_ecole(user):
-    """Nombre d'articles en déficit côté magasin (SOUMISE + VALIDEE > stock dispo)."""
+    """Nombre d'articles en déficit sur les sites de l'utilisateur (VALIDEE > stock dispo)."""
     from collections import defaultdict
-    magasins = user.sites_autorises().filter(type=TypeSite.MAGASIN, actif=True)
-    if not magasins.exists():
+    sites = user.sites_autorises().filter(actif=True)
+    if not sites.exists():
         return 0
     soldes = {
         (s.site_id, s.produit_id): s.quantite
-        for s in SoldeStock.objects.filter(site__in=magasins)
-    }
-    # Seules les réserves des commandes en transit (LIVREE) immobilisent du stock physique.
-    reserves_transit = {
-        (r["magasin_id"], r["produit_id"]): r["total"]
-        for r in StockReserve.objects.filter(
-            magasin__in=magasins,
-            commande__statut=StatutCommandeEcole.LIVREE,
-        ).values("magasin_id", "produit_id").annotate(total=Sum("quantite"))
+        for s in SoldeStock.objects.filter(site__in=sites)
     }
     demandes = defaultdict(int)
     for l in CommandeEcoleLigne.objects.filter(
         commande__statut=StatutCommandeEcole.VALIDEE,
-        commande__ecole__magasin_rattachement__in=magasins,
-    ).values("produit_id", "quantite_demandee", "quantite_deja_recue",
-             "commande__ecole__magasin_rattachement_id"):
-        key = (l["commande__ecole__magasin_rattachement_id"], l["produit_id"])
+        commande__ecole__in=sites,
+    ).values("produit_id", "quantite_demandee", "quantite_deja_recue", "commande__ecole_id"):
+        key = (l["commande__ecole_id"], l["produit_id"])
         demandes[key] += max(0, l["quantite_demandee"] - (l["quantite_deja_recue"] or 0))
     return sum(
-        1 for (mag_id, pid), qte in demandes.items()
-        if max(0, qte - max(0, soldes.get((mag_id, pid), 0) - reserves_transit.get((mag_id, pid), 0))) > 0
+        1 for (site_id, pid), qte in demandes.items()
+        if max(0, qte - soldes.get((site_id, pid), 0)) > 0
     )
 
 
@@ -97,7 +83,7 @@ def hub_approvisionnement(request):
     from django.shortcuts import render as _render
     u = request.user
 
-    _AUTORISES = {Profil.DG, Profil.MANAGER, Profil.SUPERVISEUR, Profil.GEST_MAGASIN, Profil.CHEF_EQUIPE, Profil.COMMERCIAL}
+    _AUTORISES = {Profil.DG, Profil.CHEF_EQUIPE}
     if u.profil not in _AUTORISES and not u.is_superuser:
         return redirect("accueil")
 
@@ -121,7 +107,7 @@ def hub_approvisionnement(request):
         "nb_articles_deficit_ecole": 0,
     }
 
-    if u.profil in {Profil.DG, Profil.MANAGER} or u.is_superuser:
+    if u.profil == Profil.DG or u.is_superuser:
         from ventes.views import _sites_perimetre
         sites = _sites_perimetre(u)
         ctx.update({
@@ -142,49 +128,7 @@ def hub_approvisionnement(request):
             "nb_articles_deficit": _nb_articles_deficit(),
         })
 
-    elif u.profil == Profil.SUPERVISEUR:
-        qs_ce = CommandeEcole.objects.filter(statut=StatutCommandeEcole.SOUMISE)
-        magasins_commune = Site.objects.none()
-        if u.commune_id:
-            qs_ce = qs_ce.filter(ecole__commune_id=u.commune_id)
-            magasins_commune = Site.objects.filter(type=TypeSite.MAGASIN, commune_id=u.commune_id)
-        ctx.update({
-            "nb_commandes_ecole_a_valider": qs_ce.count(),
-            "nb_livraisons_ecole_a_preparer": CommandeEcole.objects.filter(
-                ecole__commune_id=u.commune_id,
-                statut=StatutCommandeEcole.VALIDEE,
-            ).count() if u.commune_id else 0,
-            "nb_livraisons_magasin_a_recevoir": CommandeMagasin.objects.filter(
-                magasin__in=magasins_commune,
-                statut=StatutCommandeMagasin.LIVREE,
-            ).count(),
-            "nb_produits_reserves_magasin": StockReserve.objects.filter(
-                magasin__in=magasins_commune,
-            ).values("produit_id").distinct().count(),
-        })
-
-    elif u.profil == Profil.GEST_MAGASIN and u.site:
-        magasin = u.site
-        ctx.update({
-            "nb_commandes_ecole_a_valider": CommandeEcole.objects.filter(
-                ecole__magasin_rattachement=magasin,
-                statut=StatutCommandeEcole.SOUMISE,
-            ).count(),
-            "nb_livraisons_ecole_a_preparer": CommandeEcole.objects.filter(
-                ecole__magasin_rattachement=magasin,
-                statut=StatutCommandeEcole.VALIDEE,
-            ).count(),
-            "nb_livraisons_magasin_a_recevoir": CommandeMagasin.objects.filter(
-                magasin=magasin,
-                statut=StatutCommandeMagasin.LIVREE,
-            ).count(),
-            "nb_produits_reserves_magasin": StockReserve.objects.filter(
-                magasin=magasin,
-            ).values("produit_id").distinct().count(),
-            "nb_articles_deficit_ecole": _nb_articles_deficit_ecole(u),
-        })
-
-    elif u.profil in (Profil.CHEF_EQUIPE, Profil.COMMERCIAL) and u.site:
+    elif u.profil == Profil.CHEF_EQUIPE and u.site:
         ecole = u.site
         if ecole.est_ecole:
             ctx.update({
@@ -217,7 +161,7 @@ from .services import (
 )
 
 
-_SUPERVISION = {Profil.DG, Profil.MANAGER, Profil.SUPERVISEUR}
+_SUPERVISION = {Profil.DG}
 
 
 # ─── Utilitaires ─────────────────────────────────────────────────────────────
@@ -232,19 +176,16 @@ def _exiger_chef(request):
 
 
 def _exiger_gestionnaire(request):
-    """Retourne True si l'utilisateur est gestionnaire de magasin."""
-    if request.user.profil != Profil.GEST_MAGASIN:
-        messages.error(request, "Accès réservé aux gestionnaires de magasin.")
+    """Retourne True si l'utilisateur est DG (gestionnaire central dans FAMIEN)."""
+    if request.user.profil != Profil.DG and not request.user.is_superuser:
+        messages.error(request, "Accès réservé au DG.")
         return False
     return True
 
 
 def _magasin_du_chef(request):
-    """Retourne le magasin rattaché à l'école du chef, ou None."""
-    site = request.user.site
-    if site is None or not site.est_ecole:
-        return None
-    return site.magasin_rattachement
+    """Retourne le site de l'utilisateur (dans FAMIEN, pas de magasin intermédiaire)."""
+    return request.user.site
 
 
 # ─── Chef d'équipe : commandes ───────────────────────────────────────────────
@@ -262,25 +203,13 @@ def commandes_liste(request):
     filtre_fin = request.GET.get("fin") or ""
 
     if u.profil in _SUPERVISION or u.is_superuser:
-        filtre_commune = request.GET.get("commune") or ""
-        filtre_ecole = request.GET.get("ecole") or ""
+        filtre_site = request.GET.get("site") or ""
 
-        communes_qs = None
-        ecoles_qs = Site.objects.filter(type=TypeSite.ECOLE, actif=True).order_by("nom")
-        if u.profil == Profil.SUPERVISEUR and u.commune_id:
-            ecoles_qs = ecoles_qs.filter(commune_id=u.commune_id)
-        else:
-            communes_qs = Commune.objects.order_by("nom")
-            if filtre_commune:
-                ecoles_qs = ecoles_qs.filter(commune_id=filtre_commune)
+        sites_qs = Site.objects.filter(actif=True).order_by("nom")
 
         qs = CommandeEcole.objects.exclude(observations__startswith="[LDE]").select_related("ecole", "cree_par").order_by("-cree_le")
-        if u.profil == Profil.SUPERVISEUR and u.commune_id:
-            qs = qs.filter(ecole__commune_id=u.commune_id)
-        elif filtre_commune:
-            qs = qs.filter(ecole__commune_id=filtre_commune)
-        if filtre_ecole:
-            qs = qs.filter(ecole_id=filtre_ecole)
+        if filtre_site:
+            qs = qs.filter(ecole_id=filtre_site)
         if filtre_statut == "ATTENTE":
             qs = qs.filter(statut__in=[StatutCommandeEcole.BROUILLON, StatutCommandeEcole.SOUMISE])
         elif filtre_statut == "EN_COURS":
@@ -297,16 +226,12 @@ def commandes_liste(request):
         commandes_filtre = (
             CommandeEcole.objects.exclude(observations__startswith="[LDE]").select_related("ecole").order_by("-cree_le")
         )
-        if u.profil == Profil.SUPERVISEUR and u.commune_id:
-            commandes_filtre = commandes_filtre.filter(ecole__commune_id=u.commune_id)
 
         return render(request, "approvisionnement/commandes_liste.html", {
             "commandes": qs[:200],
             "commandes_filtre": commandes_filtre,
-            "communes": communes_qs,
-            "ecoles": ecoles_qs,
-            "filtre_commune": filtre_commune,
-            "filtre_ecole": filtre_ecole,
+            "ecoles": sites_qs,
+            "filtre_ecole": filtre_site,
             "filtre_commande": filtre_commande,
             "filtre_statut": filtre_statut,
             "filtre_debut": filtre_debut,
@@ -314,53 +239,13 @@ def commandes_liste(request):
             "supervision": True,
         })
 
-    if u.profil == Profil.GEST_MAGASIN:
-        if not u.site:
-            messages.error(request, "Votre compte n'est rattaché à aucun magasin.")
-            return redirect("accueil")
-        filtre_ecole = request.GET.get("ecole") or ""
-        ecoles_qs = Site.objects.filter(
-            type=TypeSite.ECOLE, magasin_rattachement=u.site, actif=True
-        ).order_by("nom")
-        qs = (
-            CommandeEcole.objects.filter(ecole__magasin_rattachement=u.site)
-            .exclude(observations__startswith="[LDE]")
-            .select_related("ecole", "cree_par").order_by("-cree_le")
-        )
-        commandes_filtre = qs
-        if filtre_ecole:
-            qs = qs.filter(ecole_id=filtre_ecole)
-        if filtre_statut == "ATTENTE":
-            qs = qs.filter(statut__in=[StatutCommandeEcole.BROUILLON, StatutCommandeEcole.SOUMISE])
-        elif filtre_statut == "EN_COURS":
-            qs = qs.filter(statut__in=[StatutCommandeEcole.VALIDEE, StatutCommandeEcole.LIVREE])
-        elif filtre_statut == "TERMINE":
-            qs = qs.filter(statut__in=[StatutCommandeEcole.RECUE, StatutCommandeEcole.REJETEE])
-        if filtre_commande.isdigit():
-            qs = qs.filter(pk=filtre_commande)
-        if filtre_debut:
-            qs = qs.filter(cree_le__date__gte=filtre_debut)
-        if filtre_fin:
-            qs = qs.filter(cree_le__date__lte=filtre_fin)
-        return render(request, "approvisionnement/commandes_liste.html", {
-            "commandes": qs[:200],
-            "commandes_filtre": commandes_filtre,
-            "ecoles": ecoles_qs,
-            "filtre_ecole": filtre_ecole,
-            "filtre_commande": filtre_commande,
-            "filtre_statut": filtre_statut,
-            "filtre_debut": filtre_debut,
-            "filtre_fin": filtre_fin,
-            "supervision": True,
-        })
-
-    if u.profil not in {Profil.CHEF_EQUIPE, Profil.COMMERCIAL}:
+    if u.profil != Profil.CHEF_EQUIPE:
         messages.error(request, "Accès non autorisé.")
         return redirect("accueil")
 
     ecole = u.site
     if ecole is None or not ecole.est_ecole:
-        messages.error(request, "Votre compte n'est rattaché à aucune école.")
+        messages.error(request, "Votre compte n'est rattaché à aucun site.")
         return redirect("accueil")
 
     qs = (
@@ -399,19 +284,13 @@ def commande_formulaire(request):
         return redirect("accueil")
 
     ecole = request.user.site
-    if ecole is None or not ecole.est_ecole:
-        messages.error(request, "Votre compte n'est rattaché à aucune école.")
+    if ecole is None:
+        messages.error(request, "Votre compte n'est rattaché à aucun site.")
         return redirect("accueil")
 
-    magasin = ecole.magasin_rattachement
-    if magasin is None:
-        return render(request, "approvisionnement/commande_formulaire.html", {
-            "erreur_magasin": True,
-            "ecole": ecole,
-        })
-
     produits = Produit.objects.filter(actif=True).order_by("code")
-    stock_magasin_json, stock_ecole_json, stock_max_ecole_json = _get_stock_ecole_context(ecole, magasin)
+    _, stock_ecole_json, stock_max_ecole_json = _get_stock_ecole_context(ecole, ecole)
+    stock_magasin_json = stock_ecole_json
 
     observations_init = ""
     lignes_soumises_json = "[]"
@@ -462,7 +341,6 @@ def commande_formulaire(request):
 
     return render(request, "approvisionnement/commande_formulaire.html", {
         "ecole": ecole,
-        "magasin": magasin,
         "produits": produits,
         "stock_magasin_json": stock_magasin_json,
         "stock_ecole_json": stock_ecole_json,
@@ -479,13 +357,13 @@ def commande_detail(request, pk):
     u = request.user
 
     qs = CommandeEcole.objects.select_related(
-        "ecole", "ecole__magasin_rattachement",
+        "ecole",
         "cree_par", "soumise_par", "validee_par",
         "livree_par", "recue_par", "rejete_par",
     )
 
-    if u.profil == Profil.GEST_MAGASIN:
-        commande = get_object_or_404(qs, pk=pk, ecole__magasin_rattachement=u.site)
+    if False:  # Profil.GEST_MAGASIN supprimé — garde-fou inatteignable
+        commande = get_object_or_404(qs, pk=pk)
     elif u.profil in _SUPERVISION or u.is_superuser:
         commande = get_object_or_404(qs, pk=pk)
     else:
@@ -521,21 +399,19 @@ def commande_detail(request, pk):
     )
     peut_valider = (
         commande.statut == StatutCommandeEcole.SOUMISE
-        and u.profil == Profil.GEST_MAGASIN
-        and u.site_id == commande.ecole.magasin_rattachement_id
+        and u.profil == Profil.DG
     )
     peut_rejeter = (
         commande.statut == StatutCommandeEcole.SOUMISE
-        and u.profil == Profil.GEST_MAGASIN
-        and u.site_id == commande.ecole.magasin_rattachement_id
+        and u.profil == Profil.DG
     )
     peut_livrer = (
         commande.statut == StatutCommandeEcole.VALIDEE
-        and u.profil == Profil.GEST_MAGASIN
+        and u.profil == Profil.DG
     )
     peut_refuser_livraison = (
         commande.statut == StatutCommandeEcole.VALIDEE
-        and u.profil == Profil.GEST_MAGASIN
+        and u.profil == Profil.DG
     )
     peut_receptionner = (
         commande.statut == StatutCommandeEcole.LIVREE
@@ -574,9 +450,9 @@ def commande_modifier(request, pk):
         statut__in=[StatutCommandeEcole.BROUILLON, StatutCommandeEcole.SOUMISE],
     )
 
-    magasin = ecole.magasin_rattachement
     produits = Produit.objects.filter(actif=True).order_by("code")
-    stock_magasin_json, stock_ecole_json, stock_max_ecole_json = _get_stock_ecole_context(ecole, magasin) if magasin else ("{}", "{}", "{}")
+    _, stock_ecole_json, stock_max_ecole_json = _get_stock_ecole_context(ecole, ecole)
+    stock_magasin_json = stock_ecole_json
     lignes_existantes_json = json.dumps([
         {"pid": l.produit_id, "qty": l.quantite_demandee}
         for l in commande.lignes.order_by("produit__code")
@@ -626,14 +502,13 @@ def commande_modifier(request, pk):
 
     return render(request, "approvisionnement/commande_formulaire.html", {
         "ecole": ecole,
-        "magasin": magasin,
         "produits": produits,
         "stock_magasin_json": stock_magasin_json,
         "stock_ecole_json": stock_ecole_json,
         "stock_max_ecole_json": stock_max_ecole_json,
         "lignes_existantes_json": lignes_existantes_json,
         "commande": commande,
-        "erreur_magasin": magasin is None,
+        "erreur_magasin": False,
     })
 
 
@@ -680,17 +555,16 @@ def commande_soumettre(request, pk):
 
 @login_required
 def commande_ecole_valider(request, pk):
-    """GEST_MAGASIN valide la commande (SOUMISE → VALIDEE, crée StockReserve)."""
+    """DG valide la commande (SOUMISE → VALIDEE, crée StockReserve)."""
     u = request.user
-    if u.profil != Profil.GEST_MAGASIN:
-        messages.error(request, "Accès réservé aux gestionnaires de magasin.")
+    if u.profil != Profil.DG and not u.is_superuser:
+        messages.error(request, "Accès réservé au DG.")
         return redirect("accueil")
 
     commande = get_object_or_404(
-        CommandeEcole.objects.select_related("ecole", "ecole__magasin_rattachement"),
+        CommandeEcole.objects.select_related("ecole"),
         pk=pk,
         statut=StatutCommandeEcole.SOUMISE,
-        ecole__magasin_rattachement=u.site,
     )
     if request.method == "POST":
         try:
@@ -703,17 +577,16 @@ def commande_ecole_valider(request, pk):
 
 @login_required
 def commande_ecole_rejeter(request, pk):
-    """GEST_MAGASIN rejette une commande soumise avec motif obligatoire."""
+    """DG rejette une commande soumise avec motif obligatoire."""
     u = request.user
-    if u.profil != Profil.GEST_MAGASIN:
-        messages.error(request, "Accès réservé aux gestionnaires de magasin.")
+    if u.profil != Profil.DG and not u.is_superuser:
+        messages.error(request, "Accès réservé au DG.")
         return redirect("accueil")
 
     commande = get_object_or_404(
         CommandeEcole,
         pk=pk,
         statut=StatutCommandeEcole.SOUMISE,
-        ecole__magasin_rattachement=u.site,
     )
     if request.method == "POST":
         motif = request.POST.get("motif", "").strip()
@@ -765,28 +638,16 @@ def receptions_liste(request):
         return qs
 
     if u.profil in _SUPERVISION or u.is_superuser:
-        commune_id = request.GET.get("commune") or ""
         ecole_id = request.GET.get("ecole") or ""
         filtre_reception = request.GET.get("reception") or ""
         filtre_statut = request.GET.get("statut") or ""
         debut = request.GET.get("debut") or ""
         fin = request.GET.get("fin") or ""
 
-        communes_qs = None
-        ecoles_qs = Site.objects.filter(type=TypeSite.ECOLE, actif=True).order_by("nom")
-        if u.profil == Profil.SUPERVISEUR and u.commune_id:
-            ecoles_qs = ecoles_qs.filter(commune_id=u.commune_id)
-        else:
-            communes_qs = Commune.objects.order_by("nom")
-            if commune_id:
-                ecoles_qs = ecoles_qs.filter(commune_id=commune_id)
+        sites_qs = Site.objects.filter(actif=True).order_by("nom")
 
         qs = _base_qs()
-        if u.profil == Profil.SUPERVISEUR and u.commune_id:
-            qs = qs.filter(ecole__commune_id=u.commune_id)
         receptions_filtre = qs
-        if commune_id and not (u.profil == Profil.SUPERVISEUR and u.commune_id):
-            qs = qs.filter(ecole__commune_id=commune_id)
         if filtre_reception.isdigit():
             qs = qs.filter(pk=filtre_reception)
         if ecole_id:
@@ -800,9 +661,7 @@ def receptions_liste(request):
         return render(request, "approvisionnement/receptions_liste.html", {
             "commandes": qs[:200],
             "receptions_filtre": receptions_filtre,
-            "communes": communes_qs,
-            "ecoles": ecoles_qs,
-            "filtre_commune": commune_id,
+            "ecoles": sites_qs,
             "filtre_ecole": ecole_id,
             "filtre_reception": filtre_reception,
             "filtre_statut": filtre_statut,
@@ -811,47 +670,12 @@ def receptions_liste(request):
             "supervision": True,
         })
 
-    if u.profil == Profil.GEST_MAGASIN:
-        if not u.site:
-            messages.error(request, "Votre compte n'est rattaché à aucun magasin.")
-            return redirect("accueil")
-        filtre_reception = request.GET.get("reception") or ""
-        filtre_ecole = request.GET.get("ecole") or ""
-        filtre_statut = request.GET.get("statut") or ""
-        filtre_debut = request.GET.get("debut") or ""
-        filtre_fin = request.GET.get("fin") or ""
-        ecoles_qs = Site.objects.filter(
-            type=TypeSite.ECOLE, magasin_rattachement=u.site, actif=True
-        ).order_by("nom")
-        qs = _base_qs({"ecole__magasin_rattachement": u.site})
-        receptions_filtre = qs
-        if filtre_reception.isdigit():
-            qs = qs.filter(pk=filtre_reception)
-        if filtre_ecole:
-            qs = qs.filter(ecole_id=filtre_ecole)
-        qs = _apply_statut(qs, filtre_statut)
-        if filtre_debut:
-            qs = qs.filter(derniere_maj__date__gte=filtre_debut)
-        if filtre_fin:
-            qs = qs.filter(derniere_maj__date__lte=filtre_fin)
-        return render(request, "approvisionnement/receptions_liste.html", {
-            "commandes": qs[:200],
-            "receptions_filtre": receptions_filtre,
-            "ecoles": ecoles_qs,
-            "filtre_reception": filtre_reception,
-            "filtre_ecole": filtre_ecole,
-            "filtre_statut": filtre_statut,
-            "filtre_debut": filtre_debut,
-            "filtre_fin": filtre_fin,
-            "supervision": True,
-        })
-
     if not _exiger_chef(request):
         return redirect("accueil")
 
     ecole = u.site
-    if ecole is None or not ecole.est_ecole:
-        messages.error(request, "Votre compte n'est rattaché à aucune école.")
+    if ecole is None:
+        messages.error(request, "Votre compte n'est rattaché à aucun site.")
         return redirect("accueil")
 
     filtre_reception = request.GET.get("reception") or ""
@@ -885,7 +709,7 @@ def reception_valider(request, pk):
 
     ecole = request.user.site
     commande = get_object_or_404(
-        CommandeEcole.objects.select_related("ecole", "ecole__magasin_rattachement"),
+        CommandeEcole.objects.select_related("ecole"),
         pk=pk,
         ecole=ecole,
         statut=StatutCommandeEcole.LIVREE,
@@ -906,7 +730,7 @@ def reception_valider(request, pk):
         try:
             receptionner_commande_ecole(commande, lignes_recues, motifs_ecart, par=request.user)
             if commande.statut == StatutCommandeEcole.RECUE:
-                messages.success(request, "Réception confirmée — stock de l'école mis à jour.")
+                messages.success(request, "Réception confirmée — stock du site mis à jour.")
             else:
                 messages.success(request, "Réception partielle enregistrée — le magasin sera notifié pour le reliquat.")
             return redirect("commande_ecole_detail", pk=pk)
@@ -928,122 +752,57 @@ def livraisons_liste(request):
     DG / MANAGER / SUPERVISEUR : supervision en lecture seule avec filtres."""
     u = request.user
 
-    if u.profil in _SUPERVISION or u.is_superuser:
-        commune_id = request.GET.get("commune") or ""
-        magasin_id = request.GET.get("magasin") or ""
-        ecole_id = request.GET.get("ecole") or ""
-        debut = request.GET.get("debut") or ""
-        fin = request.GET.get("fin") or ""
+    # DG voit toutes les livraisons ; CHEF_EQUIPE voit celles de son site
+    ecole_id = request.GET.get("ecole") or ""
+    debut = request.GET.get("debut") or ""
+    fin = request.GET.get("fin") or ""
 
-        communes_qs = None
-        magasins_qs = Site.objects.filter(type=TypeSite.MAGASIN, actif=True).order_by("nom")
-        ecoles_qs = Site.objects.filter(type=TypeSite.ECOLE, actif=True).order_by("nom")
-        if u.profil == Profil.SUPERVISEUR and u.commune_id:
-            magasins_qs = magasins_qs.filter(commune_id=u.commune_id)
-            ecoles_qs = ecoles_qs.filter(commune_id=u.commune_id)
-        else:
-            communes_qs = Commune.objects.order_by("nom")
-            if commune_id:
-                magasins_qs = magasins_qs.filter(commune_id=commune_id)
-                ecoles_qs = ecoles_qs.filter(commune_id=commune_id)
-
-        qs = (
-            CommandeEcole.objects.select_related("ecole", "ecole__magasin_rattachement", "cree_par")
-            .filter(statut=StatutCommandeEcole.VALIDEE)
-            .order_by("-validee_le")
-        )
-        if u.profil == Profil.SUPERVISEUR and u.commune_id:
-            qs = qs.filter(ecole__commune_id=u.commune_id)
-        elif commune_id:
-            qs = qs.filter(ecole__commune_id=commune_id)
-        if magasin_id:
-            qs = qs.filter(ecole__magasin_rattachement_id=magasin_id)
-        if ecole_id:
-            qs = qs.filter(ecole_id=ecole_id)
-        if debut:
-            qs = qs.filter(validee_le__date__gte=debut)
-        if fin:
-            qs = qs.filter(validee_le__date__lte=fin)
-
-        return render(request, "approvisionnement/livraisons_liste.html", {
-            "commandes": qs[:200],
-            "communes": communes_qs,
-            "magasins": magasins_qs,
-            "ecoles": ecoles_qs,
-            "filtre_commune": commune_id,
-            "filtre_magasin": magasin_id,
-            "filtre_ecole": ecole_id,
-            "filtre_debut": debut,
-            "filtre_fin": fin,
-            "supervision": True,
-        })
-
-    if not _exiger_gestionnaire(request):
-        return redirect("accueil")
-
-    magasin = u.site
-    if magasin is None:
-        messages.error(request, "Votre compte n'est rattaché à aucun magasin.")
-        return redirect("accueil")
-
-    filtre_statut = request.GET.get("statut") or ""
-    filtre_ecole = request.GET.get("ecole") or ""
-    filtre_debut = request.GET.get("debut") or ""
-    filtre_fin = request.GET.get("fin") or ""
-
-    ecoles_qs = Site.objects.filter(
-        type=TypeSite.ECOLE, magasin_rattachement=magasin, actif=True
-    ).order_by("nom")
+    sites_qs = Site.objects.filter(actif=True).order_by("nom")
 
     _lde = Q(observations__startswith="[LDE]")
-    if filtre_statut == "VALIDEE":
-        qs_base = Q(statut=StatutCommandeEcole.VALIDEE)
-    elif filtre_statut == "LIVREE":
-        qs_base = Q(statut=StatutCommandeEcole.LIVREE)
-    elif filtre_statut == "BROUILLON":
-        qs_base = _lde & Q(statut=StatutCommandeEcole.BROUILLON)
-    else:
-        qs_base = (
-            Q(statut__in=[StatutCommandeEcole.VALIDEE, StatutCommandeEcole.LIVREE])
-            | (_lde & Q(statut=StatutCommandeEcole.BROUILLON))
-        )
+    qs_base = (
+        Q(statut__in=[StatutCommandeEcole.VALIDEE, StatutCommandeEcole.LIVREE])
+        | (_lde & Q(statut=StatutCommandeEcole.BROUILLON))
+    )
 
-    commandes = (
-        CommandeEcole.objects.filter(qs_base, ecole__magasin_rattachement=magasin)
+    qs = (
+        CommandeEcole.objects.filter(qs_base)
         .select_related("ecole", "cree_par", "validee_par")
         .order_by("-cree_le")
     )
-    if filtre_ecole:
-        commandes = commandes.filter(ecole_id=filtre_ecole)
-    if filtre_debut:
-        commandes = commandes.filter(cree_le__date__gte=filtre_debut)
-    if filtre_fin:
-        commandes = commandes.filter(cree_le__date__lte=filtre_fin)
+
+    if u.profil == Profil.CHEF_EQUIPE and u.site:
+        qs = qs.filter(ecole=u.site)
+
+    if ecole_id:
+        qs = qs.filter(ecole_id=ecole_id)
+    if debut:
+        qs = qs.filter(cree_le__date__gte=debut)
+    if fin:
+        qs = qs.filter(cree_le__date__lte=fin)
 
     return render(request, "approvisionnement/livraisons_liste.html", {
-        "commandes": commandes,
-        "magasin": magasin,
-        "ecoles": ecoles_qs,
-        "filtre_ecole": filtre_ecole,
-        "filtre_statut": filtre_statut,
-        "filtre_debut": filtre_debut,
-        "filtre_fin": filtre_fin,
+        "commandes": qs[:200],
+        "ecoles": sites_qs,
+        "filtre_ecole": ecole_id,
+        "filtre_debut": debut,
+        "filtre_fin": fin,
+        "supervision": u.profil == Profil.DG or u.is_superuser,
     })
 
 
 @login_required
 def livraison_traiter(request, pk):
-    """GEST_MAGASIN prépare la livraison depuis le magasin (VALIDEE → LIVREE)."""
+    """DG prépare la livraison depuis le site source vers le site destinataire (VALIDEE → LIVREE)."""
     if not _exiger_gestionnaire(request):
         return redirect("accueil")
 
-    magasin = request.user.site
     commande = get_object_or_404(
         CommandeEcole.objects.select_related("ecole"),
         pk=pk,
-        ecole__magasin_rattachement=magasin,
         statut=StatutCommandeEcole.VALIDEE,
     )
+    magasin = commande.ecole  # Dans FAMIEN, le DG livre directement au site
     lignes = list(commande.lignes.select_related("produit").order_by("produit__code"))
     produit_ids = [l.produit_id for l in lignes]
 
@@ -1103,15 +862,13 @@ def livraison_traiter(request, pk):
 
 @login_required
 def commande_ecole_refuser_livraison(request, pk):
-    """GEST_MAGASIN refuse d'envoyer une commande validée (VALIDEE → REJETEE)."""
+    """DG refuse d'envoyer une commande validée (VALIDEE → REJETEE)."""
     if not _exiger_gestionnaire(request):
         return redirect("accueil")
 
-    magasin = request.user.site
     commande = get_object_or_404(
         CommandeEcole,
         pk=pk,
-        ecole__magasin_rattachement=magasin,
         statut=StatutCommandeEcole.VALIDEE,
     )
     if request.method == "POST":
@@ -1126,61 +883,45 @@ def commande_ecole_refuser_livraison(request, pk):
 
 @login_required
 def stock_reserve(request):
-    """Consultation des réservations du magasin, groupées par (produit, magasin)."""
+    """Consultation des réservations, groupées par (produit, site). DG voit tout, CHEF_EQUIPE son site."""
     u = request.user
-    peut_tout_voir = u.profil in {Profil.DG, Profil.MANAGER, Profil.SUPERVISEUR} or u.is_superuser
-    est_dg_manager = u.is_superuser or u.profil in {Profil.DG, Profil.MANAGER}
-    est_superviseur = u.profil == Profil.SUPERVISEUR
+    peut_tout_voir = u.profil == Profil.DG or u.is_superuser
+    est_dg_manager = peut_tout_voir
 
-    if not peut_tout_voir and u.profil != Profil.GEST_MAGASIN:
+    if not peut_tout_voir and u.profil != Profil.CHEF_EQUIPE:
         messages.error(request, "Accès non autorisé.")
         return redirect("accueil")
 
     filtre_produit = request.GET.get("produit") or ""
     filtre_site    = request.GET.get("site") or ""
-    filtre_commune = request.GET.get("commune") or ""
 
     if peut_tout_voir:
-        magasins_autorises = u.sites_autorises().filter(type=TypeSite.MAGASIN)
-
-        communes_filtre = (
-            Commune.objects.filter(
-                sites__type=TypeSite.MAGASIN, sites__in=magasins_autorises
-            ).distinct().order_by("nom")
-            if est_dg_manager else None
-        )
-        sites_filtre_qs = magasins_autorises
-        if est_dg_manager and filtre_commune:
-            sites_filtre_qs = sites_filtre_qs.filter(commune_id=filtre_commune)
-        sites_filtre = sites_filtre_qs.order_by("nom") if (est_dg_manager or est_superviseur) else None
-
-        # Appliquer les filtres sur les données
-        if filtre_commune and est_dg_manager:
-            magasins_autorises = magasins_autorises.filter(commune_id=filtre_commune)
+        sites_autorises = u.sites_autorises().filter(actif=True)
         if filtre_site:
-            magasins_autorises = magasins_autorises.filter(pk=filtre_site)
+            sites_autorises = sites_autorises.filter(pk=filtre_site)
+
+        sites_filtre = u.sites_autorises().filter(actif=True).order_by("nom")
 
         reserves_qs = (
-            StockReserve.objects.filter(magasin__in=magasins_autorises)
+            StockReserve.objects.filter(magasin__in=sites_autorises)
             .select_related("ecole", "produit", "commande", "magasin")
             .order_by("magasin__nom", "produit__code", "ecole__nom")
         )
         soldes = {
             (s.produit_id, s.site_id): s.quantite
-            for s in SoldeStock.objects.filter(site__in=magasins_autorises)
+            for s in SoldeStock.objects.filter(site__in=sites_autorises)
         }
         produits_filtre = (
-            StockReserve.objects.filter(magasin__in=magasins_autorises)
+            StockReserve.objects.filter(magasin__in=sites_autorises)
             .select_related("produit").order_by("produit__code")
             .values("produit_id", "produit__code", "produit__designation").distinct()
         )
         magasin = None
     else:
         magasin = u.site
-        communes_filtre = None
         sites_filtre = None
         if magasin is None:
-            messages.error(request, "Votre compte n'est rattaché à aucun magasin.")
+            messages.error(request, "Votre compte n'est rattaché à aucun site.")
             return redirect("accueil")
         reserves_qs = (
             StockReserve.objects.filter(magasin=magasin)
@@ -1224,13 +965,11 @@ def stock_reserve(request):
         "produits_filtre": produits_filtre,
         "filtre_produit":  filtre_produit,
         "filtre_site":     filtre_site,
-        "filtre_commune":  filtre_commune,
-        "communes_filtre": communes_filtre,
         "sites_filtre":    sites_filtre,
         "magasin":         magasin,
         "peut_tout_voir":  peut_tout_voir,
         "est_dg_manager":  est_dg_manager,
-        "est_superviseur": est_superviseur,
+        "est_superviseur": False,
     })
 
 
@@ -1238,22 +977,22 @@ def stock_reserve(request):
 
 
 def _peut_voir_appro_magasin(user):
-    """Vrai pour GEST_MAGASIN, SUPERVISEUR, MANAGER, DG et superuser."""
-    return user.is_superuser or user.profil in {
-        Profil.GEST_MAGASIN, Profil.SUPERVISEUR, Profil.MANAGER, Profil.DG
-    }
+    """Vrai pour DG et superuser (dans FAMIEN, le DG gère l'approvisionnement central)."""
+    return user.is_superuser or user.profil == Profil.DG
 
 
 def _est_superviseur(user):
-    return user.profil == Profil.SUPERVISEUR or user.is_superuser
+    """Dans FAMIEN, pas de superviseur — seul le DG supervise."""
+    return user.is_superuser
 
 
 def _est_dg_manager(user):
-    return user.profil in {Profil.DG, Profil.MANAGER} or user.is_superuser
+    return user.profil == Profil.DG or user.is_superuser
 
 
 def _est_gestionnaire(user):
-    return user.profil == Profil.GEST_MAGASIN
+    """Dans FAMIEN, le DG joue le rôle de gestionnaire central."""
+    return user.profil == Profil.DG or user.is_superuser
 
 
 @login_required
@@ -1295,7 +1034,7 @@ def commandes_magasin_liste(request):
 
     afficher_filtre_magasin = _est_dg_manager(u) or (_est_superviseur(u) and not _est_gestionnaire(u))
     magasins = (
-        Site.objects.filter(type=TypeSite.MAGASIN).order_by("nom")
+        Site.objects.filter(actif=True).order_by("nom")
         if afficher_filtre_magasin else None
     )
 
@@ -1329,23 +1068,13 @@ def commandes_magasin_liste(request):
 
 
 def _get_stock_depot_context():
-    """Retourne le dépôt actif et un dict {produit_id: stock_disponible} pour les formulaires.
+    """Dans FAMIEN, il n'y a pas de dépôt central distinct — retourne toujours vide.
 
-    Le stock disponible = stock total − réservations des commandes VALIDEE en attente de livraison.
+    L'ancien concept dépôt LEPAD n'existe pas dans FAMIEN ; les stocks sont portés
+    directement par chaque site. Cette fonction est conservée pour éviter de modifier
+    tous les formulaires qui l'appellent.
     """
-    depot = Site.objects.filter(type=TypeSite.DEPOT, actif=True).first()
-    if depot is None:
-        return None, "{}", "—"
-    soldes = SoldeStock.objects.filter(site=depot).select_related("produit")
-    reserves = {
-        r["produit_id"]: r["total"]
-        for r in StockReserveDepot.objects.values("produit_id").annotate(total=Sum("quantite"))
-    }
-    stock_depot_json = json.dumps({
-        str(s.produit_id): max(0, s.quantite - reserves.get(s.produit_id, 0))
-        for s in soldes
-    })
-    return depot, stock_depot_json, depot.nom
+    return None, "{}", "—"
 
 
 def _get_stock_magasin_context(magasin):
@@ -1420,7 +1149,7 @@ def _valider_seuils_ecole(ecole, lignes):
             propose = max(0, max_stock - s.get("quantite", 0))
             if q > propose:
                 prod = Produit.objects.only("code").get(pk=pid)
-                erreurs.append(f"{prod.code} : {q} demandé, {propose} proposé (seuil maximal de l'école)")
+                erreurs.append(f"{prod.code} : {q} demandé, {propose} proposé (seuil maximal du site)")
     return erreurs
 
 
@@ -1566,7 +1295,7 @@ def commande_magasin_detail(request, pk):
     )
     peut_livrer = (
         commande.statut == StatutCommandeMagasin.VALIDEE
-        and u.profil in {Profil.DG, Profil.MANAGER}
+        and _est_dg_manager(u)
     )
     peut_receptionner = (
         commande.statut == StatutCommandeMagasin.LIVREE
@@ -1797,12 +1526,7 @@ def livraisons_magasin_liste(request):
         .select_related("magasin", "cree_par", "validee_par")
         .order_by("-cree_le")
     )
-    # Cloisonnement : le superviseur ne voit que ses magasins
-    if _est_superviseur(u) and not _est_dg_manager(u):
-        commandes = commandes.filter(magasin__in=u.sites_autorises())
-        magasins = u.sites_autorises().filter(type=TypeSite.MAGASIN).order_by("nom")
-    else:
-        magasins = Site.objects.filter(type=TypeSite.MAGASIN, actif=True).order_by("nom")
+    magasins = Site.objects.filter(actif=True).order_by("nom")
 
     if magasin_id:
         commandes = commandes.filter(magasin_id=magasin_id)
@@ -1833,10 +1557,8 @@ def stock_reserve_depot(request):
 
     filtre_produit = request.GET.get("produit") or ""
 
-    depot = Site.objects.filter(type=TypeSite.DEPOT, actif=True).first()
+    depot = None  # Pas de dépôt central dans FAMIEN
     soldes = {}
-    if depot:
-        soldes = {s.produit_id: s.quantite for s in SoldeStock.objects.filter(site=depot)}
 
     reserves = (
         StockReserveDepot.objects
@@ -1895,23 +1617,12 @@ def commande_magasin_livraison(request, pk):
     lignes = list(commande.lignes.select_related("produit").order_by("produit__code"))
     produit_ids = [l.produit_id for l in lignes]
 
-    depot = Site.objects.filter(type=TypeSite.DEPOT, actif=True).first()
-    if depot:
-        soldes_bruts = {
-            s.produit_id: s.quantite
-            for s in SoldeStock.objects.filter(site=depot, produit_id__in=produit_ids)
-        }
-        reserves_autres = {
-            r["produit_id"]: r["total"]
-            for r in StockReserveDepot.objects
-            .filter(produit_id__in=produit_ids)
-            .exclude(commande=commande)
-            .values("produit_id")
-            .annotate(total=Sum("quantite"))
-        }
-    else:
-        soldes_bruts = {}
-        reserves_autres = {}
+    # Dans FAMIEN, pas de dépôt central distinct — le stock est porté par le magasin destination
+    soldes_bruts = {
+        s.produit_id: s.quantite
+        for s in SoldeStock.objects.filter(site=commande.magasin, produit_id__in=produit_ids)
+    }
+    reserves_autres = {}
 
     for l in lignes:
         l.stock_total = soldes_bruts.get(l.produit_id, 0)
@@ -2043,13 +1754,7 @@ def receptions_magasin_liste(request):
     if fin:
         qs = qs.filter(derniere_maj__date__lte=fin)
 
-    magasins_qs = None
-    if _est_gestionnaire(u):
-        magasins_qs = None
-    elif _est_superviseur(u) and not _est_dg_manager(u):
-        magasins_qs = u.sites_autorises().filter(type=TypeSite.MAGASIN).order_by("nom")
-    else:
-        magasins_qs = Site.objects.filter(type=TypeSite.MAGASIN, actif=True).order_by("nom")
+    magasins_qs = Site.objects.filter(actif=True).order_by("nom")
 
     return render(request, "approvisionnement/receptions_magasin_liste.html", {
         "receptions": qs[:200],
@@ -2125,7 +1830,7 @@ def livraison_directe_magasin(request):
         messages.error(request, "Accès réservé au DG et au manager.")
         return redirect("livraisons_magasin_liste")
 
-    magasins = Site.objects.filter(type=TypeSite.MAGASIN, actif=True).order_by("nom")
+    magasins = Site.objects.filter(actif=True).order_by("nom")
     produits = Produit.objects.filter(actif=True).order_by("code")
     _depot, stock_depot_json, depot_nom = _get_stock_depot_context()
 
@@ -2136,7 +1841,7 @@ def livraison_directe_magasin(request):
         quantites = request.POST.getlist("quantite")
 
         try:
-            magasin = Site.objects.get(pk=magasin_id, type=TypeSite.MAGASIN, actif=True)
+            magasin = Site.objects.get(pk=magasin_id, actif=True)
         except Site.DoesNotExist:
             messages.error(request, "Magasin invalide.")
             return render(request, "approvisionnement/livraison_directe_magasin.html", {
@@ -2236,7 +1941,7 @@ def livraison_directe_modifier(request, pk):
         CommandeMagasin, pk=pk,
         statut=StatutCommandeMagasin.BROUILLON, observations__startswith="[LD]",
     )
-    magasins = Site.objects.filter(type=TypeSite.MAGASIN, actif=True).order_by("nom")
+    magasins = Site.objects.filter(actif=True).order_by("nom")
     produits = Produit.objects.filter(actif=True).order_by("code")
     _depot, stock_depot_json, depot_nom = _get_stock_depot_context()
 
@@ -2246,9 +1951,9 @@ def livraison_directe_modifier(request, pk):
         produit_ids = request.POST.getlist("produit_id")
         quantites = request.POST.getlist("quantite")
         try:
-            magasin = Site.objects.get(pk=magasin_id, type=TypeSite.MAGASIN, actif=True)
+            magasin = Site.objects.get(pk=magasin_id, actif=True)
         except Site.DoesNotExist:
-            messages.error(request, "Magasin invalide.")
+            messages.error(request, "Site invalide.")
         else:
             produit_quantites = {}
             for pid, q in zip(produit_ids, quantites):
@@ -2298,18 +2003,16 @@ def livraison_directe_supprimer(request, pk):
 
 @login_required
 def livraison_directe_ecole(request):
-    """GEST_MAGASIN envoie directement des articles vers une école sans commande préalable."""
+    """DG envoie directement des articles vers un site sans commande préalable."""
     u = request.user
     if not _est_gestionnaire(u):
-        messages.error(request, "Accès réservé aux gestionnaires de magasin.")
+        messages.error(request, "Accès réservé au DG.")
         return redirect("livraisons_liste")
 
-    magasin = u.site
-    if not magasin:
-        messages.error(request, "Votre compte n'est rattaché à aucun magasin.")
-        return redirect("livraisons_liste")
+    # Dans FAMIEN le DG livre directement depuis le stock central vers un site
+    magasin = u.site  # site source (peut être None pour le DG, il voit tout)
 
-    ecoles = Site.objects.filter(type=TypeSite.ECOLE, actif=True, magasin_rattachement=magasin).order_by("nom")
+    ecoles = Site.objects.filter(actif=True).order_by("nom")
     produits = Produit.objects.filter(actif=True).order_by("code")
     _stock_raw_json, _, _stock_res_json = _get_stock_magasin_context(magasin)
     _stock_raw = json.loads(_stock_raw_json)
@@ -2323,9 +2026,9 @@ def livraison_directe_ecole(request):
         quantites = request.POST.getlist("quantite")
 
         try:
-            ecole = Site.objects.get(pk=ecole_id, type=TypeSite.ECOLE, actif=True, magasin_rattachement=magasin)
+            ecole = Site.objects.get(pk=ecole_id, actif=True)
         except Site.DoesNotExist:
-            messages.error(request, "École invalide.")
+            messages.error(request, "Site invalide.")
             return render(request, "approvisionnement/livraison_directe_ecole.html", {
                 "ecoles": ecoles, "produits": produits,
                 "stock_magasin_json": stock_magasin_json, "magasin": magasin,
@@ -2371,7 +2074,7 @@ def livraison_directe_ecole_detail(request, pk):
         return redirect("accueil")
 
     qs = CommandeEcole.objects.select_related(
-        "ecole", "ecole__magasin_rattachement", "cree_par", "livree_par", "recue_par"
+        "ecole", "cree_par", "livree_par", "recue_par"
     )
     commande = get_object_or_404(qs, pk=pk, observations__startswith="[LDE]")
 
@@ -2382,10 +2085,7 @@ def livraison_directe_ecole_detail(request, pk):
         if u.site_id != commande.ecole_id:
             messages.error(request, "Accès non autorisé.")
             return redirect("receptions_ecole_liste")
-    elif est_gest and not est_dg:
-        if u.site and commande.ecole.magasin_rattachement_id != u.site_id:
-            messages.error(request, "Accès non autorisé.")
-            return redirect("livraisons_liste")
+    # Dans FAMIEN, le DG gère toutes les livraisons directes — pas de restriction par site source
 
     lignes = commande.lignes.select_related("produit").order_by("produit__code")
     obs = commande.observations[5:].strip() if commande.observations.startswith("[LDE] ") else commande.observations[5:]
@@ -2413,7 +2113,6 @@ def livraison_directe_ecole_valider(request, pk):
         CommandeEcole,
         pk=pk,
         observations__startswith="[LDE]",
-        ecole__magasin_rattachement=u.site,
     )
     if request.method == "POST":
         try:
@@ -2436,10 +2135,9 @@ def livraison_directe_ecole_modifier(request, pk):
         pk=pk,
         statut=StatutCommandeEcole.BROUILLON,
         observations__startswith="[LDE]",
-        ecole__magasin_rattachement=u.site,
     )
     magasin = u.site
-    ecoles = Site.objects.filter(type=TypeSite.ECOLE, actif=True, magasin_rattachement=magasin).order_by("nom")
+    ecoles = Site.objects.filter(actif=True).order_by("nom")
     produits = Produit.objects.filter(actif=True).order_by("code")
     _stock_raw_json, _, _stock_res_json = _get_stock_magasin_context(magasin)
     _stock_raw = json.loads(_stock_raw_json)
@@ -2452,9 +2150,9 @@ def livraison_directe_ecole_modifier(request, pk):
         produit_ids = request.POST.getlist("produit_id")
         quantites = request.POST.getlist("quantite")
         try:
-            ecole = Site.objects.get(pk=ecole_id, type=TypeSite.ECOLE, actif=True, magasin_rattachement=magasin)
+            ecole = Site.objects.get(pk=ecole_id, actif=True)
         except Site.DoesNotExist:
-            messages.error(request, "École invalide.")
+            messages.error(request, "Site invalide.")
         else:
             produit_quantites = {}
             for pid, q in zip(produit_ids, quantites):
@@ -2498,7 +2196,6 @@ def livraison_directe_ecole_supprimer(request, pk):
         pk=pk,
         statut=StatutCommandeEcole.BROUILLON,
         observations__startswith="[LDE]",
-        ecole__magasin_rattachement=u.site,
     )
     if request.method == "POST":
         commande.delete()
@@ -2514,9 +2211,9 @@ def reception_directe_magasin(request):
         messages.error(request, "Accès réservé aux gestionnaires de magasin.")
         return redirect("receptions_magasin_liste")
 
-    site_fixe = u.site if u.site_id and u.site.type == TypeSite.MAGASIN else None
-    if not site_fixe:
-        messages.error(request, "Votre compte n'est associé à aucun magasin.")
+    site_fixe = u.site if u.site_id else None
+    if not site_fixe and not u.is_superuser:
+        messages.error(request, "Votre compte n'est associé à aucun site.")
         return redirect("receptions_magasin_liste")
 
     fournisseurs = Fournisseur.objects.filter(actif=True).order_by("raison_sociale")
@@ -2604,16 +2301,9 @@ def pilotage_commandes_depot(request):
     if filtre_magasin:
         qs = qs.filter(commande__magasin_id=filtre_magasin)
 
-    depot = Site.objects.filter(type=TypeSite.DEPOT, actif=True).first()
-
-    # Stock disponible = stock dépôt − livraisons déjà en transit (StockReserveDepot)
+    # Dans FAMIEN, pas de dépôt central — les réservations sont par site (StockReserveDepot inutilisé)
     soldes_depot = {}
     reserves_transit = {}
-    if depot:
-        for s in SoldeStock.objects.filter(site=depot):
-            soldes_depot[s.produit_id] = s.quantite
-        for r in StockReserveDepot.objects.values("produit_id").annotate(total=Sum("quantite")):
-            reserves_transit[r["produit_id"]] = r["total"]
 
     from collections import defaultdict
     produits_data = defaultdict(lambda: {"produit": None, "total_demande": 0})
@@ -2639,7 +2329,7 @@ def pilotage_commandes_depot(request):
 
     articles.sort(key=lambda a: a["produit"].code if a["produit"] else "")
 
-    magasins = Site.objects.filter(type=TypeSite.MAGASIN, actif=True).order_by("nom")
+    magasins = Site.objects.filter(actif=True).order_by("nom")
     produits_filtre = Produit.objects.filter(actif=True).order_by("code")
 
     return render(request, "approvisionnement/pilotage_commandes_depot.html", {
@@ -2678,14 +2368,9 @@ def pilotage_export(request):
     if filtre_magasin:
         qs = qs.filter(commande__magasin_id=filtre_magasin)
 
-    depot = Site.objects.filter(type=TypeSite.DEPOT, actif=True).first()
+    # Dans FAMIEN, pas de dépôt central
     soldes_depot = {}
     reserves_transit = {}
-    if depot:
-        for s in SoldeStock.objects.filter(site=depot):
-            soldes_depot[s.produit_id] = s.quantite
-        for r in StockReserveDepot.objects.values("produit_id").annotate(total=Sum("quantite")):
-            reserves_transit[r["produit_id"]] = r["total"]
 
     from collections import defaultdict
     produits_data = defaultdict(lambda: {"produit": None, "total_demande": 0})
@@ -2764,7 +2449,8 @@ def pilotage_commandes_ecole(request):
     from collections import defaultdict
 
     sites = u.sites_autorises()
-    magasins = sites.filter(type=TypeSite.MAGASIN, actif=True)
+    # Dans FAMIEN, tous les sites sont équivalents — pas de distinction magasin/école
+    tous_sites = sites.filter(actif=True)
 
     filtre_produit = request.GET.get("produit", "").strip()
     filtre_ecole   = request.GET.get("ecole", "").strip()
@@ -2772,48 +2458,36 @@ def pilotage_commandes_ecole(request):
 
     qs = CommandeEcoleLigne.objects.filter(
         commande__statut=StatutCommandeEcole.VALIDEE,
-        commande__ecole__magasin_rattachement__in=magasins,
-    ).select_related("produit", "commande__ecole", "commande__ecole__magasin_rattachement")
+    ).select_related("produit", "commande__ecole")
 
     if filtre_produit:
         qs = qs.filter(produit_id=filtre_produit)
     if filtre_ecole:
         qs = qs.filter(commande__ecole_id=filtre_ecole)
-    if filtre_magasin:
-        qs = qs.filter(commande__ecole__magasin_rattachement_id=filtre_magasin)
 
     soldes = {
         (s.site_id, s.produit_id): s.quantite
-        for s in SoldeStock.objects.filter(site__in=magasins)
+        for s in SoldeStock.objects.filter(site__in=tous_sites)
     }
-    # Les réserves VALIDEE sont les mêmes que les demandes comptées ci-dessus :
-    # on compare la demande nette au stock brut pour éviter le double comptage.
-    # Seules les réserves LIVREE (en transit) immobilisent du stock supplémentaire.
-    reserves_transit = {
-        (r["magasin_id"], r["produit_id"]): r["total"]
-        for r in StockReserve.objects.filter(
-            magasin__in=magasins,
-            commande__statut=StatutCommandeEcole.LIVREE,
-        ).values("magasin_id", "produit_id").annotate(total=Sum("quantite"))
-    }
+    reserves_transit = {}  # Pas de StockReserve par magasin_rattachement dans FAMIEN
 
-    data = defaultdict(lambda: {"produit": None, "magasin": None, "total_demande": 0})
+    data = defaultdict(lambda: {"produit": None, "site": None, "total_demande": 0})
     for ligne in qs:
-        magasin = ligne.commande.ecole.magasin_rattachement
-        key = (magasin.pk, ligne.produit_id)
+        site = ligne.commande.ecole
+        key = (site.pk, ligne.produit_id)
         data[key]["produit"] = ligne.produit
-        data[key]["magasin"] = magasin
+        data[key]["site"] = site
         data[key]["total_demande"] += max(0, ligne.quantite_demandee - (ligne.quantite_deja_recue or 0))
 
     articles = []
-    for (mag_id, pid), d in data.items():
-        stock_dispo = max(0, soldes.get((mag_id, pid), 0) - reserves_transit.get((mag_id, pid), 0))
+    for (site_id, pid), d in data.items():
+        stock_dispo = max(0, soldes.get((site_id, pid), 0) - reserves_transit.get((site_id, pid), 0))
         deficit = max(0, d["total_demande"] - stock_dispo)
         if deficit == 0:
             continue
         articles.append({
             "produit": d["produit"],
-            "magasin": d["magasin"],
+            "magasin": d["site"],  # conserve la clé "magasin" pour compatibilité template
             "total_demande": d["total_demande"],
             "stock_dispo": stock_dispo,
             "deficit": deficit,
@@ -2821,18 +2495,15 @@ def pilotage_commandes_ecole(request):
 
     articles.sort(key=lambda a: (a["magasin"].nom, a["produit"].code))
 
-    ecoles_qs = Site.objects.filter(
-        type=TypeSite.ECOLE, actif=True,
-        magasin_rattachement__in=magasins,
-    ).order_by("nom")
+    ecoles_qs = Site.objects.filter(actif=True).order_by("nom")
     produits_filtre = Produit.objects.filter(actif=True).order_by("code")
-    show_magasin_col = magasins.count() > 1
+    show_magasin_col = tous_sites.count() > 1
 
     return render(request, "approvisionnement/pilotage_commandes_ecole.html", {
         "articles": articles,
         "produits_filtre": produits_filtre,
         "ecoles": ecoles_qs,
-        "magasins": magasins.order_by("nom"),
+        "magasins": tous_sites.order_by("nom"),
         "show_magasin_col": show_magasin_col,
         "filtres": {
             "produit": filtre_produit,
@@ -2857,7 +2528,7 @@ def pilotage_ecole_export(request):
         return HttpResponseForbidden()
 
     sites = u.sites_autorises()
-    magasins = sites.filter(type=TypeSite.MAGASIN, actif=True)
+    tous_sites = sites.filter(actif=True)
 
     filtre_produit = request.GET.get("produit", "").strip()
     filtre_ecole   = request.GET.get("ecole", "").strip()
@@ -2865,39 +2536,30 @@ def pilotage_ecole_export(request):
 
     qs = CommandeEcoleLigne.objects.filter(
         commande__statut=StatutCommandeEcole.VALIDEE,
-        commande__ecole__magasin_rattachement__in=magasins,
-    ).select_related("produit", "commande__ecole", "commande__ecole__magasin_rattachement")
+    ).select_related("produit", "commande__ecole")
 
     if filtre_produit:
         qs = qs.filter(produit_id=filtre_produit)
     if filtre_ecole:
         qs = qs.filter(commande__ecole_id=filtre_ecole)
-    if filtre_magasin:
-        qs = qs.filter(commande__ecole__magasin_rattachement_id=filtre_magasin)
 
     soldes = {
         (s.site_id, s.produit_id): s.quantite
-        for s in SoldeStock.objects.filter(site__in=magasins)
+        for s in SoldeStock.objects.filter(site__in=tous_sites)
     }
-    reserves_transit = {
-        (r["magasin_id"], r["produit_id"]): r["total"]
-        for r in StockReserve.objects.filter(
-            magasin__in=magasins,
-            commande__statut=StatutCommandeEcole.LIVREE,
-        ).values("magasin_id", "produit_id").annotate(total=Sum("quantite"))
-    }
+    reserves_transit = {}  # Pas de StockReserve par magasin_rattachement dans FAMIEN
 
     data = defaultdict(lambda: {"produit": None, "magasin": None, "total_demande": 0})
     for ligne in qs:
-        magasin = ligne.commande.ecole.magasin_rattachement
-        key = (magasin.pk, ligne.produit_id)
+        site = ligne.commande.ecole
+        key = (site.pk, ligne.produit_id)
         data[key]["produit"] = ligne.produit
-        data[key]["magasin"] = magasin
+        data[key]["magasin"] = site
         data[key]["total_demande"] += max(0, ligne.quantite_demandee - (ligne.quantite_deja_recue or 0))
 
     rows = []
-    for (mag_id, pid), d in data.items():
-        stock_dispo = max(0, soldes.get((mag_id, pid), 0) - reserves_transit.get((mag_id, pid), 0))
+    for (site_id, pid), d in data.items():
+        stock_dispo = max(0, soldes.get((site_id, pid), 0) - reserves_transit.get((site_id, pid), 0))
         deficit = max(0, d["total_demande"] - stock_dispo)
         if deficit == 0:
             continue
@@ -2912,7 +2574,7 @@ def pilotage_ecole_export(request):
 
     wb = openpyxl.Workbook()
     ws = wb.active
-    ws.title = "Déficits école"
+    ws.title = "Déficits site"
 
     entetes = ["Magasin", "Code", "Désignation", "Catégorie", "À livrer", "Stock disponible", "Déficit dépôt"]
     header_font = Font(bold=True, color="FFFFFF")

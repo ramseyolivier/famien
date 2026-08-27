@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block titre %}Pilotage — LEPAD{% endblock %}
+{% block titre %}Pilotage — FAMIEN{% endblock %}
 {% block lieu %}Pilotage{% endblock %}
 
 {% block contenu %}
@@ -54,19 +54,11 @@
 </div>
 
 <div class="admin-section admin-section--zone" id="zone">
-  <div class="etiquette">Zone</div>
+  <div class="etiquette">Sites</div>
   <div class="indicateurs" style="margin-bottom:12px">
-    <a href="{% url 'admin_communes' %}" class="indicateur">
-      <div class="valeur chiffre">{{ nb_communes }}</div>
-      <div class="libelle">Communes</div>
-    </a>
-    <a href="{% url 'admin_magasins' %}" class="indicateur">
-      <div class="valeur chiffre">{{ nb_magasins }}</div>
-      <div class="libelle">Magasins</div>
-    </a>
-    <a href="{% url 'admin_ecoles' %}" class="indicateur">
-      <div class="valeur chiffre">{{ nb_ecoles }}</div>
-      <div class="libelle">Écoles</div>
+    <a href="{% url 'admin_sites' %}" class="indicateur">
+      <div class="valeur chiffre">{{ nb_sites }}</div>
+      <div class="libelle">Sites</div>
     </a>
     <a href="{% url 'admin_classes' %}" class="indicateur">
       <div class="valeur chiffre">{{ nb_classes }}</div>
@@ -74,9 +66,7 @@
     </a>
   </div>
   <div class="admin-raccourcis">
-    <a href="{% url 'admin_commune_nouvelle' %}" class="bouton-secondaire">+ Nouvelle commune</a>
-    <a href="{% url 'admin_magasin_nouveau' %}" class="bouton-secondaire">+ Nouveau magasin</a>
-    <a href="{% url 'admin_ecole_nouvelle' %}" class="bouton-secondaire">+ Nouvelle école</a>
+    <a href="{% url 'admin_site_nouveau' %}" class="bouton-secondaire">+ Nouveau site</a>
     <a href="{% url 'admin_classe_nouveau' %}" class="bouton-secondaire">+ Nouvelle classe</a>
   </div>
 </div>

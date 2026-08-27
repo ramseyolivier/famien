@@ -10,7 +10,7 @@ from django.db import connections, transaction
 from django.test import TestCase, TransactionTestCase
 
 from catalogue.models import Produit
-from core.models import Commune, Profil, Site, TypeSite, Utilisateur
+from core.models import Profil, Site, TypeSite, Utilisateur
 from kits.models import ClasseEcole, Kit, KitLigne, Niveau
 from stock.models import MouvementStock, SoldeStock, TypeMouvement
 from stock.services import enregistrer_mouvement
@@ -20,11 +20,7 @@ from .services import VenteDejaEnregistree, annuler_vente, completer_livraison, 
 
 
 def monter_decor(stock_c200=100, stock_c100=100):
-    commune = Commune.objects.create(nom="Bingerville")
-    magasin = Site.objects.create(type=TypeSite.MAGASIN, nom="Bingerville", commune=commune)
-    ecole = Site.objects.create(
-        type=TypeSite.ECOLE, nom="Mamie Fétaï", commune=commune, magasin_rattachement=magasin
-    )
+    ecole = Site.objects.create(type=TypeSite.SITE, nom="Mamie Fétaï")
     c100 = Produit.objects.create(code="C100", designation="Cahier 100 pages", cout_achat=380, prix_detail=600)
     c200 = Produit.objects.create(code="C200", designation="Cahier 200 pages", cout_achat=540, prix_detail=850)
 
@@ -34,13 +30,13 @@ def monter_decor(stock_c200=100, stock_c100=100):
     KitLigne.objects.create(kit=kit, produit=c200, quantite=2)
 
     vendeuse = Utilisateur.objects.create_user(
-        "awa", password="x", profil=Profil.COMMERCIAL, site=ecole
+        "awa", password="x", profil=Profil.CHEF_EQUIPE, site=ecole
     )
     for produit, quantite in ((c100, stock_c100), (c200, stock_c200)):
         enregistrer_mouvement(
             site=ecole, produit=produit, type=TypeMouvement.ENTREE_TRANSFERT, quantite=quantite
         )
-    return dict(commune=commune, magasin=magasin, ecole=ecole, c100=c100, c200=c200, kit=kit, vendeuse=vendeuse)
+    return dict(ecole=ecole, c100=c100, c200=c200, kit=kit, vendeuse=vendeuse)
 
 
 class VenteEtStock(TestCase):
@@ -73,24 +69,21 @@ class VenteEtStock(TestCase):
         )
         self.assertEqual(v.montant_total, 1800)
 
-    def test_critere_5_cloisonnement_entre_ecoles(self):
-        """Critère n°5 : un commercial ne peut pas vendre pour une autre école que la sienne."""
-        autre = Site.objects.create(
-            type=TypeSite.ECOLE, nom="Autre école", commune=self.d["commune"],
-            magasin_rattachement=self.d["magasin"],
-        )
+    def test_critere_5_cloisonnement_entre_sites(self):
+        """Critère n°5 : un chef d'équipe ne peut pas vendre pour un autre site que le sien."""
+        autre = Site.objects.create(type=TypeSite.SITE, nom="Autre site")
         self.assertFalse(self.d["vendeuse"].peut_acceder_au_site(autre))
         with self.assertRaises(ValidationError):
             enregistrer_vente(ecole=autre, vendeuse=self.d["vendeuse"], kits=[(self.d["kit"], 1)])
 
-    def test_superviseur_voit_sa_commune_seulement(self):
-        autre_commune = Commune.objects.create(nom="Cocody")
-        hors_commune = Site.objects.create(type=TypeSite.MAGASIN, nom="Cocody", commune=autre_commune)
-        superviseur = Utilisateur.objects.create_user(
-            "yao", password="x", profil=Profil.SUPERVISEUR, commune=self.d["commune"]
+    def test_dg_voit_tous_les_sites(self):
+        """Le DG a accès à tous les sites actifs."""
+        autre_site = Site.objects.create(type=TypeSite.SITE, nom="Autre site")
+        dg = Utilisateur.objects.create_user(
+            "yao", password="x", profil=Profil.DG
         )
-        self.assertTrue(superviseur.peut_acceder_au_site(self.d["ecole"]))
-        self.assertFalse(superviseur.peut_acceder_au_site(hors_commune))
+        self.assertTrue(dg.peut_acceder_au_site(self.d["ecole"]))
+        self.assertTrue(dg.peut_acceder_au_site(autre_site))
 
     def test_idempotence_sur_uuid_client(self):
         """Une requête rejouée après un timeout réseau ne crée pas de doublon."""

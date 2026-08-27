@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block titre %}{% if commande %}Modifier la commande #{{ commande.numero }}{% else %}Nouvelle commande{% endif %} — LEPAD{% endblock %}
+{% block titre %}{% if commande %}Modifier la commande #{{ commande.numero }}{% else %}Nouvelle commande{% endif %} — FAMIEN{% endblock %}
 {% block lieu %}Approvisionnement{% endblock %}
 
 {% block contenu %}
@@ -9,7 +9,7 @@
 
 {% if erreur_magasin %}
 <div class="message error">
-  Cette école n'est rattachée à aucun magasin. Contactez l'administration pour configurer le rattachement.
+  Ce site n'est rattachée à aucun magasin. Contactez l'administration pour configurer le rattachement.
 </div>
 {% else %}
 
@@ -17,7 +17,7 @@
 {% csrf_token %}
 
 <div style="margin:16px 0 12px">
-  <label style="display:block;font-size:.85rem;color:var(--encre-clair);margin-bottom:4px">École</label>
+  <label style="display:block;font-size:.85rem;color:var(--encre-clair);margin-bottom:4px">Site</label>
   <span style="display:inline-block;padding:8px 10px;border:1px solid var(--reglure);border-radius:6px;font-size:.9rem;background:var(--craie);color:var(--encre)">{{ ecole.nom }}</span>
 </div>
 

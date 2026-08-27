@@ -25,12 +25,9 @@ def notifier_chefs_equipe(ecole, *, type, titre, message="", lien=""):
 
 
 def notifier_managers(sites_concernes, *, type, titre, message="", lien=""):
-    """Envoie une notification à tous les DG/MANAGER/SUPERVISEUR du périmètre."""
+    """Envoie une notification à tous les DG du périmètre."""
     from core.models import Profil, Utilisateur
-    destinataires = Utilisateur.objects.filter(
-        is_active=True,
-        profil__in=[Profil.DG, Profil.MANAGER, Profil.SUPERVISEUR],
-    )
+    destinataires = Utilisateur.objects.filter(is_active=True, profil=Profil.DG)
     for u in destinataires:
         if u.acces_national or u.sites_autorises().filter(pk__in=sites_concernes).exists():
             creer_notification(u, type=type, titre=titre, message=message, lien=lien)

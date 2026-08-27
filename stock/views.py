@@ -9,38 +9,17 @@ from django.utils import timezone
 
 from catalogue.models import Produit
 from core.models import Profil, Site, TypeSite
-
-from core.models import Commune
 from .models import Ajustement, AjustementLigne, MouvementStock, SoldeStock, StatutAjustement
 from .services import valider_ajustement, references_sous_seuil, dates_passage_sous_seuil, references_en_rupture, dates_passage_rupture
 
 
 def _nb_nc_zone(u, NonConformite, StatutNonConformite):
-    from django.db.models import Q
     qs = NonConformite.objects.filter(
         statut__in=[StatutNonConformite.OUVERTE, StatutNonConformite.EN_COURS]
     )
     if u.acces_national or u.is_superuser:
         return qs.count()
-    q = Q(cree_par=u)
-    if u.profil == Profil.SUPERVISEUR and u.commune_id:
-        q |= Q(
-            cree_par__profil__in=[Profil.COMMERCIAL, Profil.CHEF_EQUIPE, Profil.GEST_MAGASIN],
-            cree_par__site__commune_id=u.commune_id,
-        )
-    elif u.profil == Profil.GEST_MAGASIN and u.site_id:
-        commune_id = u.site.commune_id
-        if commune_id:
-            q |= Q(
-                cree_par__profil__in=[Profil.COMMERCIAL, Profil.CHEF_EQUIPE],
-                cree_par__site__commune_id=commune_id,
-            )
-    elif u.profil == Profil.CHEF_EQUIPE and u.site_id:
-        q |= Q(
-            cree_par__profil=Profil.COMMERCIAL,
-            cree_par__site_id=u.site_id,
-        )
-    return qs.filter(q).count()
+    return qs.filter(cree_par=u).count()
 
 
 @login_required
@@ -61,7 +40,7 @@ def hub_stock(request):
     sites = _sites_perimetre(u)
 
     # Kits non constructibles : au moins une ligne avec stock < quantité requise
-    if u.profil != Profil.GEST_MAGASIN:
+    if True:
         from ventes.views import _ecoles_perimetre
         from kits.models import Kit, KitLigne
         ecoles = _ecoles_perimetre(u).filter(actif=True)
@@ -97,9 +76,8 @@ def hub_stock(request):
         "nb_livraisons_ecole_a_preparer": (
             CommandeEcole.objects.filter(
                 statut=StatutCommandeEcole.VALIDEE,
-                ecole__magasin_rattachement=u.site,
             ).count()
-            if getattr(u, "site_id", None)
+            if u.acces_national
             else 0
         ),
         "nb_receptions_ecole_a_faire": (
@@ -138,16 +116,10 @@ def stock_sous_seuil(request):
     u = request.user
     sites = _sites_perimetre(u)
 
-    filtre_commune  = request.GET.get("commune", "")
-    filtre_type     = request.GET.get("type_site", "")
     filtre_produit  = request.GET.get("produit", "")
 
-    qs = references_sous_seuil(sites=sites).select_related("site__commune", "produit")
+    qs = references_sous_seuil(sites=sites).select_related("site", "produit")
 
-    if filtre_commune:
-        qs = qs.filter(site__commune_id=filtre_commune)
-    if filtre_type:
-        qs = qs.filter(site__type=filtre_type)
     if filtre_produit:
         qs = qs.filter(produit_id=filtre_produit)
 
@@ -167,10 +139,6 @@ def stock_sous_seuil(request):
             "en_rupture": s.quantite == 0,
         })
 
-    communes = (
-        Commune.objects.filter(sites__in=sites).distinct().order_by("nom")
-        if u.acces_national or u.is_superuser else None
-    )
     produits_filtre = (
         SoldeStock.objects.filter(site__in=sites, quantite__lte=F("stock_securite"))
         .select_related("produit").order_by("produit__code")
@@ -179,11 +147,7 @@ def stock_sous_seuil(request):
 
     return render(request, "stock/sous_seuil.html", {
         "lignes": lignes,
-        "communes": communes,
-        "types_site": TypeSite.choices,
         "produits_filtre": produits_filtre,
-        "filtre_commune": filtre_commune,
-        "filtre_type": filtre_type,
         "filtre_produit": filtre_produit,
         "nb_total": len(lignes),
     })
@@ -195,15 +159,9 @@ def stock_ruptures(request):
     u = request.user
     sites = _sites_perimetre(u)
 
-    filtre_commune = request.GET.get("commune", "")
-    filtre_type    = request.GET.get("type_site", "")
     filtre_produit = request.GET.get("produit", "")
 
     qs = references_en_rupture(sites=sites)
-    if filtre_commune:
-        qs = qs.filter(site__commune_id=filtre_commune)
-    if filtre_type:
-        qs = qs.filter(site__type=filtre_type)
     if filtre_produit:
         qs = qs.filter(produit_id=filtre_produit)
 
@@ -211,15 +169,11 @@ def stock_ruptures(request):
     dates_map = dates_passage_rupture(site_ids)
 
     lignes = []
-    for s in qs.select_related("site", "site__commune", "produit"):
+    for s in qs.select_related("site", "produit"):
         depuis = dates_map.get((s.site_id, s.produit_id))
         jours = (timezone.now() - depuis).days if depuis else None
         lignes.append({"solde": s, "jours": jours})
 
-    communes = (
-        Commune.objects.filter(sites__in=sites).distinct().order_by("nom")
-        if u.acces_national or u.is_superuser else None
-    )
     produits_filtre = (
         SoldeStock.objects.filter(site__in=sites, quantite=0)
         .select_related("produit").order_by("produit__code")
@@ -228,7 +182,6 @@ def stock_ruptures(request):
 
     return render(request, "stock/ruptures.html", {
         "lignes": lignes,
-        "communes": communes,
         "types_site": TypeSite.choices,
         "produits_filtre": produits_filtre,
         "filtre_commune": filtre_commune,
@@ -318,13 +271,11 @@ def ajustement_valider(request, pk):
 @login_required
 def parametres_seuils(request):
     u = request.user
-    if u.profil not in (Profil.DG, Profil.MANAGER) and not u.is_superuser:
-        return HttpResponseForbidden("Accès réservé au DG et au Manager.")
+    if u.profil != Profil.DG and not u.is_superuser:
+        return HttpResponseForbidden("Accès réservé au DG.")
 
     site_id = request.GET.get("site") or request.POST.get("site_filtre")
-    sites_qs = Site.objects.filter(
-        type__in=[TypeSite.ECOLE, TypeSite.MAGASIN, TypeSite.DEPOT]
-    ).order_by("type", "nom")
+    sites_qs = Site.objects.all().order_by("nom")
 
     site = None
     rows = []  # liste de (produit, solde_ou_None)
@@ -403,18 +354,16 @@ def _construire_rapport(user, site_id, commune_id, debut, fin, produit_id=""):
     from collections import defaultdict
     from approvisionnement.models import StockReserve, StockReserveDepot
 
-    est_dg_manager  = user.is_superuser or user.profil in {Profil.DG, Profil.MANAGER}
-    est_superviseur = user.profil == Profil.SUPERVISEUR
+    est_dg_manager  = user.is_superuser or user.profil == Profil.DG
+    est_superviseur = False
 
     sites_base = user.sites_autorises()
     sites_qs   = sites_base
     if site_id:
         sites_qs = sites_qs.filter(pk=site_id)
-    if commune_id and est_dg_manager:
-        sites_qs = sites_qs.filter(commune_id=commune_id)
 
     site_ids   = list(sites_qs.values_list("pk", flat=True))
-    sites_list = list(sites_qs.select_related("commune"))
+    sites_list = list(sites_qs)
 
     # Mouvements de la période groupés par (site, produit, type)
     mvts_filtre = dict(site_id__in=site_ids, horodatage__date__gte=debut, horodatage__date__lte=fin)
@@ -447,30 +396,14 @@ def _construire_rapport(user, site_id, commune_id, debut, fin, produit_id=""):
     soldes_qs = SoldeStock.objects.filter(site_id__in=site_ids)
     if produit_id:
         soldes_qs = soldes_qs.filter(produit_id=produit_id)
-    soldes = soldes_qs.select_related("produit", "site", "site__commune")
+    soldes = soldes_qs.select_related("produit", "site")
 
-    site_types      = {s.type for s in sites_list}
-    afficher_vendue  = TypeSite.ECOLE in site_types or est_dg_manager
-    afficher_livree  = TypeSite.MAGASIN in site_types or TypeSite.DEPOT in site_types or est_dg_manager
-    afficher_reservee = TypeSite.MAGASIN in site_types or TypeSite.DEPOT in site_types or est_dg_manager
-    afficher_site    = sites_base.count() > 1  # basé sur le périmètre réel, pas le filtre
+    afficher_vendue   = True
+    afficher_livree   = est_dg_manager
+    afficher_reservee = False
+    afficher_site     = sites_base.count() > 1
 
-    # Réservations actuelles par (magasin, produit)
-    magasin_ids = [s.pk for s in sites_list if s.type == TypeSite.MAGASIN]
-    depot_ids   = [s.pk for s in sites_list if s.type == TypeSite.DEPOT]
     reserves_index = defaultdict(int)
-    if magasin_ids:
-        for r in (
-            StockReserve.objects
-            .filter(magasin_id__in=magasin_ids)
-            .values("magasin_id", "produit_id")
-            .annotate(total=Sum("quantite"))
-        ):
-            reserves_index[(r["magasin_id"], r["produit_id"])] = r["total"]
-    if depot_ids:
-        for r in StockReserveDepot.objects.values("produit_id").annotate(total=Sum("quantite")):
-            for depot_id in depot_ids:
-                reserves_index[(depot_id, r["produit_id"])] = r["total"]
 
     TYPES_RECUS = {"ENTREE_ACHAT", "ENTREE_LIVRAISON_ECOLE", "RETOUR_LIVRAISON_ECOLE", "ENTREE_APPRO_MAGASIN"}
 
@@ -513,7 +446,6 @@ def _construire_rapport(user, site_id, commune_id, debut, fin, produit_id=""):
         "afficher_site":     afficher_site,
         "sites_base":        sites_base,
         "est_dg_manager":    est_dg_manager,
-        "est_superviseur":   est_superviseur,
     }
     return lignes, meta
 
@@ -544,10 +476,9 @@ def rapport_journalier(request):
     if fin < debut:
         fin = debut
 
-    est_dg_manager  = user.is_superuser or user.profil in {Profil.DG, Profil.MANAGER}
-    est_superviseur = user.profil == Profil.SUPERVISEUR
+    est_dg_manager = user.is_superuser or user.profil == Profil.DG
 
-    lignes, meta = _construire_rapport(user, site_id, commune_id, debut, fin, produit_id)
+    lignes, meta = _construire_rapport(user, site_id, "", debut, fin, produit_id)
 
     CHAMPS = {
         "produit":     lambda r: r["produit"].designation,
@@ -564,35 +495,25 @@ def rapport_journalier(request):
     if tri in CHAMPS:
         lignes.sort(key=CHAMPS[tri], reverse=(sens == "desc"))
 
-    communes_filtre = Commune.objects.order_by("nom") if est_dg_manager else None
-    if est_dg_manager or est_superviseur:
-        sites_filtre_qs = meta["sites_base"]
-        if commune_id:
-            sites_filtre_qs = sites_filtre_qs.filter(commune_id=commune_id)
-        sites_filtre = sites_filtre_qs.order_by("type", "nom")
-    else:
-        sites_filtre = None
-
+    sites_filtre = meta["sites_base"].order_by("nom") if est_dg_manager else None
     produits_filtre = Produit.objects.filter(actif=True).order_by("designation")
 
     filtres = {
-        "debut":    str(debut),
-        "fin":      str(fin),
-        "site":     site_id,
-        "commune":  commune_id,
-        "produit":  produit_id,
-        "tri":      tri,
-        "sens":     sens,
+        "debut":   str(debut),
+        "fin":     str(fin),
+        "site":    site_id,
+        "produit": produit_id,
+        "tri":     tri,
+        "sens":    sens,
     }
 
     return render(request, "stock/rapport_journalier.html", {
-        "lignes":           lignes,
-        "debut":            debut,
-        "fin":              fin,
-        "filtres":          filtres,
-        "communes_filtre":  communes_filtre,
-        "sites_filtre":     sites_filtre,
-        "produits_filtre":  produits_filtre,
+        "lignes":          lignes,
+        "debut":           debut,
+        "fin":             fin,
+        "filtres":         filtres,
+        "sites_filtre":    sites_filtre,
+        "produits_filtre": produits_filtre,
         **meta,
     })
 
@@ -626,7 +547,7 @@ def rapport_journalier_export(request):
     if fin < debut:
         fin = debut
 
-    lignes, meta = _construire_rapport(user, site_id, commune_id, debut, fin, produit_id)
+    lignes, meta = _construire_rapport(user, site_id, "", debut, fin, produit_id)
     lignes.sort(key=lambda r: (r["site"].nom, r["produit"].designation))
 
     wb = openpyxl.Workbook()

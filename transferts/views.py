@@ -8,7 +8,6 @@ from django.db.models import Sum
 from django.shortcuts import get_object_or_404, redirect, render
 
 from catalogue.models import Produit
-from core.models import TypeSite
 from stock.models import SoldeStock
 
 from .models import StatutTransfert, Transfert, TransfertLigne
@@ -44,14 +43,9 @@ def _filtrer_transferts(request):
     if dest_filtre:
         qs = qs.filter(site_destination_id=dest_filtre)
 
-    depot_ids = set(sites.filter(type=TypeSite.DEPOT).values_list("pk", flat=True))
-
     result = []
     for t in qs:
-        if t.site_destination_id in depot_ids:
-            t.sens = "recu"
-        else:
-            t.sens = "envoye" if t.site_origine_id in site_ids else "recu"
+        t.sens = "envoye" if t.site_origine_id in site_ids else "recu"
         if sens_filtre and t.sens != sens_filtre:
             continue
         result.append(t)
@@ -70,7 +64,7 @@ def transferts_liste(request):
     transferts, filtres = _filtrer_transferts(request)
     sites_filtre = (
         request.user.sites_autorises().order_by("type", "nom")
-        if request.user.profil in {Profil.DG, Profil.MANAGER, Profil.SUPERVISEUR} or request.user.is_superuser
+        if request.user.profil == Profil.DG or request.user.is_superuser
         else None
     )
     return render(request, "transferts/liste.html", {
@@ -136,24 +130,11 @@ def transfert_formulaire(request):
     destinations = destinations_possibles(request.user).order_by("type", "nom")
     produits = Produit.objects.filter(actif=True).order_by("code")
 
-    # Stock disponible par produit = quantite en stock - réservations (magasin uniquement)
     soldes = {
         s.produit_id: s.quantite
         for s in SoldeStock.objects.filter(site=site_origine)
     }
-    if site_origine.type == TypeSite.MAGASIN:
-        from approvisionnement.models import StockReserve
-        reserves = {
-            r["produit_id"]: r["total"]
-            for r in StockReserve.objects.filter(magasin=site_origine)
-            .values("produit_id").annotate(total=Sum("quantite"))
-        }
-    else:
-        reserves = {}
-    stocks_disponibles = {
-        pid: max(0, qt - reserves.get(pid, 0))
-        for pid, qt in soldes.items()
-    }
+    stocks_disponibles = dict(soldes)
 
     if request.method == "POST":
         destination_id = request.POST.get("site_destination")

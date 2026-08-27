@@ -4,23 +4,23 @@
 
 {% block contenu %}
 <div class="admin-entete">
-  <h1>Classes par école</h1>
+  <h1>Classes par site</h1>
   <a href="{% url 'admin_classe_nouveau' %}" class="bouton-secondaire">+ Nouvelle classe</a>
 </div>
 
 {% if classes %}
 <div class="barre-filtre">
   <div class="champ-recherche">
-    <input type="search" id="recherche" placeholder="Rechercher par école, classe…" autocomplete="off">
+    <input type="search" id="recherche" placeholder="Rechercher par site, classe…" autocomplete="off">
   </div>
-  <select id="filtre-ecole"><option value="">Toutes les écoles</option></select>
+  <select id="filtre-ecole"><option value="">Toutes les sites</option></select>
   <span class="compteur-resultats" id="compteur-resultats"></span>
 </div>
 
 <table class="registre" id="table-classes" style="margin-top:8px">
   <thead>
     <tr>
-      <th>École</th>
+      <th>Site</th>
       <th>Niveau</th>
       <th>Intitulé</th>
       <th class="nombre">Kits</th>

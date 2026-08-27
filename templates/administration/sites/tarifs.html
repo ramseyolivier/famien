@@ -1,10 +1,10 @@
 {% extends "base.html" %}
-{% block titre %}Tarifs — {{ ecole.nom }}{% endblock %}
-{% block lieu %}Administration › Sites › {{ ecole.nom }} › Tarifs{% endblock %}
+{% block titre %}Tarifs — {{ site.nom }}{% endblock %}
+{% block lieu %}Administration › Sites › {{ site.nom }} › Tarifs{% endblock %}
 
 {% block contenu %}
 <div class="admin-entete">
-  <h1>Tarifs au détail — {{ ecole.nom }}</h1>
+  <h1>Tarifs au détail — {{ site.nom }}</h1>
 </div>
 
 <div class="barre-filtre">
@@ -33,10 +33,8 @@
         <td>{{ l.produit.designation }}</td>
         <td class="nombre chiffre" style="color:var(--encre-clair)">{{ l.produit.cout_achat|floatformat:0 }} F</td>
         <td class="nombre" style="white-space:nowrap">
-          {# hidden input — toujours soumis avec le formulaire #}
           <input type="hidden" class="tarif-hidden" name="prix_{{ l.produit.pk }}" value="{{ l.prix_js }}">
           <span class="tarif-valeur chiffre">{% if l.prix_ecole is not None %}{{ l.prix_ecole|floatformat:0 }} F{% else %}—{% endif %}</span>
-          {# number input — visible uniquement pendant l'édition #}
           <input
             class="tarif-input"
             type="number"
@@ -61,7 +59,7 @@
 
   <div class="pied">
     <div style="display:flex;gap:8px;align-items:center">
-      <a href="{% url 'admin_ecoles' %}" class="bouton-secondaire" style="min-width:180px;text-align:center">← Retour aux sites</a>
+      <a href="{% url 'admin_sites' %}" class="bouton-secondaire" style="min-width:180px;text-align:center">← Retour aux sites</a>
       <button type="submit" class="bouton-primaire" style="min-width:180px;padding-top:13px;padding-bottom:13px;font-size:.88rem">Enregistrer les tarifs</button>
     </div>
   </div>

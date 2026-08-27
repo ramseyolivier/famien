@@ -1,4 +1,4 @@
-"""Configuration Django du projet LEPAD."""
+"""Configuration Django du projet FAMIEN."""
 
 import os
 from pathlib import Path
@@ -128,6 +128,7 @@ if not DEBUG:
 
 SESSION_COOKIE_AGE = 60 * 60 * 12
 SESSION_EXPIRE_AT_BROWSER_CLOSE = False
+SESSION_COOKIE_NAME = "famien_sessionid"
 
 LOGGING = {
     "version": 1,

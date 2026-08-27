@@ -2,18 +2,14 @@ from django.core.exceptions import ValidationError
 from django.test import TestCase
 
 from catalogue.models import Produit
-from core.models import Commune, Site, TypeSite
+from core.models import Site, TypeSite
 
 from .models import ClasseEcole, Kit, KitLigne, Niveau
 
 
 class RegleDePrixEtVersionnage(TestCase):
     def setUp(self):
-        commune = Commune.objects.create(nom="Bingerville")
-        magasin = Site.objects.create(type=TypeSite.MAGASIN, nom="Bingerville", commune=commune)
-        self.ecole = Site.objects.create(
-            type=TypeSite.ECOLE, nom="Mamie Fétaï", commune=commune, magasin_rattachement=magasin
-        )
+        self.ecole = Site.objects.create(type=TypeSite.SITE, nom="Mamie Fétaï")
         self.classe = ClasseEcole.objects.create(
             ecole=self.ecole, niveau=Niveau.SIXIEME, libelle="6ème A"
         )

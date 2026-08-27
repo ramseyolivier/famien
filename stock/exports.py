@@ -81,7 +81,7 @@ def export_sous_seuil_excel(request):
 
     u = request.user
     sites = _sites_perimetre(u)
-    soldes = references_sous_seuil(sites=sites).select_related("site", "site__commune", "produit")
+    soldes = references_sous_seuil(sites=sites).select_related("site", "produit")
     site_ids = list(sites.values_list("pk", flat=True))
     dates_map = dates_passage_sous_seuil(site_ids)
 
@@ -90,7 +90,7 @@ def export_sous_seuil_excel(request):
     ws.title = "Sous le seuil"
     ws.freeze_panes = "A2"
 
-    entetes = ["Commune", "Type de site", "Site", "Code produit", "Désignation", "En stock", "Seuil", "Jours sous seuil"]
+    entetes = ["Site", "Code produit", "Désignation", "En stock", "Seuil", "Jours sous seuil"]
     for col, titre in enumerate(entetes, 1):
         cell = ws.cell(row=1, column=col, value=titre)
         _style_entete(cell)
@@ -103,14 +103,12 @@ def export_sous_seuil_excel(request):
         depuis = dates_map.get((s.site_id, s.produit_id))
         jours = (timezone.now() - depuis).days if depuis else None
 
-        ws.cell(row=row, column=1, value=s.site.commune.nom if s.site.commune_id else "—")
-        ws.cell(row=row, column=2, value=s.site.get_type_display())
-        ws.cell(row=row, column=3, value=s.site.nom)
-        ws.cell(row=row, column=4, value=s.produit.code)
-        ws.cell(row=row, column=5, value=s.produit.designation)
-        ws.cell(row=row, column=6, value=int(s.quantite))
-        ws.cell(row=row, column=7, value=int(s.stock_securite))
-        cell_j = ws.cell(row=row, column=8, value=jours)
+        ws.cell(row=row, column=1, value=s.site.nom)
+        ws.cell(row=row, column=2, value=s.produit.code)
+        ws.cell(row=row, column=3, value=s.produit.designation)
+        ws.cell(row=row, column=4, value=int(s.quantite))
+        ws.cell(row=row, column=5, value=int(s.stock_securite))
+        cell_j = ws.cell(row=row, column=6, value=jours)
         if jours is not None:
             if jours >= 7:
                 cell_j.fill = rouge
@@ -134,7 +132,7 @@ def export_ruptures_excel(request):
 
     u = request.user
     sites = _sites_perimetre(u)
-    soldes = references_en_rupture(sites=sites).select_related("site", "site__commune", "produit")
+    soldes = references_en_rupture(sites=sites).select_related("site", "produit")
     site_ids = list(sites.values_list("pk", flat=True))
     dates_map = dates_passage_rupture(site_ids)
 
@@ -143,7 +141,7 @@ def export_ruptures_excel(request):
     ws.title = "Ruptures"
     ws.freeze_panes = "A2"
 
-    entetes = ["Commune", "Type de site", "Site", "Code produit", "Désignation", "En stock", "Seuil", "Depuis quand (jours)"]
+    entetes = ["Site", "Code produit", "Désignation", "En stock", "Seuil", "Depuis quand (jours)"]
     for col, titre in enumerate(entetes, 1):
         cell = ws.cell(row=1, column=col, value=titre)
         _style_entete(cell)
@@ -156,14 +154,12 @@ def export_ruptures_excel(request):
         depuis = dates_map.get((s.site_id, s.produit_id))
         jours = (timezone.now() - depuis).days if depuis else None
 
-        ws.cell(row=row, column=1, value=s.site.commune.nom if s.site.commune_id else "—")
-        ws.cell(row=row, column=2, value=s.site.get_type_display())
-        ws.cell(row=row, column=3, value=s.site.nom)
-        ws.cell(row=row, column=4, value=s.produit.code)
-        ws.cell(row=row, column=5, value=s.produit.designation)
-        ws.cell(row=row, column=6, value=0)
-        ws.cell(row=row, column=7, value=int(s.stock_securite))
-        cell_j = ws.cell(row=row, column=8, value=jours)
+        ws.cell(row=row, column=1, value=s.site.nom)
+        ws.cell(row=row, column=2, value=s.produit.code)
+        ws.cell(row=row, column=3, value=s.produit.designation)
+        ws.cell(row=row, column=4, value=0)
+        ws.cell(row=row, column=5, value=int(s.stock_securite))
+        cell_j = ws.cell(row=row, column=6, value=jours)
         if jours is not None:
             if jours >= 7:
                 cell_j.fill = rouge

@@ -1,6 +1,6 @@
 {% extends "base.html" %}
-{% block titre %}Réceptions école — LEPAD{% endblock %}
-{% block lieu %}Approvisionnement — Réceptions école{% endblock %}
+{% block titre %}Réceptions site — FAMIEN{% endblock %}
+{% block lieu %}Approvisionnement — Réceptions site{% endblock %}
 
 {% block contenu %}
 <style>
@@ -10,7 +10,7 @@
 .admin-entete h1{color:#6b7280}
 </style>
 <div class="admin-entete">
-  <h1>Réceptions école</h1>
+  <h1>Réceptions site</h1>
 </div>
 
 <form method="get" class="finance-filtres" data-live-filter>
@@ -38,7 +38,7 @@
   {% endif %}
   {% if ecoles %}
   <div class="filtre-champ filtre-champ--large">
-    <label>École</label>
+    <label>Site</label>
     <select name="ecole" id="rec-filtre-ecole">
       <option value="">Toutes</option>
       {% for e in ecoles %}
@@ -89,7 +89,7 @@ document.addEventListener('DOMContentLoaded', function () {
   <thead>
     <tr>
       <th>Réception</th>
-      {% if supervision %}<th>École</th>{% endif %}
+      {% if supervision %}<th>Site</th>{% endif %}
       <th>Type</th>
       <th>Statut</th>
       <th>Dernière mise à jour</th>

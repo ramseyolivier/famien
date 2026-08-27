@@ -18,7 +18,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from catalogue.models import CategorieProduit, Produit, PrixEcole
-from core.models import Commune, Profil, Site, TypeSite, Utilisateur
+from core.models import Profil, Site, Utilisateur
 from kits.models import Kit, Niveau
 from stock.models import SoldeStock
 from stock.services import references_sous_seuil
@@ -210,7 +210,7 @@ def file_livraison(request):
     u = request.user
     if not u.peut_voir_ventes():
         return redirect("hub_stock")
-    sites = u.sites_autorises().filter(type=TypeSite.ECOLE)
+    sites = u.sites_autorises()
     attente = (
         Vente.objects.filter(ecole__in=sites, statut=StatutVente.EN_ATTENTE)
         .select_related("ecole", "vendeuse")
@@ -273,7 +273,6 @@ def recu(request, uuid):
     peut_demander_annulation = (
         v.statut != StatutVente.ANNULEE
         and not v.annulation_demandee
-        and request.user.profil == Profil.COMMERCIAL
         and v.vendeuse_id == request.user.pk
     )
     return render(request, "ventes/recu.html", {
@@ -333,34 +332,18 @@ def tableau_bord(request):
 
 
 def _ecoles_perimetre(user):
-    """Écoles dont cet utilisateur peut consulter les ventes."""
-    if user.acces_national:
-        return Site.objects.filter(type=TypeSite.ECOLE)
-    if user.profil == Profil.SUPERVISEUR and user.commune_id:
-        return Site.objects.filter(type=TypeSite.ECOLE, commune_id=user.commune_id)
-    if user.profil == Profil.GEST_MAGASIN and user.site_id:
-        return Site.objects.filter(type=TypeSite.ECOLE, magasin_rattachement_id=user.site_id)
-    if user.site_id:
-        return Site.objects.filter(pk=user.site_id)
-    return Site.objects.none()
+    """Sites dont cet utilisateur peut consulter les ventes."""
+    return user.sites_autorises().filter(actif=True)
 
 
 def _sites_perimetre(user):
     """Sites dont cet utilisateur peut consulter le stock."""
-    if user.acces_national:
-        return Site.objects.all()
-    if user.profil == Profil.SUPERVISEUR and user.commune_id:
-        return Site.objects.filter(commune_id=user.commune_id)
-    if user.site_id:
-        return Site.objects.filter(pk=user.site_id)
-    return Site.objects.none()
+    return user.sites_autorises()
 
 
 def _perimetre_label(user):
     if user.acces_national:
         return "national"
-    if user.commune:
-        return user.commune.nom
     if user.site:
         return user.site.nom
     return "—"
@@ -382,8 +365,8 @@ def historique_ventes(request):
         .order_by("-horodatage")
     )
 
-    # Caissières : uniquement leurs propres ventes
-    if u.profil == Profil.COMMERCIAL:
+    # Les utilisateurs qui peuvent vendre ne voient que leurs propres ventes
+    if u.peut_vendre() and not u.profil == Profil.DG:
         qs = qs.filter(vendeuse=u)
 
     # Filtres via GET
@@ -391,9 +374,6 @@ def historique_ventes(request):
     fin        = request.GET.get("fin", "")
     statut     = request.GET.get("statut", "")
     ecole_id   = request.GET.get("ecole", "")
-    commune_id = request.GET.get("commune", "")
-
-    communes = Commune.objects.filter(sites__in=ecoles, sites__type=TypeSite.ECOLE).distinct().order_by("nom")
 
     if debut:
         try:
@@ -407,9 +387,6 @@ def historique_ventes(request):
             fin = ""
     if statut:
         qs = qs.filter(statut=statut)
-    if commune_id.isdigit():
-        qs = qs.filter(ecole__commune_id=commune_id)
-        ecoles = ecoles.filter(commune_id=commune_id)
     if ecole_id.isdigit():
         qs = qs.filter(ecole_id=ecole_id)
 
@@ -426,17 +403,17 @@ def historique_ventes(request):
         "page": page,
         "ecoles": ecoles_list,
         "ecole_unique": ecole_unique,
-        "communes": communes,
+        "communes": [],
         "statuts": [
             (StatutVente.LIVREE, "Payée"),
             (StatutVente.ANNULEE, "Annulée"),
         ],
-        "filtres": {"debut": debut, "fin": fin, "statut": statut, "ecole": ecole_id, "commune": commune_id},
+        "filtres": {"debut": debut, "fin": fin, "statut": statut, "ecole": ecole_id, "commune": ""},
         "total": total,
         "nb": nb,
         "perimetre": _perimetre_label(u),
-        "caissiere": u.profil == Profil.COMMERCIAL,
-        "multi_communes": communes.count() > 1,
+        "caissiere": False,
+        "multi_communes": False,
     })
 
 
@@ -450,33 +427,28 @@ def stock_articles(request):
 
     soldes = (
         SoldeStock.objects.filter(site__in=sites)
-        .select_related("site", "site__commune", "produit", "produit__categorie")
+        .select_related("site", "produit", "produit__categorie")
         .order_by("produit__code", "site__nom")
     )
 
-    all_sites = list(sites.select_related("commune").order_by("nom"))
+    all_sites = list(sites.order_by("nom"))
     site_unique = all_sites[0] if len(all_sites) == 1 else None
 
-    commune_id = request.GET.get("commune", "")
     site_param = request.GET.get("site")
     if site_param is None:
-        if u.profil in {Profil.DG, Profil.MANAGER} or u.is_superuser:
-            # DG/Manager : dépôt général par défaut
-            from core.models import TypeSite as _TypeSite
-            depot = Site.objects.filter(type=_TypeSite.DEPOT, actif=True).first()
-            site_id = str(depot.pk) if depot else ""
+        if u.is_superuser or u.profil == Profil.DG:
+            site_id = ""
         elif u.site_id and sites.filter(pk=u.site_id).exists():
             site_id = str(u.site_id)
         else:
             site_id = ""
     else:
         site_id = site_param or ""
+    commune_id = ""
     categorie_id = request.GET.get("categorie", "")
     etat = request.GET.get("etat", "")
     produit_id = request.GET.get("produit", "")
 
-    if commune_id.isdigit():
-        soldes = soldes.filter(site__commune_id=commune_id)
     if site_id.isdigit():
         soldes = soldes.filter(site_id=site_id)
     if categorie_id.isdigit():
@@ -494,12 +466,10 @@ def stock_articles(request):
     if produit_id.isdigit():
         soldes = soldes.filter(produit_id=produit_id)
 
-    # Sites du dropdown : restreints à la commune sélectionnée si applicable
-    sites_dropdown = [s for s in all_sites if not commune_id.isdigit() or str(s.commune_id) == commune_id]
+    sites_dropdown = all_sites
 
     produits = Produit.objects.filter(actif=True).order_by("code")
     total = soldes.aggregate(t=Sum("quantite"))["t"] or 0
-    communes = Commune.objects.filter(sites__in=sites).distinct().order_by("nom")
 
     # Avoirs ouverts par (produit, site) pour la colonne Avoir
     from django.db.models import OuterRef, Subquery
@@ -518,9 +488,9 @@ def stock_articles(request):
     )
     soldes = soldes.annotate(quantite_avoir=Subquery(avoirs_qs[:1]))
 
-    # La colonne Dû (avoirs) ne concerne que les sites écoles
-    peut_voir_du = u.profil != Profil.GEST_MAGASIN
-    peut_voir_valeur = u.profil in {Profil.MANAGER, Profil.DG} or u.is_superuser
+    # La colonne Dû (avoirs) est visible par tous
+    peut_voir_du = True
+    peut_voir_valeur = u.profil == Profil.DG or u.is_superuser
     if peut_voir_valeur:
         soldes = soldes.annotate(
             valeur_stock=ExpressionWrapper(
@@ -541,9 +511,9 @@ def stock_articles(request):
         "site_unique": site_unique,
         "produits": produits,
         "categories": CategorieProduit.objects.all(),
-        "communes": communes,
+        "communes": [],
         "filtres": {
-            "commune": commune_id,
+            "commune": "",
             "site": site_id,
             "categorie": categorie_id,
             "etat": etat,
@@ -563,26 +533,21 @@ def stock_articles(request):
 @login_required
 def stock_kits(request):
     u = request.user
-    if u.profil == Profil.GEST_MAGASIN:
-        return redirect("hub_stock")
 
-    toutes_ecoles = _ecoles_perimetre(u).filter(actif=True).select_related("commune").order_by("nom")
+    toutes_ecoles = _ecoles_perimetre(u).order_by("nom")
     toutes_ecoles_list = list(toutes_ecoles)
     ecole_unique = toutes_ecoles_list[0] if len(toutes_ecoles_list) == 1 else None
 
-    commune_id = request.GET.get("commune", "")
     ecole_id = request.GET.get("ecole", "")
     niveau_filtre = request.GET.get("niveau", "")
     classe_id = request.GET.get("classe", "")
     non_constructibles = request.GET.get("nc", "")
 
     ecoles_filtrees = toutes_ecoles
-    if commune_id.isdigit():
-        ecoles_filtrees = ecoles_filtrees.filter(commune_id=commune_id)
     if ecole_id:
         ecoles_filtrees = ecoles_filtrees.filter(pk=ecole_id)
 
-    magasin_stock = u.site if u.profil == Profil.GEST_MAGASIN else None
+    magasin_stock = None
 
     donnees = []
     for ecole in ecoles_filtrees:
@@ -596,11 +561,7 @@ def stock_kits(request):
         if kits:
             donnees.append({"ecole": ecole, "kits": kits})
 
-    communes = Commune.objects.filter(
-        sites__in=toutes_ecoles, sites__type=TypeSite.ECOLE
-    ).distinct().order_by("nom")
-    ecoles_dropdown = [e for e in toutes_ecoles_list
-                       if not commune_id.isdigit() or str(e.commune_id) == commune_id]
+    ecoles_dropdown = toutes_ecoles_list
 
     # Classes du périmètre, filtrées par niveau si sélectionné
     from kits.models import ClasseEcole
@@ -614,11 +575,11 @@ def stock_kits(request):
         "perimetre": _perimetre_label(u),
         "toutes_ecoles": ecoles_dropdown,
         "ecole_unique": ecole_unique,
-        "communes": communes,
+        "communes": [],
         "niveaux": Niveau.choices,
         "classes": classes_dropdown,
         "filtres": {
-            "commune": commune_id,
+            "commune": "",
             "ecole": ecole_id,
             "niveau": niveau_filtre,
             "classe": classe_id,
@@ -647,8 +608,8 @@ def facture_vente(request, uuid):
         messages.error(request, "Facture hors de votre périmètre.")
         return redirect("historique_ventes")
 
-    # Caissières : uniquement leurs propres factures
-    if request.user.profil == Profil.COMMERCIAL and v.vendeuse_id != request.user.pk:
+    # Les utilisateurs non-DG ne peuvent consulter que leurs propres factures si caissier
+    if request.user.profil == Profil.CHEF_EQUIPE and v.vendeuse_id != request.user.pk and not request.user.peut_acceder_au_site(v.ecole):
         messages.error(request, "Vous ne pouvez consulter que vos propres factures.")
         return redirect("historique_ventes")
 
@@ -661,7 +622,6 @@ def facture_vente(request, uuid):
     peut_demander_annulation = (
         v.statut != StatutVente.ANNULEE
         and not v.annulation_demandee
-        and request.user.profil == Profil.COMMERCIAL
         and v.vendeuse_id == request.user.pk
     )
     peut_rejeter_annulation = (
@@ -713,8 +673,8 @@ def vente_annuler(request, uuid):
 
 @login_required
 def vente_demander_annulation(request, uuid):
-    """Le commercial soumet une demande d'annulation au chef d'équipe."""
-    if request.user.profil != Profil.COMMERCIAL:
+    """Le caissier soumet une demande d'annulation au chef d'équipe."""
+    if not request.user.peut_vendre():
         messages.error(request, "Accès réservé à la caisse.")
         return redirect("facture_vente", uuid=uuid)
     v = get_object_or_404(Vente, uuid=uuid)
@@ -778,12 +738,11 @@ def demandes_annulation(request):
 def historique_annulations(request):
     """Vue unifiée : demandes en attente (chef d'équipe) + historique des annulations."""
     u = request.user
-    if u.profil not in (Profil.CHEF_EQUIPE, Profil.SUPERVISEUR, Profil.DG, Profil.MANAGER) and not u.is_superuser:
+    if u.profil not in (Profil.CHEF_EQUIPE, Profil.DG) and not u.is_superuser:
         messages.error(request, "Accès non autorisé.")
         return redirect("hub_ventes")
 
-    ecoles = u.sites_autorises().filter(type=TypeSite.ECOLE)
-    communes = Commune.objects.filter(sites__in=ecoles).distinct().order_by("nom")
+    ecoles = u.sites_autorises()
 
     peut_traiter = u.profil == Profil.CHEF_EQUIPE or u.is_superuser
     demandes = (
@@ -803,16 +762,12 @@ def historique_annulations(request):
 
     debut      = request.GET.get("debut", "")
     fin        = request.GET.get("fin", "")
-    commune_id = request.GET.get("commune", "")
     ecole_id   = request.GET.get("ecole", "")
 
     if debut:
         qs = qs.filter(annulee_le__date__gte=debut)
     if fin:
         qs = qs.filter(annulee_le__date__lte=fin)
-    if commune_id.isdigit():
-        qs = qs.filter(ecole__commune_id=commune_id)
-        ecoles = ecoles.filter(commune_id=commune_id)
     if ecole_id.isdigit():
         qs = qs.filter(ecole_id=ecole_id)
 
@@ -823,10 +778,10 @@ def historique_annulations(request):
         "nb_demandes": demandes.count(),
         "annulations": qs[:200],
         "ecoles": ecoles_list,
-        "communes": communes,
-        "filtres": {"debut": debut, "fin": fin, "commune": commune_id, "ecole": ecole_id},
+        "communes": [],
+        "filtres": {"debut": debut, "fin": fin, "commune": "", "ecole": ecole_id},
         "nb": qs.count(),
-        "multi_communes": communes.count() > 1,
+        "multi_communes": False,
         "peut_traiter": peut_traiter,
     })
 
@@ -886,29 +841,21 @@ def finances_entrees_sorties(request):
 
     u          = request.user
     ecoles     = _ecoles_perimetre(u)
-    tous_sites = u.sites_autorises().select_related("commune")
+    tous_sites = u.sites_autorises()
 
     debut      = request.GET.get("debut", "")
     fin        = request.GET.get("fin", "")
-    commune_id = request.GET.get("commune", "")
+    commune_id = ""
     site_id    = request.GET.get("site", "")
     mode_f     = request.GET.get("mode", "")
 
-    communes   = Commune.objects.filter(sites__in=tous_sites).distinct().order_by("nom")
-
-    if commune_id.isdigit():
-        sites_dispo = tous_sites.filter(commune_id=commune_id).order_by("nom")
-        ecoles      = ecoles.filter(commune_id=commune_id)
-    else:
-        sites_dispo = tous_sites.order_by("nom")
+    sites_dispo = tous_sites.order_by("nom")
 
     dep_sites = tous_sites
     filtre_sup = site_id == "__sup__"
     if site_id.isdigit():
         ecoles    = ecoles.filter(pk=site_id)
         dep_sites = tous_sites.filter(pk=site_id)
-    elif commune_id.isdigit():
-        dep_sites = tous_sites.filter(commune_id=commune_id)
 
     # ── Entrées (ventes) ──────────────────────────────────────
     ventes_qs = (
@@ -948,21 +895,12 @@ def finances_entrees_sorties(request):
 
     # ── Sorties (dépenses) ───────────────────────────────────
     from django.db.models import Q as _Q
-    from core.models import Profil as _Profil
-    peut_voir_dep_sup = u.profil in {_Profil.SUPERVISEUR, _Profil.MANAGER, _Profil.DG} or u.is_superuser
-    communes_perimetre = dep_sites.values_list("commune_id", flat=True).distinct()
-    if filtre_sup and peut_voir_dep_sup:
-        _dep_q = _Q(site__isnull=True, cree_par__commune_id__in=communes_perimetre)
-    elif site_id.isdigit():
-        _dep_q = _Q(site__in=dep_sites)
-    elif peut_voir_dep_sup:
-        _dep_q = _Q(site__in=dep_sites) | _Q(site__isnull=True, cree_par__commune_id__in=communes_perimetre)
-    else:
-        _dep_q = _Q(site__in=dep_sites)
+    peut_voir_dep_sup = u.profil == Profil.DG or u.is_superuser
+    _dep_q = _Q(site__in=dep_sites)
 
     dep_qs = (
         Depense.objects.filter(_dep_q)
-        .select_related("site", "categorie", "cree_par", "cree_par__commune")
+        .select_related("site", "categorie", "cree_par")
         .order_by("-date_depense", "-pk")
     )
     dep_valide_qs = Depense.objects.filter(_dep_q, statut=StatutDepense.CONFIRME)
@@ -996,13 +934,13 @@ def finances_entrees_sorties(request):
         "total_sorties":     total_sorties_aff,
         "total_sorties_val": total_sorties_val,
         "solde":             solde,
-        "filtres":           {"debut": debut, "fin": fin, "commune": commune_id, "site": site_id, "mode": mode_f},
+        "filtres":           {"debut": debut, "fin": fin, "commune": "", "site": site_id, "mode": mode_f},
         "modes_paiement":    ModePaiement.choices,
         "sites_dispo":       sites_dispo,
-        "communes":          communes,
-        "multi_communes":    communes.count() > 1,
+        "communes":          [],
+        "multi_communes":    False,
         "peut_voir_dep_sup": peut_voir_dep_sup,
-        "libelle_sup":       (communes.get(pk=commune_id).nom if commune_id.isdigit() and communes.filter(pk=commune_id).exists() else None),
+        "libelle_sup":       None,
     })
 
 
@@ -1014,29 +952,20 @@ def finances_entrees_sorties_export(request):
     from openpyxl.styles import Alignment, Font, PatternFill
     from openpyxl.utils import get_column_letter
     from depenses.models import Depense, StatutDepense
-    from django.db.models import Q as _Q
-    from core.models import Profil as _Profil
 
     u          = request.user
     ecoles     = _ecoles_perimetre(u)
-    tous_sites = u.sites_autorises().select_related("commune")
+    tous_sites = u.sites_autorises()
 
     debut      = request.GET.get("debut", "")
     fin        = request.GET.get("fin", "")
-    commune_id = request.GET.get("commune", "")
     site_id    = request.GET.get("site", "")
     mode_f     = request.GET.get("mode", "")
 
-    if commune_id.isdigit():
-        ecoles = ecoles.filter(commune_id=commune_id)
-
     dep_sites  = tous_sites
-    filtre_sup = site_id == "__sup__"
     if site_id.isdigit():
         ecoles    = ecoles.filter(pk=site_id)
         dep_sites = tous_sites.filter(pk=site_id)
-    elif commune_id.isdigit():
-        dep_sites = tous_sites.filter(commune_id=commune_id)
 
     # Entrées
     ventes_qs = (
@@ -1060,18 +989,9 @@ def finances_entrees_sorties_export(request):
     finances = list(_finance_annotee(ventes_qs).order_by("-horodatage"))
 
     # Sorties
-    peut_voir_dep_sup  = u.profil in {_Profil.SUPERVISEUR, _Profil.MANAGER, _Profil.DG} or u.is_superuser
-    communes_perimetre = dep_sites.values_list("commune_id", flat=True).distinct()
-    if filtre_sup and peut_voir_dep_sup:
-        _dep_q = _Q(site__isnull=True, cree_par__commune_id__in=communes_perimetre)
-    elif site_id.isdigit():
-        _dep_q = _Q(site__in=dep_sites)
-    elif peut_voir_dep_sup:
-        _dep_q = _Q(site__in=dep_sites) | _Q(site__isnull=True, cree_par__commune_id__in=communes_perimetre)
-    else:
-        _dep_q = _Q(site__in=dep_sites)
+    _dep_q = _Q(site__in=dep_sites)
 
-    dep_qs = Depense.objects.filter(_dep_q).select_related("site", "cree_par__commune").order_by("-date_depense")
+    dep_qs = Depense.objects.filter(_dep_q).select_related("site", "cree_par").order_by("-date_depense")
     if debut:
         try:
             dep_qs = dep_qs.filter(date_depense__gte=date_cls.fromisoformat(debut))
@@ -1093,7 +1013,7 @@ def finances_entrees_sorties_export(request):
     # Feuille Entrées
     ws_e = wb.active
     ws_e.title = "Entrées"
-    entetes_e = ["Date", "École", "N° vente", "Articles", "Espèces", "Mobile", "Autre", "Total"]
+    entetes_e = ["Date", "Site", "N° vente", "Articles", "Espèces", "Mobile", "Autre", "Total"]
     for col, titre in enumerate(entetes_e, 1):
         c = ws_e.cell(row=1, column=col, value=titre)
         c.font = HEADER; c.fill = FILL_E; c.alignment = CENTER
@@ -1119,8 +1039,6 @@ def finances_entrees_sorties_export(request):
     for row, dep in enumerate(depenses, 2):
         if dep.site:
             site_str = dep.site.nom
-        elif dep.cree_par.commune:
-            site_str = dep.cree_par.commune.nom
         else:
             site_str = dep.cree_par.get_full_name()
         montant = float(dep.montant_confirme if dep.statut == "CONFIRME" and dep.montant_confirme is not None else dep.montant)
@@ -1148,17 +1066,11 @@ def finances_ventes(request):
         return redirect("hub_stock")
     ecoles = _ecoles_perimetre(u)
 
-    communes = Commune.objects.filter(sites__in=ecoles, sites__type=TypeSite.ECOLE).distinct().order_by("nom")
-
     debut      = request.GET.get("debut", "")
     fin        = request.GET.get("fin", "")
     mode_f     = request.GET.get("mode", "")
     type_f     = request.GET.get("type", "")
-    commune_id = request.GET.get("commune", "")
     ecole_id   = request.GET.get("ecole", "")
-
-    if commune_id.isdigit():
-        ecoles = ecoles.filter(commune_id=commune_id)
 
     qs = (
         Vente.objects.filter(ecole__in=ecoles)
@@ -1206,13 +1118,13 @@ def finances_ventes(request):
     return render(request, "ventes/finances.html", {
         "finances":       finances,
         "totaux":         totaux,
-        "filtres":        {"debut": debut, "fin": fin, "mode": mode_f, "type": type_f, "commune": commune_id, "ecole": ecole_id},
+        "filtres":        {"debut": debut, "fin": fin, "mode": mode_f, "type": type_f, "commune": "", "ecole": ecole_id},
         "modes_paiement": ModePaiement.choices,
         "perimetre":      _perimetre_label(u),
         "ecoles":         ecoles_list,
         "ecole_unique":   ecole_unique,
-        "communes":       communes,
-        "multi_communes": communes.count() > 1,
+        "communes":       [],
+        "multi_communes": False,
     })
 
 
@@ -1220,7 +1132,7 @@ def finances_ventes(request):
 def clotures_liste(request):
     if not request.user.peut_voir_ventes():
         return redirect("hub_stock")
-    sites = request.user.sites_autorises().filter(type=TypeSite.ECOLE)
+    sites = request.user.sites_autorises()
     qs = (
         ClotureCaisse.objects
         .filter(ecole__in=sites)
@@ -1239,21 +1151,21 @@ def cloturer_caisse(request):
     if request.user.profil != Profil.CHEF_EQUIPE:
         messages.error(request, "Seul le chef d'équipe peut clôturer la caisse.")
         return redirect("clotures_liste")
-    sites = request.user.sites_autorises().filter(type=TypeSite.ECOLE)
+    sites = request.user.sites_autorises()
 
     if request.method == "POST":
         site_id = request.POST.get("ecole")
         date_str = request.POST.get("date")
         observations = request.POST.get("observations", "")
         if not sites.filter(pk=site_id).exists():
-            messages.error(request, "École non autorisée.")
+            messages.error(request, "Site non autorisé.")
         else:
             try:
                 date = date_cls.fromisoformat(date_str)
             except (ValueError, TypeError):
                 date = timezone.localdate()
             if ClotureCaisse.objects.filter(ecole_id=site_id, date=date).exists():
-                messages.error(request, "Une clôture existe déjà pour cette école et cette date.")
+                messages.error(request, "Une clôture existe déjà pour ce site et cette date.")
             else:
                 ventes_jour = (
                     Vente.objects
@@ -1299,13 +1211,7 @@ def hub_finances(request):
     )
     from depenses.models import StatutVersement, Versement
     from django.db.models import Q as _Q
-    from core.models import Profil as _Profil
-    _communes = sites.values_list("commune_id", flat=True).distinct()
-    _peut_voir_sup = u.profil in {_Profil.SUPERVISEUR, _Profil.MANAGER, _Profil.DG} or u.is_superuser
-    if _peut_voir_sup:
-        _dep_q = _Q(site__in=sites) | _Q(site__isnull=True, cree_par__commune_id__in=_communes)
-    else:
-        _dep_q = _Q(site__in=sites)
+    _dep_q = _Q(site__in=sites)
     depenses_total = (
         Depense.objects.filter(_dep_q, statut=StatutDepense.CONFIRME)
         .aggregate(t=Sum("montant_confirme"))["t"] or 0
@@ -1337,7 +1243,7 @@ def hub_finances(request):
 def versements_liste(request):
     from depenses.models import Depense, StatutDepense, StatutVersement, Versement
     u = request.user
-    if u.profil not in (Profil.CHEF_EQUIPE, Profil.SUPERVISEUR, Profil.DG, Profil.MANAGER) and not u.is_superuser:
+    if u.profil not in (Profil.CHEF_EQUIPE, Profil.DG) and not u.is_superuser:
         return redirect("hub_finances")
 
     # Filtres pour les versements effectués
@@ -1351,10 +1257,10 @@ def versements_liste(request):
     rdebut_f  = request.GET.get("rdebut", "")
     rfin_f    = request.GET.get("rfin", "")
 
-    # DG et Manager partagent une caisse commune — on agrège sur les deux profils
-    est_dg_manager = u.profil in (Profil.DG, Profil.MANAGER) or u.is_superuser
+    # DG partage une caisse commune — on agrège sur tous les DG
+    est_dg_manager = u.profil == Profil.DG or u.is_superuser
     if est_dg_manager:
-        dg_managers = Utilisateur.objects.filter(profil__in=[Profil.DG, Profil.MANAGER], is_active=True)
+        dg_managers = Utilisateur.objects.filter(profil=Profil.DG, is_active=True)
         verseur_q      = Q(verseur__in=dg_managers)
         destinataire_q = Q(destinataire__in=dg_managers)
     else:
@@ -1400,7 +1306,7 @@ def versements_liste(request):
     collecte_total = 0
     depenses_total = 0
     if u.profil == Profil.CHEF_EQUIPE:
-        ecoles = u.sites_autorises().filter(type=TypeSite.ECOLE)
+        ecoles = u.sites_autorises()
         collecte_total = (
             Vente.objects.filter(ecole__in=ecoles)
             .exclude(statut=StatutVente.ANNULEE)
@@ -1408,11 +1314,6 @@ def versements_liste(request):
         )
         depenses_total = (
             Depense.objects.filter(site__in=ecoles, statut=StatutDepense.CONFIRME)
-            .aggregate(t=Sum("montant_confirme"))["t"] or 0
-        )
-    elif u.profil == Profil.SUPERVISEUR:
-        depenses_total = (
-            Depense.objects.filter(cree_par=u, statut=StatutDepense.CONFIRME)
             .aggregate(t=Sum("montant_confirme"))["t"] or 0
         )
     elif est_dg_manager:
@@ -1438,8 +1339,8 @@ def versements_liste(request):
         "verse_banque": verse_banque,
         "solde_en_main": solde_en_main,
         "est_chef": u.profil == Profil.CHEF_EQUIPE,
-        "est_superviseur": u.profil == Profil.SUPERVISEUR,
-        "est_dg": u.profil in (Profil.DG, Profil.MANAGER) or u.is_superuser,
+        "est_superviseur": False,
+        "est_dg": u.profil == Profil.DG or u.is_superuser,
         "dest_envoyes": dest_envoyes,
         "filtres":  {"statut": statut_f,  "debut": debut_f,  "fin": fin_f, "vers": vers_f},
         "filtres_r": {"statut": rstatut_f, "debut": rdebut_f, "fin": rfin_f},
@@ -1450,20 +1351,20 @@ def versements_liste(request):
 def versement_nouveau(request):
     from depenses.models import Depense, ModeVersement, StatutDepense, StatutVersement, Versement
     u = request.user
-    profils_autorises = (Profil.CHEF_EQUIPE, Profil.SUPERVISEUR, Profil.MANAGER, Profil.DG)
+    profils_autorises = (Profil.CHEF_EQUIPE, Profil.DG)
     if u.profil not in profils_autorises and not u.is_superuser:
         return redirect("versements_liste")
 
     # Calcul du solde disponible — EN_ATTENTE compte comme déjà parti
     statuts_engages = [StatutVersement.CONFIRME, StatutVersement.EN_ATTENTE]
-    est_dg_manager = u.profil in (Profil.DG, Profil.MANAGER) or u.is_superuser
+    est_dg_manager = u.profil == Profil.DG or u.is_superuser
 
     if u.profil == Profil.CHEF_EQUIPE:
         verse_engage = (
             Versement.objects.filter(verseur=u, statut__in=statuts_engages)
             .aggregate(t=Sum("montant"))["t"] or 0
         )
-        ecoles = u.sites_autorises().filter(type=TypeSite.ECOLE)
+        ecoles = u.sites_autorises()
         collecte = (
             Vente.objects.filter(ecole__in=ecoles)
             .exclude(statut=StatutVente.ANNULEE)
@@ -1474,23 +1375,9 @@ def versement_nouveau(request):
             .aggregate(t=Sum("montant_confirme"))["t"] or 0
         )
         solde_disponible = collecte - verse_engage - depenses
-    elif u.profil == Profil.SUPERVISEUR:
-        verse_engage = (
-            Versement.objects.filter(verseur=u, statut__in=statuts_engages)
-            .aggregate(t=Sum("montant"))["t"] or 0
-        )
-        recu_confirme = (
-            Versement.objects.filter(destinataire=u, statut=StatutVersement.CONFIRME)
-            .aggregate(t=Sum("montant"))["t"] or 0
-        )
-        depenses = (
-            Depense.objects.filter(cree_par=u, statut=StatutDepense.CONFIRME)
-            .aggregate(t=Sum("montant_confirme"))["t"] or 0
-        )
-        solde_disponible = recu_confirme - verse_engage - depenses
     else:
-        # DG/Manager : caisse commune agrégée sur tous les DG/Manager
-        dg_managers = Utilisateur.objects.filter(profil__in=[Profil.DG, Profil.MANAGER], is_active=True)
+        # DG : caisse commune agrégée sur tous les DG
+        dg_managers = Utilisateur.objects.filter(profil=Profil.DG, is_active=True)
         verse_engage = (
             Versement.objects.filter(verseur__in=dg_managers, statut__in=statuts_engages)
             .aggregate(t=Sum("montant"))["t"] or 0
@@ -1506,18 +1393,11 @@ def versement_nouveau(request):
         solde_disponible = recu_confirme - verse_engage - depenses
 
     # Destinataires selon le profil
-    # CHEF_EQUIPE → superviseur de la commune ; SUPERVISEUR → DG/Manager OU banque ;
-    # MANAGER/DG → banque uniquement (sortie sans destinataire humain)
-    vers_banque_seulement = u.profil in (Profil.DG, Profil.MANAGER) or u.is_superuser
+    # CHEF_EQUIPE → DG ; DG → banque uniquement (sortie sans destinataire humain)
+    vers_banque_seulement = u.profil == Profil.DG or u.is_superuser
     if u.profil == Profil.CHEF_EQUIPE:
-        commune = u.site.commune if u.site_id and u.site.commune_id else None
-        qs = Utilisateur.objects.filter(profil=Profil.SUPERVISEUR, is_active=True)
-        if commune:
-            qs = qs.filter(commune=commune)
-        destinataires = list(qs.order_by("last_name", "first_name"))
-    elif u.profil == Profil.SUPERVISEUR:
         destinataires = list(
-            Utilisateur.objects.filter(profil__in=[Profil.DG, Profil.MANAGER], is_active=True)
+            Utilisateur.objects.filter(profil=Profil.DG, is_active=True)
             .order_by("last_name", "first_name")
         )
     else:
@@ -1584,7 +1464,7 @@ def versement_nouveau(request):
         "today": timezone.localdate().isoformat(),
         "solde_disponible": solde_disponible,
         "vers_banque_seulement": vers_banque_seulement,
-        "peut_vers_banque": u.profil in (Profil.SUPERVISEUR, Profil.DG, Profil.MANAGER) or u.is_superuser,
+        "peut_vers_banque": u.profil == Profil.DG or u.is_superuser,
     })
 
 
@@ -1598,7 +1478,7 @@ def versement_detail(request, pk):
         pk=pk,
     )
     if v.verseur_id != u.pk and (v.destinataire_id is None or v.destinataire_id != u.pk):
-        if u.profil not in {Profil.MANAGER, Profil.DG} and not u.is_superuser:
+        if u.profil != Profil.DG and not u.is_superuser:
             messages.error(request, "Accès refusé.")
             return redirect("versements_liste")
     return render(request, "finances/versement_detail.html", {"v": v})
@@ -1652,7 +1532,7 @@ def versements_global(request):
     from depenses.models import StatutVersement, Versement
 
     u = request.user
-    if u.profil not in (Profil.DG, Profil.MANAGER) and not u.is_superuser:
+    if u.profil != Profil.DG and not u.is_superuser:
         return redirect("versements_liste")
 
     statut_f = request.GET.get("statut", "")
@@ -1716,9 +1596,9 @@ def versements_export(request):
     debut_f  = request.GET.get("debut", "")
     fin_f    = request.GET.get("fin", "")
 
-    est_dg_manager = u.profil in (Profil.DG, Profil.MANAGER) or u.is_superuser
+    est_dg_manager = u.profil == Profil.DG or u.is_superuser
     if est_dg_manager:
-        dg_managers = Utilisateur.objects.filter(profil__in=[Profil.DG, Profil.MANAGER], is_active=True)
+        dg_managers = Utilisateur.objects.filter(profil=Profil.DG, is_active=True)
 
     if section == "global":
         qs = Versement.objects.select_related("verseur", "destinataire").order_by("-cree_le")
@@ -1822,14 +1702,12 @@ def rapport_financier(request):
         fin = debut
 
     # ── Périmètre ────────────────────────────────────────────────
-    ecoles = u.sites_autorises().filter(type=TypeSite.ECOLE).select_related("commune")
+    ecoles = u.sites_autorises()
 
-    sups_qs = Utilisateur.objects.filter(profil=Profil.SUPERVISEUR, is_active=True).select_related("commune").order_by("last_name", "first_name")
-    if not u.acces_national:
-        sups_qs = sups_qs.filter(commune_id=u.commune_id) if u.commune_id else sups_qs.none()
+    sups_qs = Utilisateur.objects.none()
 
     dgs_qs = (
-        Utilisateur.objects.filter(profil__in=[Profil.DG, Profil.MANAGER], is_active=True, site__isnull=True).order_by("last_name", "first_name")
+        Utilisateur.objects.filter(profil=Profil.DG, is_active=True, site__isnull=True).order_by("last_name", "first_name")
         if u.acces_national else Utilisateur.objects.none()
     )
 
@@ -1865,7 +1743,7 @@ def rapport_financier(request):
         enc_t2 = agg(Vente.objects.filter(ecole=ecole).exclude(statut=StatutVente.ANNULEE), "montant_total")
         vd_t2  = agg(Versement.objects.filter(verseur__site=ecole, statut=StatutVersement.CONFIRME))
         dep_t2 = agg(Depense.objects.filter(site=ecole, statut=StatutDepense.CONFIRME), "montant_confirme")
-        detail_ecoles.append({"nom": ecole.nom, "commune": ecole.commune.nom if ecole.commune else "", "encaisse": enc, "verse": vd, "en_main": enc_t2 - vd_t2 - dep_t2})
+        detail_ecoles.append({"nom": ecole.nom, "commune": "", "encaisse": enc, "verse": vd, "en_main": enc_t2 - vd_t2 - dep_t2})
 
     detail_sups = []
     for sup in sups_qs:
@@ -1875,7 +1753,7 @@ def rapport_financier(request):
             continue
         vr_t2 = agg(Versement.objects.filter(destinataire=sup, statut=StatutVersement.CONFIRME))
         vd_t2 = agg(Versement.objects.filter(verseur=sup, statut=StatutVersement.CONFIRME))
-        detail_sups.append({"nom": sup.get_full_name() or sup.username, "commune": sup.commune.nom if sup.commune else "", "recu": vr, "verse": vd, "en_main": vr_t2 - vd_t2})
+        detail_sups.append({"nom": sup.get_full_name() or sup.username, "commune": "", "recu": vr, "verse": vd, "en_main": vr_t2 - vd_t2})
 
     detail_dg = []
     for dg in dgs_qs:
@@ -1916,7 +1794,6 @@ def rapport_financier_export(request):
     debut_str  = request.GET.get("debut", "")
     fin_str    = request.GET.get("fin", "")
     site_id    = request.GET.get("site", "")
-    commune_id = request.GET.get("commune", "")
 
     try:
         debut = date_type.fromisoformat(debut_str) if debut_str else today
@@ -1927,11 +1804,9 @@ def rapport_financier_export(request):
     except ValueError:
         fin = today
 
-    sites_qs = u.sites_autorises().select_related("commune")
+    sites_qs = u.sites_autorises()
     if site_id:
         sites_qs = sites_qs.filter(pk=site_id)
-    if commune_id:
-        sites_qs = sites_qs.filter(commune_id=commune_id)
 
     wb = openpyxl.Workbook()
     ws = wb.active
@@ -1945,7 +1820,7 @@ def rapport_financier_export(request):
         c.alignment = Alignment(horizontal="center", vertical="center")
 
     for row, site in enumerate(sites_qs.order_by("type", "nom"), 2):
-        ventes_avant      = (Vente.objects.filter(ecole=site, horodatage__date__lt=debut).exclude(statut=StatutVente.ANNULEE).aggregate(t=Sum("montant_total"))["t"] or 0) if site.type == TypeSite.ECOLE else 0
+        ventes_avant      = (Vente.objects.filter(ecole=site, horodatage__date__lt=debut).exclude(statut=StatutVente.ANNULEE).aggregate(t=Sum("montant_total"))["t"] or 0)
         vers_declares_av  = (Versement.objects.filter(verseur__site=site, statut=StatutVersement.CONFIRME, date__lt=debut).aggregate(t=Sum("montant"))["t"] or 0)
         vers_recus_av     = (Versement.objects.filter(destinataire__site=site, statut=StatutVersement.CONFIRME, date__lt=debut).aggregate(t=Sum("montant"))["t"] or 0)
         dep_avant         = (Depense.objects.filter(site=site, statut=StatutDepense.CONFIRME, date_depense__lt=debut).aggregate(t=Sum("montant_confirme"))["t"] or 0)
@@ -1953,13 +1828,13 @@ def rapport_financier_export(request):
         vers_recus        = (Versement.objects.filter(destinataire__site=site, statut=StatutVersement.CONFIRME, date__gte=debut, date__lte=fin).aggregate(t=Sum("montant"))["t"] or 0)
         autres_sorties    = (Depense.objects.filter(site=site, statut=StatutDepense.CONFIRME, date_depense__gte=debut, date_depense__lte=fin).aggregate(t=Sum("montant_confirme"))["t"] or 0)
 
-        ventes_periode = (Vente.objects.filter(ecole=site, horodatage__date__gte=debut, horodatage__date__lte=fin).exclude(statut=StatutVente.ANNULEE).aggregate(t=Sum("montant_total"))["t"] or 0) if site.type == TypeSite.ECOLE else 0
+        ventes_periode = (Vente.objects.filter(ecole=site, horodatage__date__gte=debut, horodatage__date__lte=fin).exclude(statut=StatutVente.ANNULEE).aggregate(t=Sum("montant_total"))["t"] or 0)
         initial = ventes_avant + vers_recus_av - vers_declares_av - dep_avant
         final   = initial + ventes_periode + vers_recus - vers_declares - autres_sorties
 
         ws.cell(row=row, column=1, value=site.nom)
         ws.cell(row=row, column=2, value=site.get_type_display())
-        ws.cell(row=row, column=3, value=site.commune.nom if site.commune else "")
+        ws.cell(row=row, column=3, value="")
         ws.cell(row=row, column=4, value=float(initial))
         ws.cell(row=row, column=5, value=float(ventes_periode))
         ws.cell(row=row, column=6, value=float(vers_declares))
@@ -1991,7 +1866,6 @@ def finances_benefices(request):
 
     debut_str    = request.GET.get("debut", "")
     fin_str      = request.GET.get("fin", "")
-    commune_id_f = request.GET.get("commune", "")
     site_id_f    = request.GET.get("site", "")
 
     try:
@@ -2005,24 +1879,18 @@ def finances_benefices(request):
     if fin < debut:
         fin = debut
 
-    tous_sites = u.sites_autorises().select_related("commune")
+    tous_sites = u.sites_autorises()
 
     # Listes pour les menus déroulants
-    from core.models import Commune
-    communes_dispo = Commune.objects.filter(
-        pk__in=tous_sites.values("commune_id")
-    ).order_by("nom")
-    sites_dispo = tous_sites.order_by("commune__nom", "nom")
+    communes_dispo = []
+    sites_dispo = tous_sites.order_by("nom")
 
     # Application des filtres
-    if commune_id_f:
-        tous_sites = tous_sites.filter(commune_id=commune_id_f)
-        sites_dispo = sites_dispo.filter(commune_id=commune_id_f)
     if site_id_f:
         tous_sites = tous_sites.filter(pk=site_id_f)
 
-    ecoles     = tous_sites.filter(type=TypeSite.ECOLE)
-    sites_hors = tous_sites.exclude(type=TypeSite.ECOLE)
+    ecoles     = tous_sites
+    sites_hors = tous_sites.none()
 
     ventes_base = Vente.objects.filter(
         ecole__in=ecoles,
@@ -2036,16 +1904,8 @@ def finances_benefices(request):
         vente__horodatage__date__lte=fin,
     ).exclude(vente__statut=StatutVente.ANNULEE)
 
-    from django.db.models import Q as _Q
     _base_dep = dict(statut=StatutDepense.CONFIRME, date_depense__gte=debut, date_depense__lte=fin)
-    if site_id_f:
-        dep_all = Depense.objects.filter(site__in=tous_sites, **_base_dep)
-    else:
-        _communes_perim = tous_sites.values_list("commune_id", flat=True).distinct()
-        dep_all = Depense.objects.filter(
-            _Q(site__in=tous_sites) | _Q(site__isnull=True, cree_par__commune_id__in=_communes_perim),
-            **_base_dep,
-        )
+    dep_all = Depense.objects.filter(site__in=tous_sites, **_base_dep)
 
     recettes_map = {
         r["ecole_id"]: r["total"]
@@ -2074,14 +1934,14 @@ def finances_benefices(request):
     )
 
     lignes_ecoles = []
-    for ecole in ecoles.order_by("commune__nom", "nom"):
+    for ecole in ecoles.order_by("nom"):
         rec    = recettes_map.get(ecole.pk, 0) or 0
         cog    = cogs_map.get(ecole.pk, 0)
         dep    = dep_ecoles_map.get(ecole.pk, 0) or 0
         contrib = rec - cog - dep
         lignes_ecoles.append({
             "nom":     ecole.nom,
-            "commune": ecole.commune.nom if ecole.commune else "",
+            "commune": "",
             "recettes": rec,
             "cogs":     cog,
             "depenses": dep,
@@ -2089,32 +1949,7 @@ def finances_benefices(request):
             "marge":    round(float(contrib) / float(rec) * 100, 1) if rec else None,
         })
 
-    type_labels = {TypeSite.DEPOT: "Dépôt général", TypeSite.MAGASIN: "Magasin"}
-    lignes_hors = [
-        {
-            "nom":     d["site__nom"],
-            "niveau":  type_labels.get(d["site__type"], d["site__type"]),
-            "commune": d["site__commune__nom"] or "",
-            "montant": d["total"] or 0,
-        }
-        for d in dep_all.filter(site__in=sites_hors)
-        .values("site__nom", "site__type", "site__commune__nom")
-        .annotate(total=Sum("montant_confirme"))
-        .order_by("site__type", "site__commune__nom", "site__nom")
-    ]
-    # Dépenses niveau superviseur (sans site)
-    lignes_hors += [
-        {
-            "nom":     d["cree_par__commune__nom"] or "Sans commune",
-            "niveau":  "Supervision",
-            "commune": d["cree_par__commune__nom"] or "",
-            "montant": d["total"] or 0,
-        }
-        for d in dep_all.filter(site__isnull=True)
-        .values("cree_par__commune__nom")
-        .annotate(total=Sum("montant_confirme"))
-        .order_by("cree_par__commune__nom")
-    ]
+    lignes_hors = []
 
     total_rec    = sum(l["recettes"] for l in lignes_ecoles)
     total_cog    = sum(l["cogs"]     for l in lignes_ecoles)
@@ -2143,7 +1978,7 @@ def finances_benefices(request):
         "filtres": {
             "debut":    str(debut),
             "fin":      str(fin),
-            "commune":  commune_id_f,
+            "commune":  "",
             "site":     site_id_f,
         },
     })
@@ -2165,7 +2000,6 @@ def finances_benefices_export(request):
 
     debut_str    = request.GET.get("debut", "")
     fin_str      = request.GET.get("fin", "")
-    commune_id_f = request.GET.get("commune", "")
     site_id_f    = request.GET.get("site", "")
 
     try:
@@ -2177,14 +2011,12 @@ def finances_benefices_export(request):
     except ValueError:
         fin = today
 
-    tous_sites = u.sites_autorises().select_related("commune")
-    if commune_id_f:
-        tous_sites = tous_sites.filter(commune_id=commune_id_f)
+    tous_sites = u.sites_autorises()
     if site_id_f:
         tous_sites = tous_sites.filter(pk=site_id_f)
 
-    ecoles     = tous_sites.filter(type=TypeSite.ECOLE)
-    sites_hors = tous_sites.exclude(type=TypeSite.ECOLE)
+    ecoles     = tous_sites
+    sites_hors = tous_sites.none()
 
     ventes_base = Vente.objects.filter(
         ecole__in=ecoles,
@@ -2198,16 +2030,8 @@ def finances_benefices_export(request):
         vente__horodatage__date__lte=fin,
     ).exclude(vente__statut=StatutVente.ANNULEE)
 
-    from django.db.models import Q as _Q
     _base_dep = dict(statut=StatutDepense.CONFIRME, date_depense__gte=debut, date_depense__lte=fin)
-    if site_id_f:
-        dep_all = Depense.objects.filter(site__in=tous_sites, **_base_dep)
-    else:
-        _communes_perim = tous_sites.values_list("commune_id", flat=True).distinct()
-        dep_all = Depense.objects.filter(
-            _Q(site__in=tous_sites) | _Q(site__isnull=True, cree_par__commune_id__in=_communes_perim),
-            **_base_dep,
-        )
+    dep_all = Depense.objects.filter(site__in=tous_sites, **_base_dep)
 
     recettes_map = {
         r["ecole_id"]: r["total"]
@@ -2229,43 +2053,31 @@ def finances_benefices_export(request):
         r["site_id"]: r["total"]
         for r in dep_all.filter(site__in=ecoles).values("site_id").annotate(total=Sum("montant_confirme"))
     }
-    dep_hors_rows = list(
-        dep_all.filter(site__in=sites_hors)
-        .values("site__nom", "site__type", "site__commune__nom")
-        .annotate(total=Sum("montant_confirme"))
-        .order_by("site__type", "site__commune__nom", "site__nom")
-    )
-    dep_sup_rows = list(
-        dep_all.filter(site__isnull=True)
-        .values("cree_par__commune__nom")
-        .annotate(total=Sum("montant_confirme"))
-        .order_by("cree_par__commune__nom")
-    )
-
-    type_labels = {TypeSite.DEPOT: "Dépôt général", TypeSite.MAGASIN: "Magasin"}
+    dep_hors_rows = []
+    dep_sup_rows = []
 
     wb = openpyxl.Workbook()
 
-    # ── Feuille 1 : Écoles ────────────────────────────────────────
+    # ── Feuille 1 : Sites ─────────────────────────────────────────
     ws = wb.active
-    ws.title = "Écoles"
+    ws.title = "Sites"
     hdr_style = lambda c: (setattr(c, "font", Font(bold=True, color="FFFFFF", size=11)) or
                            setattr(c, "fill", PatternFill("solid", fgColor="16233F")) or
                            setattr(c, "alignment", Alignment(horizontal="center")))
 
-    entetes = ["École", "Commune", "Recettes (F)", "Coût marchandises (F)", "Dépenses école (F)", "Contribution (F)", "Marge (%)"]
+    entetes = ["Site", "Commune", "Recettes (F)", "Coût marchandises (F)", "Dépenses site (F)", "Contribution (F)", "Marge (%)"]
     for col, titre in enumerate(entetes, 1):
         hdr_style(ws.cell(row=1, column=col, value=titre))
 
     t_rec = t_cog = t_dep_e = 0
-    for row, ecole in enumerate(ecoles.order_by("commune__nom", "nom"), 2):
+    for row, ecole in enumerate(ecoles.order_by("nom"), 2):
         rec    = float(recettes_map.get(ecole.pk, 0) or 0)
         cog    = float(cogs_map.get(ecole.pk, 0))
         dep    = float(dep_ecoles_map.get(ecole.pk, 0) or 0)
         contrib = rec - cog - dep
         t_rec += rec; t_cog += cog; t_dep_e += dep
         ws.cell(row=row, column=1, value=ecole.nom)
-        ws.cell(row=row, column=2, value=ecole.commune.nom if ecole.commune else "")
+        ws.cell(row=row, column=2, value="")
         ws.cell(row=row, column=3, value=rec)
         ws.cell(row=row, column=4, value=cog)
         ws.cell(row=row, column=5, value=dep)
@@ -2274,7 +2086,7 @@ def finances_benefices_export(request):
 
     last_e = ecoles.count() + 2
     t_contrib = t_rec - t_cog - t_dep_e
-    for col, val in enumerate(["TOTAL ÉCOLES", "", t_rec, t_cog, t_dep_e, t_contrib,
+    for col, val in enumerate(["TOTAL SITES", "", t_rec, t_cog, t_dep_e, t_contrib,
                                 round(t_contrib / t_rec * 100, 1) if t_rec else ""], 1):
         ws.cell(row=last_e, column=col, value=val).font = Font(bold=True)
 
@@ -2282,20 +2094,13 @@ def finances_benefices_export(request):
         ws.column_dimensions[get_column_letter(col[0].column)].width = min(
             max(len(str(c.value or "")) for c in col) + 4, 50)
 
-    # ── Feuille 2 : Dépenses hors écoles ─────────────────────────
-    ws2 = wb.create_sheet("Dépenses hors écoles")
+    # ── Feuille 2 : Dépenses hors sites ──────────────────────────
+    ws2 = wb.create_sheet("Dépenses hors sites")
     for col, titre in enumerate(["Site", "Niveau", "Commune", "Dépenses (F)"], 1):
         hdr_style(ws2.cell(row=1, column=col, value=titre))
 
     t_dep_h = 0
-    all_hors_rows = (
-        [{"nom": d["site__nom"], "niveau": type_labels.get(d["site__type"], d["site__type"]),
-          "commune": d["site__commune__nom"] or "", "montant": float(d["total"] or 0)}
-         for d in dep_hors_rows]
-        + [{"nom": d["cree_par__commune__nom"] or "Sans commune", "niveau": "Supervision",
-            "commune": d["cree_par__commune__nom"] or "", "montant": float(d["total"] or 0)}
-           for d in dep_sup_rows]
-    )
+    all_hors_rows = []
     for row, d in enumerate(all_hors_rows, 2):
         t_dep_h += d["montant"]
         ws2.cell(row=row, column=1, value=d["nom"])
@@ -2421,19 +2226,16 @@ def avoirs_liste(request):
     if not u.peut_voir_ventes():
         return redirect("hub_stock")
 
-    tous_sites = u.sites_autorises().filter(type=TypeSite.ECOLE)
-    communes   = Commune.objects.filter(sites__in=tous_sites).distinct().order_by("nom")
+    tous_sites = u.sites_autorises()
 
-    commune_id = request.GET.get("commune", "")
     site_id    = request.GET.get("site", "")
+    commune_id = ""
     debut      = request.GET.get("debut", "")
     fin        = request.GET.get("fin", "")
     telephone  = request.GET.get("telephone", "").strip()
     produit_id = request.GET.get("produit", "")
 
     sites = tous_sites
-    if commune_id.isdigit():
-        sites = sites.filter(commune_id=commune_id)
     sites_dispo = sites.order_by("nom")
     if site_id.isdigit():
         sites = sites.filter(pk=site_id)
@@ -2479,16 +2281,16 @@ def avoirs_liste(request):
 
     ventes_list = list(ventes_avec_avoirs)
 
-    peut_livrer = u.profil in {Profil.COMMERCIAL, Profil.CHEF_EQUIPE, Profil.SUPERVISEUR, Profil.MANAGER, Profil.DG} or u.is_superuser
+    peut_livrer = u.profil in {Profil.CHEF_EQUIPE, Profil.DG} or u.is_superuser or u.peut_vendre()
     peut_annuler_avoir = u.is_superuser
     return render(request, "avoirs/liste.html", {
         "ventes":             ventes_list,
         "peut_livrer":        peut_livrer,
         "peut_annuler_avoir": peut_annuler_avoir,
-        "communes":           communes,
+        "communes":           [],
         "sites_dispo":        sites_dispo,
         "produits_avoirs":    produits_avoirs,
-        "filtres":            {"commune": commune_id, "site": site_id, "debut": debut, "fin": fin,
+        "filtres":            {"commune": "", "site": site_id, "debut": debut, "fin": fin,
                                "telephone": telephone, "produit": produit_id},
     })
 
@@ -2545,7 +2347,7 @@ def avoir_document(request, uuid):
     stocks = {s.produit_id: s.quantite for s in SoldeStock.objects.filter(site=v.ecole)}
     for lp in v.lignes_produit.all():
         lp.stock_dispo = stocks.get(lp.produit_id, 0)
-    peut_livrer = u.profil == Profil.COMMERCIAL or u.is_superuser
+    peut_livrer = u.peut_vendre() or u.is_superuser
     peut_annuler_avoir = u.is_superuser
     return render(request, "avoirs/document_livraison.html", {
         "v": v,
@@ -2563,7 +2365,7 @@ def avoir_livrer_partiel(request, pk):
     if not u.peut_acceder_au_site(lp.vente.ecole):
         messages.error(request, "Accès refusé.")
         return redirect("avoirs_liste")
-    if not (u.profil == Profil.COMMERCIAL or u.is_superuser):
+    if not (u.peut_vendre() or u.is_superuser):
         messages.error(request, "Action non autorisée.")
         return redirect("avoir_document", uuid=lp.vente.uuid)
     try:

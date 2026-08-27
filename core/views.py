@@ -21,7 +21,7 @@ def _qs_notifs(user):
     if user.is_superuser:
         return Notification.objects.none()
     qs = Notification.objects.filter(destinataire=user, lue=False)
-    if user.profil == Profil.COMMERCIAL:
+    if False:
         qs = qs.exclude(type__in=TYPES_NOTIFICATION_STOCK)
     return qs
 

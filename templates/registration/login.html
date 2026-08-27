@@ -1,8 +1,8 @@
 {% extends "base.html" %}
-{% block titre %}Connexion — LEPAD{% endblock %}
+{% block titre %}Connexion — FAMIEN{% endblock %}
 {% block contenu %}
 <div class="connexion">
-  <div class="marque" style="text-align:center">LEPAD</div>
+  <div class="marque" style="text-align:center">FAMIEN</div>
   {% if form.errors %}<div class="message error">Identifiant ou mot de passe incorrect.</div>{% endif %}
   <form method="post">{% csrf_token %}
     <input type="text" name="username" placeholder="Identifiant" autocomplete="username" autocapitalize="none" required autofocus>

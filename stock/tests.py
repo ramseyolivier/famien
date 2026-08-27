@@ -2,7 +2,7 @@ from django.core.exceptions import ValidationError
 from django.test import TestCase
 
 from catalogue.models import Produit
-from core.models import Commune, Site, TypeSite
+from core.models import Site, TypeSite
 
 from .models import MouvementStock, SoldeStock, TypeMouvement
 from .services import StockInsuffisant, annuler_mouvement, enregistrer_mouvement, references_sous_seuil
@@ -10,8 +10,7 @@ from .services import StockInsuffisant, annuler_mouvement, enregistrer_mouvement
 
 class JournalImmuable(TestCase):
     def setUp(self):
-        commune = Commune.objects.create(nom="Cocody")
-        self.site = Site.objects.create(type=TypeSite.MAGASIN, nom="Cocody", commune=commune)
+        self.site = Site.objects.create(type=TypeSite.SITE, nom="Cocody")
         self.produit = Produit.objects.create(code="C200", designation="Cahier 200 pages")
 
     def test_un_mouvement_ne_peut_pas_etre_modifie(self):

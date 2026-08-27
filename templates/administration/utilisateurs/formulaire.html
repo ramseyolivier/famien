@@ -53,16 +53,6 @@
     {% endif %}
   {% endfor %}
 
-  <div id="div-commune" class="champ">
-    {% for champ in form %}
-      {% if champ.html_name == "commune" %}
-      <label for="{{ champ.id_for_label }}">{{ champ.label }}</label>
-      {{ champ }}
-      {% if champ.errors %}<p class="erreur-champ">{{ champ.errors|join:" " }}</p>{% endif %}
-      {% endif %}
-    {% endfor %}
-  </div>
-
   <div id="div-site" class="champ">
     {% for champ in form %}
       {% if champ.html_name == "site" %}
@@ -72,6 +62,7 @@
       {% if champ.errors %}<p class="erreur-champ">{{ champ.errors|join:" " }}</p>{% endif %}
       {% endif %}
     {% endfor %}
+    <p class="aide-champ">Le DG peut aussi avoir un site pour accéder à la caisse.</p>
   </div>
 
   <div class="etiquette">Accès</div>
@@ -100,42 +91,18 @@
 
 {% block scripts %}
 <script>
-const PREFIXE_PROFIL = {
-  'DG': 'DGE', 'MANAGER': 'MGR', 'SUPERVISEUR': 'SUP',
-  'GEST_MAGASIN': 'GST', 'CHEF_EQUIPE': 'CHF', 'COMMERCIAL': 'COM',
-};
-const PROFILS_SANS_PERIMETRE = ['DG', 'MANAGER'];
-const PROFILS_SANS_SITE      = ['DG', 'MANAGER', 'SUPERVISEUR'];
-const TYPE_SITE_PAR_PROFIL   = {
-  'GEST_MAGASIN': 'MAGASIN',
-  'CHEF_EQUIPE':  'ECOLE',
-  'COMMERCIAL':   'ECOLE',
-};
-const SITES_PAR_COMMUNE = {{ sites_json|safe }};
+const PREFIXE_PROFIL = { 'DG': 'DG', 'CHEF_EQUIPE': 'CHF' };
+const SITES = {{ sites_json|safe }};
 
-const selProfil  = document.getElementById('id_profil');
-const selCommune = document.getElementById('id_commune');
-const selSite    = document.getElementById('id_site');
-const divCommune = document.getElementById('div-commune');
-const divSite    = document.getElementById('div-site');
-
-function majVisibilite() {
-  const profil = selProfil.value;
-  divCommune.style.display = PROFILS_SANS_PERIMETRE.includes(profil) ? 'none' : '';
-  divSite.style.display    = PROFILS_SANS_SITE.includes(profil)      ? 'none' : '';
-  if (PROFILS_SANS_SITE.includes(profil)) selSite.value = '';
-  majSites();
-}
+const selProfil = document.getElementById('id_profil');
+const selSite   = document.getElementById('id_site');
+const inpPrenom = document.getElementById('id_first_name');
 
 function majSites() {
-  const profil    = selProfil.value;
-  const communeId = selCommune.value;
-  const typeFiltrer = TYPE_SITE_PAR_PROFIL[profil] || null;
-  let sites = communeId ? (SITES_PAR_COMMUNE[communeId] || []) : [];
-  if (typeFiltrer) sites = sites.filter(function(s) { return s.type === typeFiltrer; });
-  const valActuelle = selSite.value;
-  selSite.innerHTML = '<option value="">— Choisir —</option>';
-  sites.forEach(function(s) {
+  const valActuelle = selSite ? selSite.value : '';
+  if (!selSite) return;
+  selSite.innerHTML = '<option value="">— Aucun site —</option>';
+  SITES.forEach(function(s) {
     const o = document.createElement('option');
     o.value = s.id;
     o.textContent = s.nom;
@@ -144,7 +111,6 @@ function majSites() {
   });
 }
 
-const inpPrenom = document.getElementById('id_first_name');
 const PREFIXES_VALUES = new Set(Object.values(PREFIXE_PROFIL));
 
 function retirerPrefixePrenom(prenom) {
@@ -155,16 +121,14 @@ function retirerPrefixePrenom(prenom) {
 }
 
 function majPrefixePrenom() {
-  if (!inpPrenom) return;
+  if (!inpPrenom || !selProfil) return;
   const prefix = PREFIXE_PROFIL[selProfil.value] || '';
   const base   = retirerPrefixePrenom(inpPrenom.value);
   inpPrenom.value = prefix ? `${prefix}-${base}` : base;
 }
 
-if (selProfil)  selProfil.addEventListener('change', function() { majVisibilite(); majPrefixePrenom(); });
-if (selCommune) selCommune.addEventListener('change', majSites);
+if (selProfil) selProfil.addEventListener('change', majPrefixePrenom);
 
-majVisibilite();
 majSites();
 </script>
 {% endblock %}

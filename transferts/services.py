@@ -3,20 +3,14 @@ from django.core.exceptions import ValidationError
 from django.db import models, transaction
 from django.utils import timezone
 
-from core.models import Notification, Profil, TypeNotification, TypeSite, Utilisateur
+from core.models import Notification, Profil, TypeNotification, Utilisateur
 from stock.models import TypeMouvement
 from stock.services import enregistrer_mouvement
 
 
 def _utilisateurs_du_site(site):
     """Retourne les utilisateurs actifs à notifier pour un site donné."""
-    if site.type == TypeSite.ECOLE:
-        profils = [Profil.CHEF_EQUIPE, Profil.COMMERCIAL]
-        return Utilisateur.objects.filter(is_active=True, site=site, profil__in=profils)
-    elif site.type == TypeSite.MAGASIN:
-        return Utilisateur.objects.filter(is_active=True, site=site, profil=Profil.GEST_MAGASIN)
-    else:  # DEPOT
-        return Utilisateur.objects.filter(is_active=True, profil__in=[Profil.DG, Profil.MANAGER])
+    return Utilisateur.objects.filter(is_active=True, site=site, profil=Profil.CHEF_EQUIPE)
 
 
 def _notifier(utilisateurs, type_notif, titre, message, lien, groupe):
@@ -145,28 +139,13 @@ def rejeter_transfert(transfert, *, par):
 def destinations_possibles(user):
     """
     Sites vers lesquels cet utilisateur peut envoyer un transfert.
-    Règles :
-      - École → autres écoles de la même commune + magasin_rattachement
-      - Magasin → autres magasins + dépôt général
-      - Dépôt → tous les magasins
+    En FAMIEN tous les sites sont du même type — tout site peut transférer vers tout autre site autorisé.
     """
     from core.models import Site
 
     if not user.site_id:
+        if user.acces_national:
+            return Site.objects.filter(actif=True)
         return Site.objects.none()
 
-    site = user.site
-    if site.type == TypeSite.ECOLE:
-        return Site.objects.filter(
-            models.Q(type=TypeSite.ECOLE, commune=site.commune) |
-            models.Q(pk=site.magasin_rattachement_id)
-        ).exclude(pk=site.pk)
-    elif site.type == TypeSite.MAGASIN:
-        return Site.objects.filter(
-            models.Q(type=TypeSite.MAGASIN) |
-            models.Q(type=TypeSite.DEPOT)
-        ).exclude(pk=site.pk)
-    elif site.type == TypeSite.DEPOT:
-        return Site.objects.filter(type=TypeSite.MAGASIN)
-
-    return Site.objects.none()
+    return Site.objects.filter(actif=True).exclude(pk=user.site_id)

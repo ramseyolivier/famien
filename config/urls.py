@@ -14,8 +14,8 @@ from stock.exports import export_stock_excel, export_sous_seuil_excel, export_ru
 from achats import views as achats_views
 from core import views as core_views
 
-admin.site.site_header = "GROUPE LEPAD — administration"
-admin.site.site_title = "LEPAD"
+admin.site.site_header = "GROUPE FAMIEN — administration"
+admin.site.site_title = "FAMIEN"
 admin.site.index_title = "Paramétrage et référentiels"
 
 urlpatterns = [

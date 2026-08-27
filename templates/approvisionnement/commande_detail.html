@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block titre %}Commande #{{ commande.numero }} — LEPAD{% endblock %}
+{% block titre %}Commande #{{ commande.numero }} — FAMIEN{% endblock %}
 {% block lieu %}Approvisionnement{% endblock %}
 
 {% block contenu %}
@@ -35,7 +35,7 @@
 </div>
 
 <p style="font-size:.85rem;color:var(--encre-clair)">
-  École : <strong>{{ commande.ecole.nom }}</strong> · Magasin : <strong>{{ commande.ecole.magasin_rattachement.nom|default:"—" }}</strong>
+  Site : <strong>{{ commande.ecole.nom }}</strong> · Magasin : <strong>{{ commande.ecole.magasin_rattachement.nom|default:"—" }}</strong>
   · Créé le {{ commande.cree_le|date:"d/m/Y" }} par {{ commande.cree_par.get_full_name|default:commande.cree_par.username }}
   {% if commande.soumise_par %} · Soumise par {{ commande.soumise_par.get_full_name|default:commande.soumise_par.username }}{% elif commande.soumise_le %} · Soumise le {{ commande.soumise_le|date:"d/m/Y" }}{% endif %}
   {% if commande.validee_par %} · Validée par {{ commande.validee_par.get_full_name|default:commande.validee_par.username }}{% endif %}

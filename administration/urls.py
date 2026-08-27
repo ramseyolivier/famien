@@ -6,11 +6,12 @@ urlpatterns = [
     # Tableau de bord
     path("", views.accueil, name="admin_accueil"),
 
-    # Communes
-    path("communes/", views.communes_liste, name="admin_communes"),
-    path("communes/nouvelle/", views.commune_formulaire, name="admin_commune_nouvelle"),
-    path("communes/<int:pk>/modifier/", views.commune_formulaire, name="admin_commune_modifier"),
-    path("communes/<int:pk>/supprimer/", views.commune_supprimer, name="admin_commune_supprimer"),
+    # Sites
+    path("sites/", views.sites_liste, name="admin_sites"),
+    path("sites/nouveau/", views.site_formulaire, name="admin_site_nouveau"),
+    path("sites/<int:pk>/modifier/", views.site_formulaire, name="admin_site_modifier"),
+    path("sites/<int:pk>/activer/", views.site_activer, name="admin_site_activer"),
+    path("sites/<int:pk>/tarifs/", views.site_tarifs, name="admin_site_tarifs"),
 
     # Catégories produit
     path("categories/", views.categories_liste, name="admin_categories"),
@@ -23,19 +24,6 @@ urlpatterns = [
     path("marques/nouvelle/", views.marque_formulaire, name="admin_marque_nouvelle"),
     path("marques/<int:pk>/modifier/", views.marque_formulaire, name="admin_marque_modifier"),
     path("marques/<int:pk>/supprimer/", views.marque_supprimer, name="admin_marque_supprimer"),
-
-    # Magasins
-    path("magasins/", views.magasins_liste, name="admin_magasins"),
-    path("magasins/nouveau/", views.magasin_formulaire, name="admin_magasin_nouveau"),
-    path("magasins/<int:pk>/modifier/", views.magasin_formulaire, name="admin_magasin_modifier"),
-    path("magasins/<int:pk>/activer/", views.magasin_activer, name="admin_magasin_activer"),
-
-    # Écoles
-    path("ecoles/", views.ecoles_liste, name="admin_ecoles"),
-    path("ecoles/nouvelle/", views.ecole_formulaire, name="admin_ecole_nouvelle"),
-    path("ecoles/<int:pk>/modifier/", views.ecole_formulaire, name="admin_ecole_modifier"),
-    path("ecoles/<int:pk>/activer/", views.ecole_activer, name="admin_ecole_activer"),
-    path("ecoles/<int:pk>/tarifs/", views.ecole_tarifs, name="admin_ecole_tarifs"),
 
     # Produits
     path("produits/", views.produits_liste, name="admin_produits"),

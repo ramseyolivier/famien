@@ -21,9 +21,9 @@
   </div>
   {% endif %}
   <div class="filtre-champ filtre-champ--large">
-    <label>École</label>
+    <label>Site</label>
     <select name="ecole" onchange="this.form.submit()">
-      <option value="">Toutes les écoles</option>
+      <option value="">Toutes les sites</option>
       {% for e in ecoles %}
       <option value="{{ e.pk }}" {% if filtres.ecole == e.pk|stringformat:"s" %}selected{% endif %}>{{ e.nom }}</option>
       {% endfor %}
@@ -68,7 +68,7 @@
   <thead>
     <tr>
       <th>N°</th>
-      {% if not caissiere %}<th>École</th>{% endif %}
+      {% if not caissiere %}<th>Site</th>{% endif %}
       <th>Vendeuse</th>
       <th>Date</th>
       <th>Heure</th>

@@ -1,11 +1,11 @@
 {% extends "base.html" %}
-{% block titre %}{% if commande %}Modifier la livraison directe #{{ commande.pk }}{% else %}Nouvelle livraison directe école{% endif %} — LEPAD{% endblock %}
-{% block lieu %}Livraisons école — Livraison directe{% endblock %}
+{% block titre %}{% if commande %}Modifier la livraison directe #{{ commande.pk }}{% else %}Nouvelle livraison directe site{% endif %} — FAMIEN{% endblock %}
+{% block lieu %}Livraisons site — Livraison directe{% endblock %}
 
 {% block fil_ariane %}{% endblock %}
 
 {% block contenu %}
-<div class="admin-entete"><h1 style="color:#6b7280">{% if commande %}Modifier la livraison directe #{{ commande.pk }}{% else %}Nouvelle livraison directe école{% endif %}</h1></div>
+<div class="admin-entete"><h1 style="color:#6b7280">{% if commande %}Modifier la livraison directe #{{ commande.pk }}{% else %}Nouvelle livraison directe site{% endif %}</h1></div>
 <p style="font-size:.85rem;color:var(--encre-clair);margin:4px 0 12px">Sans commande préalable.</p>
 
 <form method="post" id="form-livraison-directe-ecole">
@@ -17,9 +17,9 @@
       <span style="display:inline-block;padding:8px 10px;border:1px solid var(--reglure);border-radius:6px;font-size:.9rem;background:var(--craie);color:var(--encre)">{{ magasin.nom }}</span>
     </div>
     <div>
-      <label style="display:block;font-size:.85rem;color:var(--encre-clair);margin-bottom:4px">École destinataire *</label>
+      <label style="display:block;font-size:.85rem;color:var(--encre-clair);margin-bottom:4px">Site destinataire *</label>
       <select name="ecole" required data-combobox style="width:100%;padding:8px 10px;border:1px solid var(--reglure);border-radius:6px;font:inherit">
-        <option value="">— Choisir une école —</option>
+        <option value="">— Choisir un site —</option>
         {% for e in ecoles %}
         <option value="{{ e.pk }}"{% if ecole_selectionnee == e.pk %} selected{% endif %}>{{ e.nom }}</option>
         {% endfor %}

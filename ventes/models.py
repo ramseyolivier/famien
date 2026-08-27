@@ -20,7 +20,7 @@ from django.core.validators import MinValueValidator
 from django.db import models
 
 from catalogue.models import Produit
-from core.models import Site, TypeSite
+from core.models import Site
 from kits.models import Kit
 
 
@@ -39,10 +39,10 @@ class StatutVente(models.TextChoices):
 
 class Vente(models.Model):
     uuid = models.UUIDField(default=uuid_lib.uuid4, unique=True, editable=False)
-    numero = models.CharField(max_length=30, editable=False, help_text="Séquentiel par école.")
+    numero = models.CharField(max_length=30, editable=False, help_text="Séquentiel par site.")
 
     ecole = models.ForeignKey(
-        Site, on_delete=models.PROTECT, related_name="ventes", limit_choices_to={"type": TypeSite.ECOLE}
+        Site, on_delete=models.PROTECT, related_name="ventes"
     )
     vendeuse = models.ForeignKey("core.Utilisateur", on_delete=models.PROTECT, related_name="ventes")
     horodatage = models.DateTimeField(auto_now_add=True, db_index=True)
@@ -165,7 +165,7 @@ class ClotureCaisse(models.Model):
     """Clôture journalière de caisse par école (M19)."""
 
     ecole = models.ForeignKey(
-        Site, on_delete=models.PROTECT, related_name="clotures", limit_choices_to={"type": TypeSite.ECOLE}
+        Site, on_delete=models.PROTECT, related_name="clotures"
     )
     date = models.DateField(db_index=True)
     montant_especes = models.DecimalField(max_digits=12, decimal_places=2, default=0)

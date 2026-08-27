@@ -15,11 +15,8 @@ def verifier_blocages_inventaire(site):
     """
     from approvisionnement.models import (
         CommandeEcole,
-        CommandeMagasin,
         StatutCommandeEcole,
-        StatutCommandeMagasin,
     )
-    from core.models import TypeSite
     from transferts.models import StatutTransfert, Transfert
 
     blocages = []
@@ -36,63 +33,19 @@ def verifier_blocages_inventaire(site):
             "label": "Voir les transferts",
         })
 
-    ACTIFS_ECOLE = [
+    ACTIFS = [
         StatutCommandeEcole.SOUMISE,
         StatutCommandeEcole.VALIDEE,
         StatutCommandeEcole.LIVREE,
     ]
-    ACTIFS_MAGASIN = [
-        StatutCommandeMagasin.SOUMISE,
-        StatutCommandeMagasin.VALIDEE,
-        StatutCommandeMagasin.LIVREE,
-    ]
 
-    if site.type == TypeSite.ECOLE:
-        nb_cmd = CommandeEcole.objects.filter(ecole=site, statut__in=ACTIFS_ECOLE).count()
-        if nb_cmd:
-            blocages.append({
-                "message": f"{nb_cmd} commande(s) école en cours",
-                "url_name": "commandes_ecole_liste",
-                "label": "Voir les commandes",
-            })
-
-    elif site.type == TypeSite.MAGASIN:
-        nb_cmd_mag = CommandeMagasin.objects.filter(magasin=site, statut__in=ACTIFS_MAGASIN).count()
-        if nb_cmd_mag:
-            blocages.append({
-                "message": f"{nb_cmd_mag} commande(s) magasin en cours",
-                "url_name": "commandes_magasin_liste",
-                "label": "Voir les commandes",
-            })
-        nb_livr = CommandeEcole.objects.filter(
-            ecole__magasin_rattachement=site, statut__in=ACTIFS_ECOLE
-        ).count()
-        if nb_livr:
-            blocages.append({
-                "message": f"{nb_livr} commande(s) école en cours",
-                "url_name": "commandes_ecole_liste",
-                "label": "Voir les commandes",
-            })
-
-    elif site.type == TypeSite.DEPOT:
-        nb_cmd = CommandeMagasin.objects.filter(statut__in=ACTIFS_MAGASIN).count()
-        if nb_cmd:
-            blocages.append({
-                "message": f"{nb_cmd} commande(s) magasin en cours",
-                "url_name": "commandes_magasin_liste",
-                "label": "Voir les commandes",
-            })
-        from achats.models import CommandeFournisseur, StatutCommande
-        ACTIFS_FOURN = [StatutCommande.SOUMIS, StatutCommande.VALIDE_N1, StatutCommande.VALIDE]
-        nb_fourn = CommandeFournisseur.objects.filter(
-            site_destination=site, statut__in=ACTIFS_FOURN
-        ).count()
-        if nb_fourn:
-            blocages.append({
-                "message": f"{nb_fourn} commande(s) fournisseur en cours",
-                "url_name": "commandes_liste",
-                "label": "Voir les commandes fournisseur",
-            })
+    nb_cmd = CommandeEcole.objects.filter(ecole=site, statut__in=ACTIFS).count()
+    if nb_cmd:
+        blocages.append({
+            "message": f"{nb_cmd} commande(s) en cours",
+            "url_name": "commandes_ecole_liste",
+            "label": "Voir les commandes",
+        })
 
     return blocages
 

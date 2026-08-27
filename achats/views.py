@@ -7,7 +7,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
 from catalogue.models import Fournisseur, Produit, ProduitFournisseur
-from core.models import Profil, Site, TypeSite
+from core.models import Profil, Site
 
 from .models import (
     CommandeFournisseur,
@@ -38,12 +38,7 @@ def hub_operations(request):
 
     nb_a_livrer = 0
     nb_a_recevoir = 0
-    if user.profil == Profil.GEST_MAGASIN and user.site_id:
-        nb_a_livrer = CommandeEcole.objects.filter(
-            ecole__magasin_rattachement=user.site,
-            statut=StatutCommandeEcole.SOUMISE,
-        ).count()
-    elif user.profil == Profil.CHEF_EQUIPE and user.site_id:
+    if user.profil == Profil.CHEF_EQUIPE and user.site_id:
         nb_a_recevoir = CommandeEcole.objects.filter(
             ecole=user.site,
             statut=StatutCommandeEcole.LIVREE,
@@ -67,8 +62,8 @@ def hub_operations(request):
 # ─── Commandes fournisseurs ───────────────────────────────────────────────────
 
 def _peut_acceder_achats_fournisseur(user):
-    """Seuls DG, Manager et superuser accèdent aux commandes et réceptions fournisseurs."""
-    return user.profil in {Profil.DG, Profil.MANAGER} or user.is_superuser
+    """Seul le DG accède aux commandes et réceptions fournisseurs."""
+    return user.profil == Profil.DG or user.is_superuser
 
 
 @login_required
@@ -128,10 +123,10 @@ def commande_formulaire(request):
     fournisseurs = Fournisseur.objects.filter(actif=True).order_by("raison_sociale")
     produits = Produit.objects.filter(actif=True).order_by("code")
 
-    # Les commandes fournisseurs vont toujours au dépôt — pas de choix utilisateur.
-    site_fixe = sites.filter(type=TypeSite.DEPOT).first()
+    # Le DG choisit le site destination de la commande fournisseur.
+    site_fixe = u.site if u.site_id else sites.first()
     if not site_fixe:
-        messages.error(request, "Aucun dépôt disponible pour votre compte.")
+        messages.error(request, "Aucun site disponible pour votre compte.")
         return redirect("hub_approvisionnement")
 
     if request.method == "POST":
@@ -218,17 +213,17 @@ def commande_detail(request, pk):
     receptions = cf.receptions.select_related("cree_par")
     # Commandes fournisseurs : workflow DG/MANAGER uniquement, pas de superviseur.
     peut_valider_n1 = False
-    peut_valider = cf.statut == StatutCommande.SOUMIS and (u.profil in {Profil.DG, Profil.MANAGER} or u.is_superuser)
-    peut_rejeter = (u.profil in {Profil.DG, Profil.MANAGER} or u.is_superuser) and cf.statut == StatutCommande.SOUMIS
+    peut_valider = cf.statut == StatutCommande.SOUMIS and (u.profil == Profil.DG or u.is_superuser)
+    peut_rejeter = (u.profil == Profil.DG or u.is_superuser) and cf.statut == StatutCommande.SOUMIS
     if cf.statut == StatutCommande.BROUILLON:
-        peut_modifier = u.profil in {Profil.DG, Profil.MANAGER} or u.is_superuser
+        peut_modifier = u.profil == Profil.DG or u.is_superuser
     elif cf.statut == StatutCommande.SOUMIS:
         peut_modifier = u.profil == Profil.DG or u.is_superuser
     else:
         peut_modifier = False
     est_dg = u.profil == Profil.DG or u.is_superuser
     a_reception_validee = receptions.filter(statut=StatutReception.VALIDE).exists()
-    est_dg_ou_manager = u.profil in {Profil.DG, Profil.MANAGER} or u.is_superuser
+    est_dg_ou_manager = u.profil == Profil.DG or u.is_superuser
     peut_cloturer = est_dg_ou_manager and cf.statut == StatutCommande.VALIDE and a_reception_validee
     peut_modifier_reception = _peut_gerer_reception(u)
     return render(request, "achats/commande_detail.html", {
@@ -370,7 +365,7 @@ def commande_valider_n1(request, pk):
 @login_required
 def commande_valider(request, pk):
     u = request.user
-    if u.profil not in {Profil.DG, Profil.MANAGER} and not u.is_superuser:
+    if u.profil != Profil.DG and not u.is_superuser:
         messages.error(request, "Seuls le DG et le Manager peuvent valider une commande fournisseur.")
         return redirect("commande_detail", pk=pk)
     cf = get_object_or_404(CommandeFournisseur, pk=pk, statut=StatutCommande.SOUMIS)
@@ -386,7 +381,7 @@ def commande_valider(request, pk):
 @login_required
 def commande_rejeter(request, pk):
     u = request.user
-    if u.profil not in {Profil.DG, Profil.MANAGER} and not u.is_superuser:
+    if u.profil != Profil.DG and not u.is_superuser:
         messages.error(request, "Seuls le DG et le Manager peuvent rejeter une commande fournisseur.")
         return redirect("commande_detail", pk=pk)
     cf = get_object_or_404(CommandeFournisseur, pk=pk)
@@ -404,7 +399,7 @@ def commande_rejeter(request, pk):
 @login_required
 def commande_cloturer(request, pk):
     u = request.user
-    if u.profil not in {Profil.DG, Profil.MANAGER} and not u.is_superuser:
+    if u.profil != Profil.DG and not u.is_superuser:
         messages.error(request, "Seuls le DG et le Manager peuvent clôturer une commande.")
         return redirect("commande_detail", pk=pk)
     cf = get_object_or_404(CommandeFournisseur, pk=pk)
@@ -420,7 +415,7 @@ def commande_cloturer(request, pk):
 # ─── Réceptions ──────────────────────────────────────────────────────────────
 
 def _peut_gerer_reception(user):
-    return user.profil in {Profil.DG, Profil.MANAGER} or user.is_superuser
+    return user.profil == Profil.DG or user.is_superuser
 
 
 @login_required
@@ -694,10 +689,10 @@ def reception_supprimer(request, pk):
 
 
 def _site_depot_pour_reception_libre(user):
-    """Retourne le site de réception directe : site de l'utilisateur s'il a un dépôt, sinon premier dépôt actif."""
-    if user.site_id and user.site.type == TypeSite.DEPOT:
+    """Retourne le site de réception directe : site de l'utilisateur ou premier site actif."""
+    if user.site_id:
         return user.site
-    return Site.objects.filter(type=TypeSite.DEPOT, actif=True).first()
+    return Site.objects.filter(actif=True).first()
 
 
 def _sauvegarder_lignes_libre(rec, produit_ids, qtes_recues):

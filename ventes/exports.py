@@ -12,7 +12,7 @@ import openpyxl
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
-from core.models import Commune, Profil, TypeSite
+from core.models import Profil
 from kits.models import Niveau
 from .models import StatutVente, Vente
 
@@ -62,7 +62,7 @@ def export_ventes_excel(request):
     ws.title = "Ventes"
     ws.freeze_panes = "A2"
 
-    entetes = ["N° Vente", "École", "Vendeuse", "Date", "Heure", "Mode paiement", "Montant", "Remise", "Statut"]
+    entetes = ["N° Vente", "Site", "Vendeuse", "Date", "Heure", "Mode paiement", "Montant", "Remise", "Statut"]
     for col, titre in enumerate(entetes, 1):
         cell = ws.cell(row=1, column=col, value=titre)
         _style_entete(cell)
@@ -98,27 +98,24 @@ def export_kits_excel(request):
     from core.models import Profil
 
     u = request.user
-    toutes_ecoles = _ecoles_perimetre(u).filter(actif=True).select_related("commune").order_by("nom")
+    toutes_ecoles = _ecoles_perimetre(u).filter(actif=True).order_by("nom")
 
-    commune_id = request.GET.get("commune", "")
     ecole_id = request.GET.get("ecole", "")
     niveau_filtre = request.GET.get("niveau", "")
     non_constructibles = request.GET.get("nc", "")
 
     ecoles = toutes_ecoles
-    if commune_id.isdigit():
-        ecoles = ecoles.filter(commune_id=commune_id)
     if ecole_id:
         ecoles = ecoles.filter(pk=ecole_id)
 
-    magasin_stock = u.site if u.profil == Profil.GEST_MAGASIN else None
+    magasin_stock = None
 
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Kits constructibles"
     ws.freeze_panes = "A2"
 
-    entetes = ["Commune", "École", "Niveau", "Prix vente (F CFA)", "Constructibles", "Articles manquants"]
+    entetes = ["Site", "Niveau", "Prix vente (F CFA)", "Constructibles", "Articles manquants"]
     for col, titre in enumerate(entetes, 1):
         cell = ws.cell(row=1, column=col, value=titre)
         _style_entete(cell)
@@ -133,14 +130,13 @@ def export_kits_excel(request):
         if non_constructibles:
             kits = [k for k in kits if k["constructibles"] == 0]
         for k in kits:
-            ws.cell(row=row, column=1, value=ecole.commune.nom if ecole.commune_id else "—")
-            ws.cell(row=row, column=2, value=ecole.nom)
-            ws.cell(row=row, column=3, value=k["kit"].classe.libelle)
-            ws.cell(row=row, column=4, value=int(k["kit"].prix_vente))
-            cell_c = ws.cell(row=row, column=5, value=k["constructibles"])
+            ws.cell(row=row, column=1, value=ecole.nom)
+            ws.cell(row=row, column=2, value=k["kit"].classe.libelle)
+            ws.cell(row=row, column=3, value=int(k["kit"].prix_vente))
+            cell_c = ws.cell(row=row, column=4, value=k["constructibles"])
             if k["constructibles"] == 0:
                 cell_c.fill = rouge
-            ws.cell(row=row, column=6, value=", ".join(k["manquants"]) if k["manquants"] else "")
+            ws.cell(row=row, column=5, value=", ".join(k["manquants"]) if k["manquants"] else "")
             row += 1
 
     _ajuster_colonnes(ws)
@@ -169,15 +165,12 @@ def export_annulations_excel(request):
 
     debut      = request.GET.get("debut", "")
     fin        = request.GET.get("fin", "")
-    commune_id = request.GET.get("commune", "")
     ecole_id   = request.GET.get("ecole", "")
 
     if debut:
         qs = qs.filter(annulee_le__date__gte=debut)
     if fin:
         qs = qs.filter(annulee_le__date__lte=fin)
-    if commune_id.isdigit():
-        qs = qs.filter(ecole__commune_id=commune_id)
     if ecole_id.isdigit():
         qs = qs.filter(ecole_id=ecole_id)
 
@@ -186,7 +179,7 @@ def export_annulations_excel(request):
     ws.title = "Annulations"
     ws.freeze_panes = "A2"
 
-    entetes = ["Annulée le", "N° Vente", "École", "Caissière", "Annulée par", "Montant", "Motif"]
+    entetes = ["Annulée le", "N° Vente", "Site", "Caissière", "Annulée par", "Montant", "Motif"]
     for col, titre in enumerate(entetes, 1):
         cell = ws.cell(row=1, column=col, value=titre)
         _style_entete(cell)

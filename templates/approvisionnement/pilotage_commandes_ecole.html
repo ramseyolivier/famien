@@ -1,6 +1,6 @@
 {% extends "base.html" %}
-{% block titre %}Déficits consolidés école — LEPAD{% endblock %}
-{% block lieu %}Approvisionnement — Déficits consolidés école{% endblock %}
+{% block titre %}Déficits consolidés site — FAMIEN{% endblock %}
+{% block lieu %}Approvisionnement — Déficits consolidés site{% endblock %}
 
 {% block contenu %}
 <div class="admin-entete">
@@ -14,7 +14,7 @@
 </div>
 
 <p style="font-size:.88rem;color:var(--encre-clair);margin:-4px 0 20px">
-  Articles dont le stock disponible au magasin ne couvre pas les commandes école soumises.
+  Articles dont le stock disponible au magasin ne couvre pas les commandes site soumises.
   Commandez les articles manquants au dépôt.
 </p>
 
@@ -30,7 +30,7 @@
     </select>
   </div>
   <div class="filtre-champ filtre-champ--large">
-    <label>École</label>
+    <label>Site</label>
     <select name="ecole" onchange="this.form.submit()">
       <option value="">Toutes</option>
       {% for e in ecoles %}
@@ -68,7 +68,7 @@
     <tr>
       {% if show_magasin_col %}<th data-tri="0" style="cursor:pointer;user-select:none">Magasin <span class="tri-icone">↕</span></th>{% endif %}
       <th data-tri="{% if show_magasin_col %}1{% else %}0{% endif %}" style="cursor:pointer;user-select:none">Désignation <span class="tri-icone">↕</span></th>
-      <th class="nombre" data-tri="{% if show_magasin_col %}2{% else %}1{% endif %}" style="cursor:pointer;user-select:none" title="Quantité demandée par les écoles (commandes soumises)">À livrer <span class="tri-icone">↕</span></th>
+      <th class="nombre" data-tri="{% if show_magasin_col %}2{% else %}1{% endif %}" style="cursor:pointer;user-select:none" title="Quantité demandée par les sites (commandes soumises)">À livrer <span class="tri-icone">↕</span></th>
       <th class="nombre" data-tri="{% if show_magasin_col %}3{% else %}2{% endif %}" style="cursor:pointer;user-select:none" title="Stock magasin − réservations déjà engagées">Stock disponible <span class="tri-icone">↕</span></th>
       <th class="nombre" data-tri="{% if show_magasin_col %}4{% else %}3{% endif %}" style="cursor:pointer;user-select:none" title="Quantité à commander au dépôt">Déficit <span class="tri-icone">↕</span></th>
     </tr>
@@ -88,7 +88,7 @@
 </div>
 {% else %}
 <p class="vide-liste" style="margin-top:20px">
-  Aucun déficit — le stock disponible couvre toutes les commandes école soumises.
+  Aucun déficit — le stock disponible couvre toutes les commandes site soumises.
 </p>
 {% endif %}
 

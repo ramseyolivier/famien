@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block titre %}Opérations — LEPAD{% endblock %}
+{% block titre %}Opérations — FAMIEN{% endblock %}
 {% block lieu %}Opérations{% endblock %}
 
 {% block contenu %}
@@ -34,7 +34,7 @@
   </div>
 </div>
 
-{# ── Approvisionnement École : chef d'équipe et caissière ─────────────────── #}
+{# ── Approvisionnement Site : chef d'équipe et caissière ─────────────────── #}
 {% if request.user.profil == "CHEF_EQUIPE" or request.user.profil == "COMMERCIAL" %}
 <div class="hub-section">
   <div class="hub-section-titre">Approvisionnement</div>
@@ -62,17 +62,17 @@
 </div>
 {% endif %}
 
-{# ── Approvisionnement École : gestionnaire de magasin ────────────────────── #}
+{# ── Approvisionnement Site : gestionnaire de magasin ────────────────────── #}
 {% if request.user.profil == "GEST_MAGASIN" %}
 <div class="hub-section">
-  <div class="hub-section-titre">Approvisionnement des écoles</div>
+  <div class="hub-section-titre">Approvisionnement des sites</div>
   <div class="hub-grille">
     <a href="{% url 'livraisons_liste' %}" class="hub-carte">
       <span class="hub-carte-icone">
         <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
       </span>
       <strong class="hub-carte-titre">Livraisons à traiter</strong>
-      <span class="hub-carte-desc">Commandes des écoles à préparer</span>
+      <span class="hub-carte-desc">Commandes des sites à préparer</span>
       {% if nb_a_livrer %}
       <span class="hub-carte-badge">{{ nb_a_livrer }} en attente</span>
       {% endif %}
@@ -82,7 +82,7 @@
         <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
       </span>
       <strong class="hub-carte-titre">Stock réservé</strong>
-      <span class="hub-carte-desc">Marchandise en transit vers les écoles</span>
+      <span class="hub-carte-desc">Marchandise en transit vers les sites</span>
     </a>
   </div>
 </div>

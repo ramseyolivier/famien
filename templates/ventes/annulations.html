@@ -26,7 +26,7 @@
   <thead>
     <tr>
       <th>N° vente</th>
-      <th>École</th>
+      <th>Site</th>
       <th class="nombre">Montant</th>
       <th>Date vente</th>
       <th>Motif demandé</th>
@@ -78,9 +78,9 @@
   {% endif %}
 
   <div class="filtre-champ filtre-champ--large">
-    <label>École</label>
+    <label>Site</label>
     <select name="ecole" onchange="this.form.submit()">
-      <option value="">Toutes les écoles</option>
+      <option value="">Toutes les sites</option>
       {% for e in ecoles %}
       <option value="{{ e.pk }}" {% if filtres.ecole == e.pk|stringformat:"s" %}selected{% endif %}>{{ e.nom }}</option>
       {% endfor %}
@@ -109,7 +109,7 @@
     <tr>
       <th>Annulée le</th>
       <th>N° vente</th>
-      <th>École</th>
+      <th>Site</th>
       <th>Caissière</th>
       <th>Annulée par</th>
       <th>Contenu</th>

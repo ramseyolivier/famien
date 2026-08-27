@@ -7,7 +7,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
 from catalogue.models import CategorieProduit, Marque, Produit, PrixEcole
-from core.models import Commune, Site, TypeSite, Utilisateur
+from core.models import Site, TypeSite, Utilisateur
 from kits.models import ClasseEcole, Kit, KitLigne
 from stock.models import SoldeStock
 from stock.services import references_sous_seuil
@@ -17,15 +17,13 @@ from .decorateurs import admin_requis
 from .forms import (
     CategorieProduitForm,
     ClasseEcoleForm,
-    CommuneForm,
-    EcoleForm,
     KitCreationForm,
     KitLigneFormSet,
     KitPrixForm,
-    MagasinForm,
     MarqueForm,
     ProduitForm,
     ReinitialisationMdpForm,
+    SiteForm,
     UtilisateurCreationForm,
     UtilisateurModificationForm,
 )
@@ -45,7 +43,7 @@ def accueil(request):
         "ca_jour": aujourdhui.aggregate(t=Sum("montant_total"))["t"] or 0,
         "nb_ventes_jour": aujourdhui.count(),
         "ca_total": ventes.aggregate(t=Sum("montant_total"))["t"] or 0,
-        "par_ecole": (
+        "par_site": (
             aujourdhui.values("ecole__nom")
             .annotate(ca=Sum("montant_total"), n=Count("id"))
             .order_by("-ca")
@@ -57,131 +55,57 @@ def accueil(request):
         "nb_marques": Marque.objects.count(),
         "nb_categories": CategorieProduit.objects.count(),
         "nb_kits": Kit.objects.filter(actif=True).count(),
-        "nb_ecoles": Site.objects.filter(type=TypeSite.ECOLE, actif=True).count(),
+        "nb_sites": Site.objects.filter(actif=True).count(),
         "nb_classes": ClasseEcole.objects.count(),
-        "nb_magasins": Site.objects.filter(type=TypeSite.MAGASIN, actif=True).count(),
-        "nb_communes": Commune.objects.count(),
         "nb_utilisateurs": Utilisateur.objects.filter(is_active=True).count(),
         "derniers_utilisateurs": Utilisateur.objects.filter(is_active=True).order_by("-last_login")[:5],
     }
     return render(request, "administration/accueil.html", contexte)
 
 
-# ─── Communes ────────────────────────────────────────────────────────────────
+# ─── Sites ────────────────────────────────────────────────────────────────────
 
 
 @admin_requis
-def communes_liste(request):
-    communes = Commune.objects.all()
-    return render(request, "administration/communes/liste.html", {"communes": communes})
+def sites_liste(request):
+    sites = Site.objects.all()
+    return render(request, "administration/sites/liste.html", {"sites": sites})
 
 
 @admin_requis
-def commune_formulaire(request, pk=None):
-    instance = get_object_or_404(Commune, pk=pk) if pk else None
-    titre = "Modifier la commune" if instance else "Nouvelle commune"
+def site_formulaire(request, pk=None):
+    instance = get_object_or_404(Site, pk=pk) if pk else None
+    titre = "Modifier le site" if instance else "Nouveau site"
     if request.method == "POST":
-        form = CommuneForm(request.POST, instance=instance)
+        form = SiteForm(request.POST, instance=instance)
         if form.is_valid():
             form.save()
-            messages.success(request, "Commune enregistrée.")
-            return redirect("admin_communes")
+            messages.success(request, "Site enregistré.")
+            return redirect("admin_sites")
     else:
-        form = CommuneForm(instance=instance)
-    return render(request, "administration/communes/formulaire.html", {"form": form, "titre": titre, "instance": instance})
+        form = SiteForm(instance=instance)
+    return render(request, "administration/sites/formulaire.html", {"form": form, "titre": titre, "instance": instance})
 
 
 @admin_requis
-def commune_supprimer(request, pk):
-    commune = get_object_or_404(Commune, pk=pk)
+def site_activer(request, pk):
+    site = get_object_or_404(Site, pk=pk)
     if request.method == "POST":
-        try:
-            commune.delete()
-            messages.success(request, f"Commune « {commune.nom} » supprimée.")
-        except Exception:
-            messages.error(request, "Impossible de supprimer cette commune : elle est utilisée par des sites.")
-        return redirect("admin_communes")
-    return render(request, "administration/communes/liste.html", {"communes": Commune.objects.all(), "supprimer": commune})
-
-
-# ─── Magasins ────────────────────────────────────────────────────────────────
+        site.actif = not site.actif
+        site.save()
+        etat = "activé" if site.actif else "désactivé"
+        messages.success(request, f"Site {etat}.")
+    return redirect("admin_sites")
 
 
 @admin_requis
-def magasins_liste(request):
-    magasins = Site.objects.filter(type=TypeSite.MAGASIN).select_related("commune")
-    return render(request, "administration/magasins/liste.html", {"magasins": magasins})
-
-
-@admin_requis
-def magasin_formulaire(request, pk=None):
-    instance = get_object_or_404(Site, pk=pk, type=TypeSite.MAGASIN) if pk else None
-    titre = "Modifier le magasin" if instance else "Nouveau magasin"
-    if request.method == "POST":
-        form = MagasinForm(request.POST, instance=instance)
-        if form.is_valid():
-            form.save()
-            messages.success(request, "Magasin enregistré.")
-            return redirect("admin_magasins")
-    else:
-        form = MagasinForm(instance=instance)
-    return render(request, "administration/magasins/formulaire.html", {"form": form, "titre": titre, "instance": instance})
-
-
-@admin_requis
-def magasin_activer(request, pk):
-    magasin = get_object_or_404(Site, pk=pk, type=TypeSite.MAGASIN)
-    if request.method == "POST":
-        magasin.actif = not magasin.actif
-        magasin.save()
-        etat = "activé" if magasin.actif else "désactivé"
-        messages.success(request, f"Magasin {etat}.")
-    return redirect("admin_magasins")
-
-
-# ─── Écoles ──────────────────────────────────────────────────────────────────
-
-
-@admin_requis
-def ecoles_liste(request):
-    ecoles = Site.objects.filter(type=TypeSite.ECOLE).select_related("commune", "magasin_rattachement")
-    return render(request, "administration/ecoles/liste.html", {"ecoles": ecoles})
-
-
-@admin_requis
-def ecole_formulaire(request, pk=None):
-    instance = get_object_or_404(Site, pk=pk, type=TypeSite.ECOLE) if pk else None
-    titre = "Modifier l'école" if instance else "Nouvelle école"
-    if request.method == "POST":
-        form = EcoleForm(request.POST, instance=instance)
-        if form.is_valid():
-            form.save()
-            messages.success(request, "École enregistrée.")
-            return redirect("admin_ecoles")
-    else:
-        form = EcoleForm(instance=instance)
-    return render(request, "administration/ecoles/formulaire.html", {"form": form, "titre": titre, "instance": instance})
-
-
-@admin_requis
-def ecole_activer(request, pk):
-    ecole = get_object_or_404(Site, pk=pk, type=TypeSite.ECOLE)
-    if request.method == "POST":
-        ecole.actif = not ecole.actif
-        ecole.save()
-        etat = "activée" if ecole.actif else "désactivée"
-        messages.success(request, f"École {etat}.")
-    return redirect("admin_ecoles")
-
-
-@admin_requis
-def ecole_tarifs(request, pk):
+def site_tarifs(request, pk):
     from decimal import Decimal, InvalidOperation
-    ecole = get_object_or_404(Site, pk=pk, type=TypeSite.ECOLE)
+    site = get_object_or_404(Site, pk=pk)
     produits = list(Produit.objects.filter(actif=True).select_related("categorie", "marque").order_by("code"))
 
     if request.method == "POST":
-        prix_existants = {pe.produit_id: pe for pe in PrixEcole.objects.filter(ecole=ecole)}
+        prix_existants = {pe.produit_id: pe for pe in PrixEcole.objects.filter(ecole=site)}
         a_creer, a_maj = [], []
         a_supprimer = []
         for produit in produits:
@@ -196,7 +120,7 @@ def ecole_tarifs(request, pk):
                         pe.prix_detail = prix
                         a_maj.append(pe)
                     else:
-                        a_creer.append(PrixEcole(produit=produit, ecole=ecole, prix_detail=prix))
+                        a_creer.append(PrixEcole(produit=produit, ecole=site, prix_detail=prix))
                 except (ValueError, InvalidOperation):
                     pass
             else:
@@ -212,9 +136,9 @@ def ecole_tarifs(request, pk):
             from django.http import JsonResponse
             return JsonResponse({"ok": True})
         messages.success(request, "Tarifs enregistrés.")
-        return redirect("admin_ecole_tarifs", pk=pk)
+        return redirect("admin_site_tarifs", pk=pk)
 
-    prix_existants = {pe.produit_id: pe.prix_detail for pe in PrixEcole.objects.filter(ecole=ecole)}
+    prix_existants = {pe.produit_id: pe.prix_detail for pe in PrixEcole.objects.filter(ecole=site)}
     lignes = [
         {
             "produit": p,
@@ -224,8 +148,8 @@ def ecole_tarifs(request, pk):
         }
         for p in produits
     ]
-    return render(request, "administration/ecoles/tarifs.html", {
-        "ecole": ecole,
+    return render(request, "administration/sites/tarifs.html", {
+        "site": site,
         "lignes": lignes,
     })
 
@@ -349,29 +273,29 @@ def produit_activer(request, pk):
 def produit_tarifs(request, pk):
     from decimal import Decimal, InvalidOperation
     produit = get_object_or_404(Produit, pk=pk)
-    ecoles = list(Site.objects.filter(type=TypeSite.ECOLE, actif=True).order_by("nom"))
+    sites = list(Site.objects.filter(actif=True).order_by("nom"))
 
     if request.method == "POST":
         prix_existants = {pe.ecole_id: pe for pe in PrixEcole.objects.filter(produit=produit)}
         a_creer, a_maj, a_supprimer = [], [], []
-        for ecole in ecoles:
-            valeur = request.POST.get(f"prix_{ecole.pk}", "").strip().replace(" ", "").replace("\xa0", "")
+        for site in sites:
+            valeur = request.POST.get(f"prix_{site.pk}", "").strip().replace(" ", "").replace("\xa0", "")
             if valeur:
                 try:
                     prix = Decimal(valeur)
                     if prix < 0:
                         continue
-                    if ecole.pk in prix_existants:
-                        pe = prix_existants[ecole.pk]
+                    if site.pk in prix_existants:
+                        pe = prix_existants[site.pk]
                         pe.prix_detail = prix
                         a_maj.append(pe)
                     else:
-                        a_creer.append(PrixEcole(produit=produit, ecole=ecole, prix_detail=prix))
+                        a_creer.append(PrixEcole(produit=produit, ecole=site, prix_detail=prix))
                 except (ValueError, InvalidOperation):
                     pass
             else:
-                if ecole.pk in prix_existants:
-                    a_supprimer.append(prix_existants[ecole.pk].pk)
+                if site.pk in prix_existants:
+                    a_supprimer.append(prix_existants[site.pk].pk)
         if a_creer:
             PrixEcole.objects.bulk_create(a_creer)
         if a_maj:
@@ -384,10 +308,10 @@ def produit_tarifs(request, pk):
     prix_existants = {pe.ecole_id: pe.prix_detail for pe in PrixEcole.objects.filter(produit=produit)}
     lignes = [
         {
-            "ecole": e,
-            "prix_ecole": prix_existants.get(e.pk),
+            "site": s,
+            "prix_ecole": prix_existants.get(s.pk),
         }
-        for e in ecoles
+        for s in sites
     ]
     return render(request, "administration/produits/tarifs.html", {
         "produit": produit,
@@ -556,7 +480,7 @@ def utilisateurs_connexions(request):
     q = request.GET.get("q", "").strip()
     tri = request.GET.get("tri", "desc")
     ordre = "derniere_activite" if tri == "asc" else "-derniere_activite"
-    utilisateurs = Utilisateur.objects.filter(is_active=True).order_by(ordre).select_related("site", "commune")
+    utilisateurs = Utilisateur.objects.filter(is_active=True).order_by(ordre).select_related("site")
     if profil_filtre:
         utilisateurs = utilisateurs.filter(profil=profil_filtre)
     if q:
@@ -572,7 +496,7 @@ def utilisateurs_connexions(request):
 
 @admin_requis
 def utilisateurs_liste(request):
-    utilisateurs = Utilisateur.objects.select_related("commune", "site").order_by("profil", "last_name", "first_name")
+    utilisateurs = Utilisateur.objects.select_related("site").order_by("profil", "last_name", "first_name")
     return render(request, "administration/utilisateurs/liste.html", {"utilisateurs": utilisateurs})
 
 
@@ -593,18 +517,16 @@ def utilisateur_formulaire(request, pk=None):
         "form": form,
         "titre": titre,
         "instance": instance,
-        "sites_json": _sites_par_commune_json(),
+        "sites_json": _sites_json(),
     })
 
 
-def _sites_par_commune_json():
-    """Retourne un dict {commune_id: [{id, nom, type}]} pour le filtre JS du formulaire utilisateur."""
-    data = {}
-    for commune in Commune.objects.prefetch_related("sites"):
-        data[str(commune.pk)] = [
-            {"id": s.pk, "nom": str(s), "type": s.type}
-            for s in commune.sites.filter(actif=True).order_by("nom")
-        ]
+def _sites_json():
+    """Sites actifs pour le formulaire utilisateur."""
+    data = [
+        {"id": s.pk, "nom": str(s)}
+        for s in Site.objects.filter(actif=True).order_by("nom")
+    ]
     return json.dumps(data)
 
 

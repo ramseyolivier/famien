@@ -5,11 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0d1b30">
 <link rel="icon" type="image/svg+xml" href="{% static 'favicon.svg' %}">
-<title>{% block titre %}LEPAD{% endblock %}</title>
+<title>{% block titre %}FAMIEN{% endblock %}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=Raleway:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="{% static 'css/lepad.css' %}?v=8">
+<link rel="stylesheet" href="{% static 'css/lepad.css' %}?v=10">
 <script src="{% static 'js/combobox.js' %}?v=3" defer></script>
 <script src="{% static 'js/filtres.js' %}?v=1" defer></script>
 </head>
@@ -45,17 +45,17 @@
     <button class="hamburger" id="hamburger" aria-label="Menu" aria-expanded="false">
       <span></span><span></span><span></span>
     </button>
-    <span class="bandeau-logo">LEPAD</span>
-    <span class="bandeau-contexte">{% block lieu %}Groupe LEPAD{% endblock %}</span>
+    <span class="bandeau-logo">FAMIEN</span>
+    <span class="bandeau-contexte">{% block lieu %}Groupe FAMIEN{% endblock %}</span>
   </div>
 
   <nav class="bandeau-nav">
     {% if user.peut_vendre %}<a href="{% url 'vente' %}" class="nav-pill nav-vendre">Caisse</a>{% endif %}
-    {% if user.profil != 'GEST_MAGASIN' %}<a href="{% url 'hub_ventes' %}" class="nav-pill">Ventes</a>{% endif %}
+    <a href="{% url 'hub_ventes' %}" class="nav-pill">Ventes</a>
     {% if user.peut_voir_ventes %}<a href="{% url 'hub_finances' %}" class="nav-pill">Finances</a>{% endif %}
     <a href="{% url 'hub_stock' %}" class="nav-pill">Stock</a>
-    {% if user.profil != 'COMMERCIAL' %}<a href="{% url 'hub_approvisionnement' %}" class="nav-pill">Appro</a>{% endif %}
-    {% if user.profil == 'DG' or user.profil == 'MANAGER' or user.is_superuser %}<a href="{% url 'admin_accueil' %}" class="nav-pill nav-pill-admin">Admin</a>{% endif %}
+    <a href="{% url 'hub_approvisionnement' %}" class="nav-pill">Appro</a>
+    {% if user.profil == 'DG' or user.is_superuser %}<a href="{% url 'admin_accueil' %}" class="nav-pill nav-pill-admin">Admin</a>{% endif %}
     {% if user.is_superuser %}<a href="/admin/" class="nav-pill nav-admin" title="Administration Django">⚙</a>{% endif %}
   </nav>
 
@@ -74,7 +74,7 @@
 <!-- Sidebar gauche -->
 <aside class="sidebar" id="sidebar">
   <div class="sidebar-entete">
-    <span class="sidebar-logo">LEPAD</span>
+    <span class="sidebar-logo">FAMIEN</span>
     <button class="sidebar-fermer" id="sidebar-fermer" aria-label="Fermer">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
     </button>
@@ -92,19 +92,15 @@
     </div>
     {% endif %}
 
-    {% if user.profil != 'GEST_MAGASIN' %}
     <div class="sidebar-section">
       <div class="sidebar-section-titre">Ventes</div>
       <a href="{% url 'hub_ventes' %}" class="sidebar-lien">Vue d'ensemble</a>
       <a href="{% url 'historique_ventes' %}" class="sidebar-lien">Historique</a>
       {% if user.peut_voir_ventes %}
       <a href="{% url 'historique_annulations' %}" class="sidebar-lien">Annulations</a>
-      {% if user.profil == 'CHEF_EQUIPE' or user.profil == 'SUPERVISEUR' or user.profil == 'DG' or user.profil == 'MANAGER' or user.is_superuser %}
       <a href="{% url 'versements_liste' %}" class="sidebar-lien">Versements</a>
       {% endif %}
-      {% endif %}
     </div>
-    {% endif %}
 
     {% if user.peut_voir_ventes %}
     <div class="sidebar-section">
@@ -126,39 +122,25 @@
       <a href="{% url 'nc_liste' %}" class="sidebar-lien">Non-conformités</a>
     </div>
 
-    {% if user.profil != 'COMMERCIAL' %}
     <div class="sidebar-section">
       <div class="sidebar-section-titre">Approvisionnement</div>
-      {% if user.profil == 'DG' or user.profil == 'MANAGER' or user.is_superuser %}
+      {% if user.profil == 'DG' or user.is_superuser %}
       <div class="sidebar-sous-titre">Dépôt général</div>
       <a href="{% url 'commandes_liste' %}" class="sidebar-lien sidebar-lien-sous">Commandes fournisseurs</a>
       <a href="{% url 'receptions_liste' %}" class="sidebar-lien sidebar-lien-sous">Réceptions fournisseur</a>
-      <a href="{% url 'livraisons_magasin_liste' %}" class="sidebar-lien sidebar-lien-sous">Livraisons magasins</a>
+      <a href="{% url 'commandes_ecole_liste' %}" class="sidebar-lien sidebar-lien-sous">Commandes des sites</a>
+      <a href="{% url 'livraisons_magasin_liste' %}" class="sidebar-lien sidebar-lien-sous">Livraisons aux sites</a>
+      <a href="{% url 'receptions_ecole_liste' %}" class="sidebar-lien sidebar-lien-sous">Réceptions sites</a>
       <a href="{% url 'stock_reserve_depot' %}" class="sidebar-lien sidebar-lien-sous">Stock réservé dépôt</a>
       {% endif %}
-      {% if user.profil == 'GEST_MAGASIN' or user.profil == 'SUPERVISEUR' or user.profil == 'MANAGER' or user.profil == 'DG' or user.is_superuser %}
-      <div class="sidebar-sous-titre">Magasins</div>
-      <a href="{% url 'commandes_magasin_liste' %}" class="sidebar-lien sidebar-lien-sous">Commandes magasin</a>
-      <a href="{% url 'receptions_magasin_liste' %}" class="sidebar-lien sidebar-lien-sous">Réceptions magasin</a>
-      {% if user.profil == 'DG' or user.profil == 'MANAGER' or user.is_superuser %}
-      <a href="{% url 'stock_reserve' %}" class="sidebar-lien sidebar-lien-sous">Stock réservé magasin</a>
-      {% endif %}
-      {% if user.profil == 'GEST_MAGASIN' %}
-      <a href="{% url 'stock_reserve' %}" class="sidebar-lien sidebar-lien-sous">Stock réservé</a>
-      {% endif %}
-      {% endif %}
-      <div class="sidebar-sous-titre">École</div>
-      <a href="{% url 'commandes_ecole_liste' %}" class="sidebar-lien sidebar-lien-sous">Commandes école</a>
-      {% if user.profil == 'CHEF_EQUIPE' or user.profil == 'DG' or user.profil == 'MANAGER' or user.profil == 'SUPERVISEUR' or user.is_superuser %}
-      <a href="{% url 'receptions_ecole_liste' %}" class="sidebar-lien sidebar-lien-sous">Réceptions école</a>
-      {% endif %}
-      {% if user.profil == 'GEST_MAGASIN' or user.profil == 'DG' or user.profil == 'MANAGER' or user.profil == 'SUPERVISEUR' or user.is_superuser %}
-      <a href="{% url 'livraisons_liste' %}" class="sidebar-lien sidebar-lien-sous">Livraisons écoles</a>
+      {% if user.profil == 'CHEF_EQUIPE' %}
+      <div class="sidebar-sous-titre">Mon site</div>
+      <a href="{% url 'commandes_ecole_liste' %}" class="sidebar-lien sidebar-lien-sous">Mes commandes au dépôt</a>
+      <a href="{% url 'receptions_ecole_liste' %}" class="sidebar-lien sidebar-lien-sous">Réceptions</a>
       {% endif %}
     </div>
-    {% endif %}
 
-    {% if user.profil == 'DG' or user.profil == 'MANAGER' or user.is_superuser %}
+    {% if user.profil == 'DG' or user.is_superuser %}
     <div class="sidebar-section">
       <div class="sidebar-section-titre">Administration</div>
       <a href="{% url 'admin_accueil' %}" class="sidebar-lien">Vue d'ensemble</a>
@@ -169,9 +151,7 @@
       <a href="{% url 'admin_kits' %}" class="sidebar-lien sidebar-lien-sous">Kits</a>
       <a href="{% url 'parametres_seuils' %}" class="sidebar-lien sidebar-lien-sous">Seuils & limites</a>
       <div class="sidebar-sous-titre">Sites</div>
-      <a href="{% url 'admin_ecoles' %}" class="sidebar-lien sidebar-lien-sous">Écoles</a>
-      <a href="{% url 'admin_magasins' %}" class="sidebar-lien sidebar-lien-sous">Magasins</a>
-      <a href="{% url 'admin_communes' %}" class="sidebar-lien sidebar-lien-sous">Communes</a>
+      <a href="{% url 'admin_sites' %}" class="sidebar-lien sidebar-lien-sous">Sites</a>
       <div class="sidebar-sous-titre">Accès</div>
       <a href="{% url 'admin_utilisateurs' %}" class="sidebar-lien sidebar-lien-sous">Utilisateurs</a>
       <a href="{% url 'admin_utilisateurs_connexions' %}" class="sidebar-lien sidebar-lien-sous">Connexions</a>

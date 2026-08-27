@@ -1,15 +1,15 @@
 {% extends "base.html" %}
-{% block titre %}Livraison directe école #{{ commande.pk }} — LEPAD{% endblock %}
-{% block lieu %}Livraisons école — Livraison directe{% endblock %}
+{% block titre %}Livraison directe site #{{ commande.pk }} — FAMIEN{% endblock %}
+{% block lieu %}Livraisons site — Livraison directe{% endblock %}
 {% block fil_ariane %}{% endblock %}
 
 {% block contenu %}
 <div class="admin-entete">
-  <h1 style="color:#6b7280">Livraison directe école #{{ commande.pk }} — {{ commande.ecole.nom }}</h1>
+  <h1 style="color:#6b7280">Livraison directe site #{{ commande.pk }} — {{ commande.ecole.nom }}</h1>
 </div>
 
 <p style="font-size:.85rem;color:var(--encre-clair);margin-bottom:16px">
-  École : <strong>{{ commande.ecole.nom }}</strong>
+  Site : <strong>{{ commande.ecole.nom }}</strong>
   · Créé le {{ commande.cree_le|date:"d/m/Y à H:i" }} par {{ commande.cree_par.get_full_name|default:commande.cree_par.username }}
   {% if commande.livree_par %} · Validé par {{ commande.livree_par.get_full_name|default:commande.livree_par.username }}{% endif %}
 </p>

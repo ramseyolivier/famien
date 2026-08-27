@@ -18,7 +18,7 @@ from django.core.validators import MinValueValidator
 from django.db import models, transaction
 
 from catalogue.models import Produit
-from core.models import Site, TypeSite
+from core.models import Site
 
 
 class Niveau(models.TextChoices):
@@ -42,8 +42,7 @@ class ClasseEcole(models.Model):
     Le niveau sert uniquement au groupement et aux filtres ; le libellé est libre.
     """
     ecole = models.ForeignKey(
-        Site, on_delete=models.CASCADE, related_name="classes",
-        limit_choices_to={"type": TypeSite.ECOLE}
+        Site, on_delete=models.CASCADE, related_name="classes"
     )
     niveau = models.CharField(max_length=6, choices=Niveau.choices)
     libelle = models.CharField(
@@ -68,8 +67,7 @@ class ClasseEcole(models.Model):
 
 class Kit(models.Model):
     ecole = models.ForeignKey(
-        Site, on_delete=models.PROTECT, related_name="kits",
-        limit_choices_to={"type": TypeSite.ECOLE}
+        Site, on_delete=models.PROTECT, related_name="kits"
     )
     classe = models.ForeignKey(
         ClasseEcole, on_delete=models.PROTECT, related_name="kits"
@@ -132,10 +130,8 @@ class Kit(models.Model):
         return sum(ligne.quantite for ligne in self.lignes.all())
 
     def clean(self):
-        if self.ecole_id and self.ecole.type != TypeSite.ECOLE:
-            raise ValidationError({"ecole": "Un kit se rattache à une école, pas à un magasin."})
         if self.classe_id and self.ecole_id and self.classe.ecole_id != self.ecole_id:
-            raise ValidationError({"classe": "La classe sélectionnée n'appartient pas à cette école."})
+            raise ValidationError({"classe": "La classe sélectionnée n'appartient pas à ce site."})
 
     def verifier_regle_de_prix(self):
         """

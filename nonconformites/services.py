@@ -1,5 +1,4 @@
 from django.core.exceptions import ValidationError
-from django.db import models as dj_models
 from django.db import transaction
 from django.utils import timezone
 
@@ -10,39 +9,7 @@ from .models import ActionCorrective, NonConformite, StatutNonConformite
 
 
 def _destinataires(auteur):
-    p = auteur.profil
-    commune_id = auteur.site.commune_id if auteur.site_id else None
-
-    if p == Profil.COMMERCIAL and commune_id:
-        return Utilisateur.objects.filter(
-            dj_models.Q(profil=Profil.CHEF_EQUIPE, site=auteur.site)
-            | dj_models.Q(profil=Profil.SUPERVISEUR, commune_id=commune_id)
-            | dj_models.Q(profil__in=[Profil.MANAGER, Profil.DG])
-        ).exclude(pk=auteur.pk)
-
-    if p == Profil.CHEF_EQUIPE and commune_id:
-        return Utilisateur.objects.filter(
-            dj_models.Q(profil=Profil.SUPERVISEUR, commune_id=commune_id)
-            | dj_models.Q(profil__in=[Profil.MANAGER, Profil.DG])
-        ).exclude(pk=auteur.pk)
-
-    if p == Profil.GEST_MAGASIN and commune_id:
-        return Utilisateur.objects.filter(
-            dj_models.Q(profil=Profil.SUPERVISEUR, commune_id=commune_id)
-            | dj_models.Q(profil__in=[Profil.MANAGER, Profil.DG])
-        ).exclude(pk=auteur.pk)
-
-    if p == Profil.SUPERVISEUR:
-        return Utilisateur.objects.filter(
-            profil__in=[Profil.MANAGER, Profil.DG]
-        ).exclude(pk=auteur.pk)
-
-    if p in {Profil.MANAGER, Profil.DG}:
-        return Utilisateur.objects.filter(
-            profil__in=[Profil.MANAGER, Profil.DG]
-        ).exclude(pk=auteur.pk)
-
-    return Utilisateur.objects.none()
+    return Utilisateur.objects.filter(is_active=True, profil=Profil.DG).exclude(pk=auteur.pk)
 
 
 @transaction.atomic

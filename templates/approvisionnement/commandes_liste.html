@@ -1,6 +1,6 @@
 {% extends "base.html" %}
-{% block titre %}Commandes école — LEPAD{% endblock %}
-{% block lieu %}Approvisionnement — Commandes école{% endblock %}
+{% block titre %}Commandes site — FAMIEN{% endblock %}
+{% block lieu %}Approvisionnement — Commandes site{% endblock %}
 
 {% block contenu %}
 <style>
@@ -10,7 +10,7 @@
 .admin-entete h1{color:#6b7280}
 </style>
 <div class="admin-entete">
-  <h1>Commandes école</h1>
+  <h1>Commandes site</h1>
   {% if not supervision and request.user.profil == "CHEF_EQUIPE" %}
   <a href="{% url 'commande_ecole_nouvelle' %}" class="bouton-secondaire">+ Nouvelle commande</a>
   {% endif %}
@@ -39,7 +39,7 @@
   {% endif %}
   {% if ecoles %}
   <div class="filtre-champ filtre-champ--large">
-    <label>École</label>
+    <label>Site</label>
     <select name="ecole" id="filtre-ecole">
       <option value="">Toutes</option>
       {% for e in ecoles %}

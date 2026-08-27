@@ -20,28 +20,7 @@ def _qs_visible(user):
     """QuerySet des NCs que cet utilisateur a le droit de consulter."""
     if user.acces_national or user.is_superuser:
         return NonConformite.objects.all()
-
-    q = Q(cree_par=user)
-
-    if user.profil == Profil.SUPERVISEUR and user.commune_id:
-        q |= Q(
-            cree_par__profil__in=[Profil.COMMERCIAL, Profil.CHEF_EQUIPE, Profil.GEST_MAGASIN],
-            cree_par__site__commune_id=user.commune_id,
-        )
-    elif user.profil == Profil.GEST_MAGASIN and user.site_id:
-        commune_id = user.site.commune_id
-        if commune_id:
-            q |= Q(
-                cree_par__profil__in=[Profil.COMMERCIAL, Profil.CHEF_EQUIPE],
-                cree_par__site__commune_id=commune_id,
-            )
-    elif user.profil == Profil.CHEF_EQUIPE and user.site_id:
-        q |= Q(
-            cree_par__profil=Profil.COMMERCIAL,
-            cree_par__site_id=user.site_id,
-        )
-
-    return NonConformite.objects.filter(q)
+    return NonConformite.objects.filter(cree_par=user)
 
 
 @login_required
@@ -117,21 +96,17 @@ def nc_detail(request, pk):
         pk=pk,
     )
     peut_cloturer = (
-        request.user.profil in {Profil.MANAGER, Profil.DG}
+        request.user.profil == Profil.DG
         or request.user.is_superuser
     )
     peut_supprimer = peut_cloturer
     peut_relancer = peut_cloturer
 
-    # Utilisateurs dans la zone de la NC (pour la relance)
-    if nc.site and nc.site.commune_id:
-        commune_id = nc.site.commune_id
+    # Utilisateurs sur le même site ou dans l'équipe (pour la relance)
+    if nc.site:
         utilisateurs_zone = (
-            Utilisateur.objects.filter(
-                Q(site__commune_id=commune_id) | Q(commune_id=commune_id)
-            )
+            Utilisateur.objects.filter(site=nc.site)
             .exclude(pk=request.user.pk)
-            .distinct()
             .order_by("first_name", "last_name", "username")
         )
     else:
@@ -264,7 +239,7 @@ def nc_exporter_word(request, pk):
 
 @login_required
 def nc_supprimer(request, pk):
-    if request.user.profil not in {Profil.MANAGER, Profil.DG} and not request.user.is_superuser:
+    if request.user.profil != Profil.DG and not request.user.is_superuser:
         messages.error(request, "Accès refusé.")
         return redirect("nc_liste")
     nc = get_object_or_404(NonConformite, pk=pk)

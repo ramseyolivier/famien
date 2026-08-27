@@ -23,9 +23,9 @@
   </div>
 </div>
 
-<div class="etiquette">Chiffre d'affaires du jour par école</div>
+<div class="etiquette">Chiffre d'affaires du jour par site</div>
 <table class="registre">
-  <thead><tr><th>École</th><th class="nombre">Ventes</th><th class="nombre">F CFA</th></tr></thead>
+  <thead><tr><th>Site</th><th class="nombre">Ventes</th><th class="nombre">F CFA</th></tr></thead>
   <tbody>
   {% for l in par_ecole %}
     <tr><td>{{ l.ecole__nom }}</td><td class="nombre">{{ l.n }}</td><td class="nombre">{{ l.ca|floatformat:0 }}</td></tr>

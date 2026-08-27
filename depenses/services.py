@@ -8,7 +8,7 @@ def _notifier_dg_manager(depense, *, type, titre, message=""):
     from core.models import Utilisateur, Profil, TypeNotification
     from core.services import creer_notification
     lien = f"/depenses/{depense.pk}/"
-    for u in Utilisateur.objects.filter(profil__in=[Profil.DG, Profil.MANAGER], is_active=True):
+    for u in Utilisateur.objects.filter(profil=Profil.DG, is_active=True):
         if u.pk == depense.cree_par_id:
             continue
         if u.acces_national or depense.site is None or depense.site in u.sites_autorises():

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block titre %}Réception commande #{{ commande.numero }} — LEPAD{% endblock %}
+{% block titre %}Réception commande #{{ commande.numero }} — FAMIEN{% endblock %}
 {% block lieu %}Approvisionnement{% endblock %}
 
 {% block fil_ariane %}{% endblock %}
@@ -13,7 +13,7 @@
   Saisissez les quantités effectivement reçues. Tout écart doit être justifié.
 </p>
 <p style="color:var(--encre-clair);font-size:.85rem;margin-bottom:20px;font-style:italic">
-  Le stock de l'école sera crédité à la confirmation. Si des articles manquent, signalez-le via le motif d'écart.
+  Le stock de le site sera crédité à la confirmation. Si des articles manquent, signalez-le via le motif d'écart.
 </p>
 
 <form method="post" onsubmit="return confirm('Confirmer la réception et mettre à jour les stocks ?')">

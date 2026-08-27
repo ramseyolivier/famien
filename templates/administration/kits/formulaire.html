@@ -19,7 +19,7 @@
 
   {% if kit_existant %}
   <div class="kit-info-lecture">
-    <span><strong>École :</strong> {{ kit_existant.ecole.nom }}</span>
+    <span><strong>Site :</strong> {{ kit_existant.ecole.nom }}</span>
     <span style="margin-left:20px"><strong>Classe :</strong> {{ kit_existant.classe.libelle }}</span>
   </div>
   {% for champ in prix_form %}
@@ -104,7 +104,7 @@ const PRODUITS = {{ produits_json|safe }};
 const CLASSES = {{ classes_json|safe }};
 const ECOLE_FIXE = "{{ kit_existant.ecole.pk|default:'' }}";
 
-// Cascade école → classe lors de la création d'un nouveau kit
+// Cascade site → classe lors de la création d'un nouveau kit
 (function() {
   const ecoleSelect = document.getElementById('id_ecole');
   const classeSelect = document.getElementById('id_classe');

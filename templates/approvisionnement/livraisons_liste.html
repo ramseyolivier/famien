@@ -1,6 +1,6 @@
 {% extends "base.html" %}
-{% block titre %}Livraisons école — LEPAD{% endblock %}
-{% block lieu %}Approvisionnement — Livraisons école{% endblock %}
+{% block titre %}Livraisons site — FAMIEN{% endblock %}
+{% block lieu %}Approvisionnement — Livraisons site{% endblock %}
 
 {% block contenu %}
 <style>
@@ -10,7 +10,7 @@
 .admin-entete h1{color:var(--accent)}
 </style>
 <div class="admin-entete">
-  <h1>Livraisons école</h1>
+  <h1>Livraisons site</h1>
   {% if magasin %}
   <a href="{% url 'livraison_directe_ecole' %}" class="bouton-secondaire">+ Livraison directe</a>
   {% endif %}
@@ -30,7 +30,7 @@
   {% endif %}
   {% if ecoles %}
   <div class="filtre-champ filtre-champ--large">
-    <label>École</label>
+    <label>Site</label>
     <select name="ecole" id="liv-filtre-ecole">
       <option value="">Toutes</option>
       {% for e in ecoles %}
@@ -81,7 +81,7 @@ document.addEventListener('DOMContentLoaded', function () {
   <thead>
     <tr>
       <th>#</th>
-      <th>École</th>
+      <th>Site</th>
       <th>Type</th>
       <th>Statut</th>
       <th>Date</th>

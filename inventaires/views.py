@@ -3,22 +3,18 @@ from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
 from django.shortcuts import get_object_or_404, redirect, render
 
-from core.models import Commune, Profil, Site, TypeSite
+from core.models import Profil, Site
 from stock.models import SoldeStock
 
 from .models import Inventaire, InventaireLigne, StatutInventaire
 from .services import valider_inventaire, verifier_blocages_inventaire
 
-PEUT_INITIER = {Profil.DG, Profil.MANAGER, Profil.CHEF_EQUIPE, Profil.GEST_MAGASIN}
-_DG_MANAGER = {Profil.DG, Profil.MANAGER}
-
-
 def _peut_initier(user):
-    return user.is_superuser or user.profil in PEUT_INITIER
+    return user.is_superuser or user.profil in {Profil.DG, Profil.CHEF_EQUIPE}
 
 
 def _est_dg_manager(user):
-    return user.is_superuser or user.profil in _DG_MANAGER
+    return user.is_superuser or user.profil == Profil.DG
 
 
 @login_required
@@ -26,16 +22,8 @@ def inventaires_liste(request):
     u = request.user
     est_dg = _est_dg_manager(u)
 
-    if est_dg:
-        # Le DG/Manager voit uniquement les dépôts (son site_id s'il est défini, sinon tous les DEPOT)
-        if u.site_id:
-            sites = Site.objects.filter(pk=u.site_id)
-        else:
-            sites = Site.objects.filter(type=TypeSite.DEPOT)
-    else:
-        sites = u.sites_autorises()
+    sites = u.sites_autorises()
 
-    est_superviseur = u.profil == Profil.SUPERVISEUR
     statut_filtre = request.GET.get("statut", "")
     site_filtre   = request.GET.get("site", "")
     debut         = request.GET.get("debut", "")
@@ -47,7 +35,7 @@ def inventaires_liste(request):
         .select_related("site", "cree_par")
         .order_by("-cree_le")
     )
-    if site_filtre and est_superviseur:
+    if site_filtre and est_dg:
         qs = qs.filter(site_id=site_filtre)
     if statut_filtre:
         qs = qs.filter(statut=statut_filtre)
@@ -56,18 +44,16 @@ def inventaires_liste(request):
     if fin:
         qs = qs.filter(cree_le__date__lte=fin)
 
-    sites_filtre = sites.order_by("nom") if est_superviseur else None
+    sites_filtre = sites.order_by("nom") if est_dg else None
     filtres = {"statut": statut_filtre, "site": site_filtre, "debut": debut, "fin": fin}
 
     return render(request, "inventaires/liste.html", {
         "inventaires":    qs[:200],
         "peut_initier":   _peut_initier(u),
         "est_dg_manager": est_dg,
-        "est_superviseur": est_superviseur,
         "statuts":        StatutInventaire.choices,
         "filtres":        filtres,
         "sites_filtre":   sites_filtre,
-        "depot":          u.site if est_dg else None,
     })
 
 
@@ -83,14 +69,7 @@ def inventaires_liste_export(request):
 
     u = request.user
     est_dg = _est_dg_manager(u)
-    if est_dg:
-        if u.site_id:
-            sites = Site.objects.filter(pk=u.site_id)
-        else:
-            sites = Site.objects.filter(type=TypeSite.DEPOT)
-    else:
-        sites = u.sites_autorises()
-
+    sites = u.sites_autorises()
     statut_filtre = request.GET.get("statut", "")
     debut         = request.GET.get("debut", "")
     fin           = request.GET.get("fin", "")
@@ -139,21 +118,18 @@ def inventaires_global(request):
         messages.error(request, "Accès réservé au DG et au Manager.")
         return redirect("inventaires_liste")
 
-    statut_filtre  = request.GET.get("statut", "")
-    commune_filtre = request.GET.get("commune", "")
-    site_filtre    = request.GET.get("site", "")
-    debut          = request.GET.get("debut", "")
-    fin            = request.GET.get("fin", "")
+    statut_filtre = request.GET.get("statut", "")
+    site_filtre   = request.GET.get("site", "")
+    debut         = request.GET.get("debut", "")
+    fin           = request.GET.get("fin", "")
 
     qs = (
         Inventaire.objects
-        .select_related("site", "site__commune", "cree_par", "valide_par")
+        .select_related("site", "cree_par", "valide_par")
         .order_by("-cree_le")
     )
     if statut_filtre:
         qs = qs.filter(statut=statut_filtre)
-    if commune_filtre:
-        qs = qs.filter(site__commune_id=commune_filtre)
     if site_filtre:
         qs = qs.filter(site_id=site_filtre)
     if debut:
@@ -161,21 +137,15 @@ def inventaires_global(request):
     if fin:
         qs = qs.filter(cree_le__date__lte=fin)
 
-    communes_filtre = Commune.objects.order_by("nom")
-    sites_filtre_qs = Site.objects.order_by("type", "nom")
-    if commune_filtre:
-        sites_filtre_qs = sites_filtre_qs.filter(commune_id=commune_filtre)
-
+    sites_filtre_qs = Site.objects.order_by("nom")
     filtres = {
-        "statut": statut_filtre, "commune": commune_filtre,
-        "site": site_filtre, "debut": debut, "fin": fin,
+        "statut": statut_filtre, "site": site_filtre, "debut": debut, "fin": fin,
     }
     return render(request, "inventaires/global.html", {
-        "inventaires":    qs[:500],
-        "statuts":        StatutInventaire.choices,
-        "communes_filtre": communes_filtre,
-        "sites_filtre":   sites_filtre_qs,
-        "filtres":        filtres,
+        "inventaires":  qs[:500],
+        "statuts":      StatutInventaire.choices,
+        "sites_filtre": sites_filtre_qs,
+        "filtres":      filtres,
     })
 
 
@@ -193,17 +163,14 @@ def inventaires_global_export(request):
         from django.http import HttpResponseForbidden
         return HttpResponseForbidden()
 
-    statut_filtre  = request.GET.get("statut", "")
-    commune_filtre = request.GET.get("commune", "")
-    site_filtre    = request.GET.get("site", "")
-    debut          = request.GET.get("debut", "")
-    fin            = request.GET.get("fin", "")
+    statut_filtre = request.GET.get("statut", "")
+    site_filtre   = request.GET.get("site", "")
+    debut         = request.GET.get("debut", "")
+    fin           = request.GET.get("fin", "")
 
-    qs = Inventaire.objects.select_related("site", "site__commune", "cree_par", "valide_par").order_by("-cree_le")
+    qs = Inventaire.objects.select_related("site", "cree_par", "valide_par").order_by("-cree_le")
     if statut_filtre:
         qs = qs.filter(statut=statut_filtre)
-    if commune_filtre:
-        qs = qs.filter(site__commune_id=commune_filtre)
     if site_filtre:
         qs = qs.filter(site_id=site_filtre)
     if debut:
@@ -214,7 +181,7 @@ def inventaires_global_export(request):
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Inventaires global"
-    entetes = ["#", "Commune", "Site", "Type", "Statut", "Écarts", "Créé le", "Par", "Validé le", "Par"]
+    entetes = ["#", "Site", "Statut", "Écarts", "Créé le", "Par", "Validé le", "Par"]
     for col, t in enumerate(entetes, 1):
         c = ws.cell(row=1, column=col, value=t)
         c.font = Font(bold=True, color="FFFFFF", size=11)
@@ -222,15 +189,13 @@ def inventaires_global_export(request):
         c.alignment = Alignment(horizontal="center")
     for row, inv in enumerate(qs, 2):
         ws.cell(row=row, column=1, value=f"INV-{inv.pk}")
-        ws.cell(row=row, column=2, value=inv.site.commune.nom if inv.site.commune_id else "")
-        ws.cell(row=row, column=3, value=inv.site.nom)
-        ws.cell(row=row, column=4, value=inv.site.get_type_display())
-        ws.cell(row=row, column=5, value=inv.get_statut_display())
-        ws.cell(row=row, column=6, value=inv.nb_ecarts)
-        ws.cell(row=row, column=7, value=inv.cree_le.strftime("%d/%m/%Y %H:%M") if inv.cree_le else "")
-        ws.cell(row=row, column=8, value=inv.cree_par.get_full_name() or inv.cree_par.username)
-        ws.cell(row=row, column=9, value=inv.valide_le.strftime("%d/%m/%Y %H:%M") if inv.valide_le else "")
-        ws.cell(row=row, column=10, value=inv.valide_par.get_full_name() if inv.valide_par else "")
+        ws.cell(row=row, column=2, value=inv.site.nom)
+        ws.cell(row=row, column=3, value=inv.get_statut_display())
+        ws.cell(row=row, column=4, value=inv.nb_ecarts)
+        ws.cell(row=row, column=5, value=inv.cree_le.strftime("%d/%m/%Y %H:%M") if inv.cree_le else "")
+        ws.cell(row=row, column=6, value=inv.cree_par.get_full_name() or inv.cree_par.username)
+        ws.cell(row=row, column=7, value=inv.valide_le.strftime("%d/%m/%Y %H:%M") if inv.valide_le else "")
+        ws.cell(row=row, column=8, value=inv.valide_par.get_full_name() if inv.valide_par else "")
     for col in ws.columns:
         ws.column_dimensions[get_column_letter(col[0].column)].width = min(max(len(str(c.value or "")) for c in col) + 4, 40)
     buf = io.BytesIO()
@@ -249,11 +214,8 @@ def inventaire_nouveau(request):
         return redirect("inventaires_liste")
 
     u = request.user
-    if _est_dg_manager(u):
-        sites = Site.objects.filter(pk=u.site_id) if u.site_id else Site.objects.filter(type=TypeSite.DEPOT)
-    else:
-        sites = u.sites_autorises()
-    sites_list = list(sites.order_by("type", "nom"))
+    sites = u.sites_autorises()
+    sites_list = list(sites.order_by("nom"))
     site_unique = sites_list[0] if len(sites_list) == 1 else None
 
     blocages = []

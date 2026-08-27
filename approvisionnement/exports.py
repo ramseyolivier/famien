@@ -334,8 +334,6 @@ def export_commandes_ecole_excel(request):
         .order_by("-cree_le")
     )
 
-    if request.GET.get("commune", "").isdigit():
-        qs = qs.filter(ecole__commune_id=request.GET["commune"])
     if request.GET.get("ecole", "").isdigit():
         qs = qs.filter(ecole_id=request.GET["ecole"])
     if request.GET.get("debut"):
@@ -345,10 +343,10 @@ def export_commandes_ecole_excel(request):
 
     wb = openpyxl.Workbook()
     ws = wb.active
-    ws.title = "Commandes école"
+    ws.title = "Commandes site"
     ws.freeze_panes = "A2"
 
-    entetes = ["#", "École", "Statut", "Date", "Créé par", "Produit", "Code", "Qté demandée"]
+    entetes = ["#", "Site", "Statut", "Date", "Créé par", "Produit", "Code", "Qté demandée"]
     for col, titre in enumerate(entetes, 1):
         cell = ws.cell(row=1, column=col, value=titre)
         _style_entete(cell)
@@ -403,8 +401,6 @@ def export_receptions_ecole_excel(request):
         .order_by("-livree_le")
     )
 
-    if request.GET.get("commune", "").isdigit():
-        qs = qs.filter(ecole__commune_id=request.GET["commune"])
     if request.GET.get("ecole", "").isdigit():
         qs = qs.filter(ecole_id=request.GET["ecole"])
     if request.GET.get("debut"):
@@ -414,10 +410,10 @@ def export_receptions_ecole_excel(request):
 
     wb = openpyxl.Workbook()
     ws = wb.active
-    ws.title = "Réceptions école"
+    ws.title = "Réceptions site"
     ws.freeze_panes = "A2"
 
-    entetes = ["#", "École", "Statut", "Livrée le", "Livrée par", "Produit", "Code", "Qté livrée"]
+    entetes = ["#", "Site", "Statut", "Livrée le", "Livrée par", "Produit", "Code", "Qté livrée"]
     for col, titre in enumerate(entetes, 1):
         cell = ws.cell(row=1, column=col, value=titre)
         _style_entete(cell)
@@ -474,10 +470,6 @@ def export_livraisons_ecole_excel(request):
         .order_by("-validee_le")
     )
 
-    if request.GET.get("commune", "").isdigit():
-        qs = qs.filter(ecole__commune_id=request.GET["commune"])
-    if request.GET.get("magasin", "").isdigit():
-        qs = qs.filter(ecole__magasin_rattachement_id=request.GET["magasin"])
     if request.GET.get("ecole", "").isdigit():
         qs = qs.filter(ecole_id=request.GET["ecole"])
     if request.GET.get("debut"):
@@ -487,10 +479,10 @@ def export_livraisons_ecole_excel(request):
 
     wb = openpyxl.Workbook()
     ws = wb.active
-    ws.title = "Livraisons école"
+    ws.title = "Livraisons site"
     ws.freeze_panes = "A2"
 
-    entetes = ["#", "École", "Magasin", "Validée le", "Validée par", "Produit", "Code", "Qté demandée"]
+    entetes = ["#", "Site", "Validée le", "Validée par", "Produit", "Code", "Qté demandée"]
     for col, titre in enumerate(entetes, 1):
         cell = ws.cell(row=1, column=col, value=titre)
         _style_entete(cell)
@@ -500,25 +492,22 @@ def export_livraisons_ecole_excel(request):
     for commande in qs:
         validee_par = commande.validee_par
         validee_par_nom = (validee_par.get_full_name() or validee_par.username) if validee_par else ""
-        magasin_nom = commande.ecole.magasin_rattachement.nom if commande.ecole.magasin_rattachement_id else ""
         lignes = list(commande.lignes.all())
         if not lignes:
             ws.cell(row=row, column=1, value=commande.pk)
             ws.cell(row=row, column=2, value=commande.ecole.nom)
-            ws.cell(row=row, column=3, value=magasin_nom)
-            ws.cell(row=row, column=4, value=commande.validee_le.strftime("%d/%m/%Y") if commande.validee_le else "")
-            ws.cell(row=row, column=5, value=validee_par_nom)
+            ws.cell(row=row, column=3, value=commande.validee_le.strftime("%d/%m/%Y") if commande.validee_le else "")
+            ws.cell(row=row, column=4, value=validee_par_nom)
             row += 1
         else:
             for ligne in lignes:
                 ws.cell(row=row, column=1, value=commande.pk)
                 ws.cell(row=row, column=2, value=commande.ecole.nom)
-                ws.cell(row=row, column=3, value=magasin_nom)
-                ws.cell(row=row, column=4, value=commande.validee_le.strftime("%d/%m/%Y") if commande.validee_le else "")
-                ws.cell(row=row, column=5, value=validee_par_nom)
-                ws.cell(row=row, column=6, value=ligne.produit.designation)
-                ws.cell(row=row, column=7, value=ligne.produit.code)
-                ws.cell(row=row, column=8, value=ligne.quantite)
+                ws.cell(row=row, column=3, value=commande.validee_le.strftime("%d/%m/%Y") if commande.validee_le else "")
+                ws.cell(row=row, column=4, value=validee_par_nom)
+                ws.cell(row=row, column=5, value=ligne.produit.designation)
+                ws.cell(row=row, column=6, value=ligne.produit.code)
+                ws.cell(row=row, column=7, value=ligne.quantite)
                 row += 1
 
     _ajuster_colonnes(ws)
