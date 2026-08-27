@@ -1,6 +1,4 @@
-# Accès par IP directe (HTTP). Remplacer l'adresse par un domaine
-# pour obtenir HTTPS automatique via Let's Encrypt.
-:80 {
+famien.online {
     encode gzip
     reverse_proxy web:8000
 }
