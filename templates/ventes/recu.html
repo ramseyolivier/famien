@@ -45,7 +45,11 @@
     {% if v.remise %}
       <tr><td colspan="3">Remise conventionnelle</td><td class="nombre">−{{ v.remise|floatformat:0 }}</td></tr>
     {% endif %}
+      {% if v.a_credit %}
+      <tr style="color:var(--marge)"><td colspan="3"><b>Total dû (à crédit)</b></td><td class="nombre"><b>{{ v.montant_total|floatformat:0 }} F CFA</b></td></tr>
+      {% else %}
       <tr><td colspan="3"><b>Total payé</b></td><td class="nombre"><b>{{ v.montant_total|floatformat:0 }} F CFA</b></td></tr>
+      {% endif %}
     </tbody>
   </table>
 

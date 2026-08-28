@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block titre %}Créances — FAMIEN{% endblock %}
+{% block lieu %}Ventes — Créances{% endblock %}
+
+{% block contenu %}
+<div class="admin-entete">
+  <h1>Créances</h1>
+</div>
+
+<!-- Indicateurs -->
+<div class="hub-stats" style="margin-bottom:20px">
+  <div class="indicateur alerte">
+    <div class="valeur chiffre">{{ total_restant|floatformat:0 }}</div>
+    <div class="libelle">Reste à encaisser</div>
+  </div>
+  <div class="indicateur">
+    <div class="valeur chiffre">{{ total_paye|floatformat:0 }}</div>
+    <div class="libelle">Déjà encaissé</div>
+  </div>
+  <div class="indicateur">
+    <div class="valeur chiffre">{{ total_du|floatformat:0 }}</div>
+    <div class="libelle">Total vendu à crédit</div>
+  </div>
+</div>
+
+<!-- Filtres -->
+<form method="get" class="finance-filtres" style="margin-bottom:16px">
+  <div class="filtre-champ">
+    <label>Nom / Prénom</label>
+    <input type="text" name="nom" value="{{ nom_f }}" placeholder="Chercher…"
+      style="padding:8px 10px;border:1.5px solid var(--reglure);border-radius:var(--rayon);font:inherit">
+  </div>
+  <div class="filtre-champ">
+    <label>Statut</label>
+    <select name="statut" data-no-combobox onchange="this.form.submit()">
+      <option value="ouvert"  {% if statut_f == "ouvert"  %}selected{% endif %}>En cours</option>
+      <option value="solde"   {% if statut_f == "solde"   %}selected{% endif %}>Soldé</option>
+      <option value="tous"    {% if statut_f == "tous"    %}selected{% endif %}>Tous</option>
+    </select>
+  </div>
+  <div style="display:flex;align-items:flex-end;gap:8px;padding-bottom:2px">
+    <button type="submit" class="bouton-secondaire">Chercher</button>
+    <a href="{% url 'creances_liste' %}" class="bouton-secondaire" title="Réinitialiser" style="min-width:0;padding:8px 12px">↺</a>
+  </div>
+</form>
+
+{% if ventes %}
+<div style="overflow-x:auto">
+<table class="registre">
+  <thead>
+    <tr>
+      <th>Client</th>
+      <th>Site</th>
+      <th>Date</th>
+      <th>N°</th>
+      <th class="nombre">Total vendu</th>
+      <th class="nombre">Encaissé</th>
+      <th class="nombre">Reste</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for v in ventes %}
+    <tr>
+      <td style="font-weight:600">{{ v.client_prenom }} {{ v.client_nom }}</td>
+      <td>{{ v.ecole.nom }}</td>
+      <td>{{ v.horodatage|date:"d/m/Y" }}</td>
+      <td>{{ v.numero }}</td>
+      <td class="nombre chiffre">{{ v.montant_total|floatformat:0 }}</td>
+      <td class="nombre chiffre" style="color:var(--valide)">{{ v.total_paye|floatformat:0 }}</td>
+      <td class="nombre chiffre" style="font-weight:700;color:{% if v.solde_restant > 0 %}var(--marge){% else %}var(--valide){% endif %}">
+        {% if v.solde_restant > 0 %}{{ v.solde_restant|floatformat:0 }}{% else %}Soldé{% endif %}
+      </td>
+      <td>
+        <a href="{% url 'creance_detail' v.pk %}" class="bouton-secondaire" style="padding:6px 12px;font-size:.82rem">Détail</a>
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<p class="vide-liste">Aucune créance{% if nom_f %} pour « {{ nom_f }} »{% endif %}.</p>
+{% endif %}
+
+<div class="pied">
+  <a href="{% url 'hub_ventes' %}" class="bouton-secondaire">← Ventes</a>
+</div>
+{% endblock %}

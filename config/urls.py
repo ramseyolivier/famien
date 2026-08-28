@@ -77,6 +77,10 @@ urlpatterns = [
     path("avoirs/<int:pk>/livrer-partiel/", ventes_views.avoir_livrer_partiel, name="avoir_livrer_partiel"),
     path("avoirs/<uuid:uuid>/document/", ventes_views.avoir_document, name="avoir_document"),
 
+    # ─── Créances (ventes à crédit) ──────────────────────────────────────────
+    path("creances/", ventes_views.creances_liste, name="creances_liste"),
+    path("creances/<int:pk>/", ventes_views.creance_detail, name="creance_detail"),
+
     # ─── Clôtures de caisse (M19) ────────────────────────────────────────────
     path("clotures/", ventes_views.clotures_liste, name="clotures_liste"),
     path("clotures/nouvelle/", ventes_views.cloturer_caisse, name="cloturer_caisse"),

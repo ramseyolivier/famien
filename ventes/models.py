@@ -77,6 +77,25 @@ class Vente(models.Model):
     annulation_demandee = models.BooleanField(default=False)
     motif_demande = models.TextField(blank=True)
 
+    a_credit     = models.BooleanField(default=False, help_text="Le stock est sorti mais le client n'a pas encore payé.")
+    client_nom   = models.CharField(max_length=100, blank=True, default="")
+    client_prenom = models.CharField(max_length=100, blank=True, default="")
+
+    @property
+    def solde_credit(self):
+        """Montant restant à encaisser sur une vente à crédit."""
+        if not self.a_credit:
+            return None
+        from django.db.models import Sum
+        paye = self.paiements_credit.aggregate(t=Sum("montant"))["t"] or Decimal("0")
+        return max(self.montant_total - paye, Decimal("0"))
+
+    @property
+    def credit_solde(self):
+        """True si la vente à crédit est intégralement réglée."""
+        s = self.solde_credit
+        return s is not None and s == Decimal("0")
+
     class Meta:
         verbose_name = "vente"
         ordering = ["-horodatage"]
@@ -232,3 +251,20 @@ class LigneProduitVente(models.Model):
     @property
     def montant_avoir(self):
         return self.prix_unitaire_avoir * self.quantite_manquante
+
+
+class PaiementCredit(models.Model):
+    """Règlement partiel ou total d'une vente à crédit."""
+    vente    = models.ForeignKey(Vente, on_delete=models.PROTECT, related_name="paiements_credit")
+    montant  = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(Decimal("0.01"))])
+    date     = models.DateField()
+    auteur   = models.ForeignKey("core.Utilisateur", on_delete=models.PROTECT, related_name="paiements_credit_saisis")
+    note     = models.CharField(max_length=255, blank=True, default="")
+    cree_le  = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "paiement crédit"
+        ordering = ["date", "cree_le"]
+
+    def __str__(self):
+        return f"Paiement {self.montant:,.0f} F — vente {self.vente.numero}"

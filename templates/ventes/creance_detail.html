@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% block titre %}Créance — {{ v.client_prenom }} {{ v.client_nom }}{% endblock %}
+{% block lieu %}Ventes — Créances — Détail{% endblock %}
+
+{% block contenu %}
+<div class="admin-entete">
+  <h1>{{ v.client_prenom }} {{ v.client_nom }}</h1>
+</div>
+
+<!-- Résumé de la vente -->
+<div style="background:var(--papier);border:1.5px solid var(--reglure);border-radius:var(--rayon);padding:16px 20px;margin-bottom:24px">
+  <div style="display:flex;flex-wrap:wrap;gap:20px;align-items:flex-start">
+    <div>
+      <div style="font-size:.75rem;color:var(--encre-clair);text-transform:uppercase;letter-spacing:.07em;margin-bottom:3px">Vente</div>
+      <div style="font-weight:700">{{ v.numero }} — {{ v.horodatage|date:"d/m/Y" }}</div>
+      <div style="font-size:.88rem;color:var(--encre-clair)">{{ v.ecole.nom }}</div>
+    </div>
+    <div>
+      <div style="font-size:.75rem;color:var(--encre-clair);text-transform:uppercase;letter-spacing:.07em;margin-bottom:3px">Total vendu</div>
+      <div class="chiffre" style="font-weight:700;font-size:1.1rem">{{ v.montant_total|floatformat:0 }} F</div>
+    </div>
+    <div>
+      <div style="font-size:.75rem;color:var(--encre-clair);text-transform:uppercase;letter-spacing:.07em;margin-bottom:3px">Déjà encaissé</div>
+      <div class="chiffre" style="font-weight:700;font-size:1.1rem;color:var(--valide)">{{ total_paye|floatformat:0 }} F</div>
+    </div>
+    <div>
+      <div style="font-size:.75rem;color:var(--encre-clair);text-transform:uppercase;letter-spacing:.07em;margin-bottom:3px">Reste à payer</div>
+      <div class="chiffre" style="font-weight:800;font-size:1.2rem;color:{% if solde_restant > 0 %}var(--marge){% else %}var(--valide){% endif %}">
+        {% if solde_restant > 0 %}{{ solde_restant|floatformat:0 }} F{% else %}Soldé ✓{% endif %}
+      </div>
+    </div>
+    <div style="margin-left:auto">
+      <a href="{% url 'recu' v.uuid %}" class="bouton-secondaire" style="font-size:.82rem">Voir le reçu</a>
+    </div>
+  </div>
+</div>
+
+<!-- Articles achetés -->
+<div class="etiquette" style="margin-bottom:8px">Articles achetés</div>
+<table class="registre" style="margin-bottom:24px">
+  <thead>
+    <tr>
+      <th>Article / Kit</th>
+      <th class="nombre">Qté</th>
+      <th class="nombre">Prix unit.</th>
+      <th class="nombre">Total</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for l in v.lignes.all %}
+    <tr>
+      <td>{% if l.kit %}Kit {{ l.kit.classe.libelle }}{% else %}{{ l.produit.designation }}{% endif %}</td>
+      <td class="nombre">{{ l.quantite }}</td>
+      <td class="nombre chiffre">{{ l.prix_unitaire|floatformat:0 }}</td>
+      <td class="nombre chiffre">{{ l.montant_total|floatformat:0 }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<!-- Historique des paiements -->
+<div class="etiquette" style="margin-bottom:8px">Paiements effectués</div>
+{% if paiements %}
+<table class="registre" style="margin-bottom:24px">
+  <thead>
+    <tr>
+      <th>Date</th>
+      <th>Enregistré par</th>
+      <th>Note</th>
+      <th class="nombre">Montant</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for p in paiements %}
+    <tr>
+      <td>{{ p.date|date:"d/m/Y" }}</td>
+      <td>{{ p.auteur.get_full_name|default:p.auteur.username }}</td>
+      <td style="color:var(--encre-clair)">{{ p.note|default:"—" }}</td>
+      <td class="nombre chiffre" style="color:var(--valide);font-weight:700">{{ p.montant|floatformat:0 }} F</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="vide-liste" style="margin-bottom:24px">Aucun paiement enregistré.</p>
+{% endif %}
+
+<!-- Formulaire de paiement -->
+{% if solde_restant > 0 %}
+<div class="etiquette" style="margin-bottom:10px">Enregistrer un paiement</div>
+<div style="background:var(--papier);border:1.5px solid var(--reglure);border-radius:var(--rayon);padding:18px 20px;max-width:480px">
+  {% if erreur %}
+  <div style="color:#e00000;margin-bottom:12px;font-size:.9rem">{{ erreur }}</div>
+  {% endif %}
+  <form method="post">
+    {% csrf_token %}
+    <div style="margin-bottom:14px">
+      <label style="display:block;font-size:.85rem;color:var(--encre-clair);margin-bottom:4px">
+        Montant encaissé (max {{ solde_restant|floatformat:0 }} F) *
+      </label>
+      <input type="number" name="montant" min="1" max="{{ solde_restant|floatformat:0 }}" step="1" required
+        style="width:100%;padding:10px;border:1.5px solid var(--reglure);border-radius:var(--rayon);font:inherit;font-size:1.05rem">
+    </div>
+    <div style="margin-bottom:14px">
+      <label style="display:block;font-size:.85rem;color:var(--encre-clair);margin-bottom:4px">Date du paiement</label>
+      <input type="date" name="date" value="{{ aujourd_hui|date:'Y-m-d' }}"
+        style="width:100%;padding:10px;border:1.5px solid var(--reglure);border-radius:var(--rayon);font:inherit">
+    </div>
+    <div style="margin-bottom:18px">
+      <label style="display:block;font-size:.85rem;color:var(--encre-clair);margin-bottom:4px">Note (optionnel)</label>
+      <input type="text" name="note" maxlength="255" placeholder="Ex : Paiement partiel, mobile money…"
+        style="width:100%;padding:10px;border:1.5px solid var(--reglure);border-radius:var(--rayon);font:inherit">
+    </div>
+    <button type="submit" class="bouton-primaire" style="width:100%">
+      Valider le paiement
+    </button>
+  </form>
+</div>
+{% else %}
+<div style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:var(--rayon);padding:14px 18px;color:#166534;font-weight:600;max-width:480px">
+  ✓ Cette créance est intégralement soldée.
+</div>
+{% endif %}
+
+<div class="pied" style="margin-top:32px">
+  <a href="{% url 'creances_liste' %}" class="bouton-secondaire">← Créances</a>
+</div>
+{% endblock %}

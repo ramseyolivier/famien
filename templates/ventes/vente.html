@@ -8,12 +8,6 @@
   <span style="font-size:1.6rem;font-weight:800;color:#1a3060;letter-spacing:.08em;font-family:'Raleway',sans-serif">CAISSE</span>
 </div>
 
-<!-- Téléphone client -->
-<div style="margin-bottom:18px">
-  <label style="display:block;font-size:.85rem;color:var(--encre-clair);margin-bottom:4px">Téléphone client <span id="tel-obligatoire" style="color:var(--marge);display:none">*</span></label>
-  <input type="tel" id="telephone-client" maxlength="20" placeholder="0X XX XX XX XX"
-    style="width:220px;padding:10px;border:1.5px solid var(--reglure);border-radius:var(--rayon);font:inherit">
-</div>
 
 <!-- ── Articles ──────────────────────────────────────────────────────── -->
 <div class="etiquette" style="color:#228B22;font-size:1rem;font-weight:800">Articles à l'unité</div>
@@ -72,12 +66,39 @@
 </div>
 
 {% if True %}
-<div style="margin-top:44px;text-align:center">
+<div style="margin-top:44px;text-align:center;display:flex;flex-wrap:wrap;gap:12px;justify-content:center;align-items:center">
   <input type="checkbox" id="remise" style="display:none">
   <label for="remise" id="label-remise" class="bouton-secondaire" style="cursor:pointer;display:inline-flex;align-items:center;gap:8px;user-select:none;background:#fff;color:#6b7280;border-color:#d1d5db">
     <span id="remise-icone">☐</span> Réduction personnel administratif ({{ ecole.remise_convention|floatformat:0 }} %)
   </label>
+  <input type="checkbox" id="credit-cb" style="display:none">
+  <label for="credit-cb" id="label-credit" class="bouton-secondaire" style="cursor:pointer;display:inline-flex;align-items:center;gap:8px;user-select:none;background:#fff;color:#6b7280;border-color:#d1d5db">
+    <span id="credit-icone">☐</span> Vente à crédit (paiement différé)
+  </label>
 </div>
+
+<!-- Bloc client : affiché si crédit coché OU si avoir détecté par rafraichir() -->
+<div id="bloc-client" style="display:none;margin-top:18px;max-width:520px;margin-left:auto;margin-right:auto;background:var(--papier);border:1.5px solid var(--reglure);border-radius:var(--rayon);padding:16px 18px">
+  <div id="bloc-client-titre" style="font-size:.85rem;font-weight:700;color:var(--marge);margin-bottom:12px">Informations client</div>
+  <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+    <div style="flex:1;min-width:120px">
+      <label style="display:block;font-size:.8rem;color:var(--encre-clair);margin-bottom:4px">Prénom <span id="credit-prenom-obl" style="color:var(--marge);display:none">*</span></label>
+      <input type="text" id="credit-prenom" maxlength="100" placeholder="Prénom"
+        style="width:100%;padding:10px;border:1.5px solid var(--reglure);border-radius:var(--rayon);font:inherit">
+    </div>
+    <div style="flex:1;min-width:120px">
+      <label style="display:block;font-size:.8rem;color:var(--encre-clair);margin-bottom:4px">Nom <span id="credit-nom-obl" style="color:var(--marge);display:none">*</span></label>
+      <input type="text" id="credit-nom" maxlength="100" placeholder="Nom de famille"
+        style="width:100%;padding:10px;border:1.5px solid var(--reglure);border-radius:var(--rayon);font:inherit">
+    </div>
+  </div>
+  <div>
+    <label style="display:block;font-size:.8rem;color:var(--encre-clair);margin-bottom:4px">Téléphone <span id="tel-obligatoire" style="color:var(--marge);display:none">*</span></label>
+    <input type="tel" id="telephone-client" maxlength="20" placeholder="0X XX XX XX XX"
+      style="width:220px;padding:10px;border:1.5px solid var(--reglure);border-radius:var(--rayon);font:inherit">
+  </div>
+</div>
+
 <script>
 document.getElementById("remise").addEventListener("change", function() {
   var icone = document.getElementById("remise-icone");
@@ -93,6 +114,31 @@ document.getElementById("remise").addEventListener("change", function() {
     label.style.color = "";
     label.style.borderColor = "";
   }
+});
+document.getElementById("credit-cb").addEventListener("change", function() {
+  var icone = document.getElementById("credit-icone");
+  var label = document.getElementById("label-credit");
+  var recu  = document.getElementById("montant-donne");
+  if (this.checked) {
+    icone.textContent = "☑";
+    label.style.background = "var(--marge)";
+    label.style.color = "#fff";
+    label.style.borderColor = "var(--marge)";
+    recu.disabled = true;
+    recu.value = "";
+    recu.style.opacity = ".4";
+    document.getElementById("monnaie-bloc").style.display = "none";
+    document.getElementById("valider-label").textContent = "Enregistrer (crédit)";
+  } else {
+    icone.textContent = "☐";
+    label.style.background = "";
+    label.style.color = "";
+    label.style.borderColor = "";
+    recu.disabled = false;
+    recu.style.opacity = "";
+    document.getElementById("valider-label").textContent = "Encaisser";
+  }
+  if (typeof rafraichir === "function") rafraichir();
 });
 </script>
 {% endif %}
@@ -338,23 +384,75 @@ document.getElementById("remise").addEventListener("change", function() {
       }
     });
 
+    var elCredit     = document.getElementById("credit-cb");
+    var estCredit    = !!(elCredit && elCredit.checked);
+
+    // Vente à crédit : pas d'avoir côté UI, le client prend ce qui est dispo
+    if (estCredit) { aDesAvoirs = false; aDesAvoirsKit = false; }
     var aDesAvoirsTous = aDesAvoirs || aDesAvoirsKit;
 
-    if (aDesAvoirsTous) {
-      elTelObl.style.display = "";
-    } else {
-      elTelObl.style.display = "none";
+    var elBlocClient = document.getElementById("bloc-client");
+    var elNomObl     = document.getElementById("credit-nom-obl");
+    var elPrenomObl  = document.getElementById("credit-prenom-obl");
+
+    // Afficher le bloc client si crédit coché ou avoir détecté
+    if (elBlocClient) elBlocClient.style.display = (estCredit || aDesAvoirsTous) ? "block" : "none";
+    if (elTelObl)    elTelObl.style.display    = aDesAvoirsTous ? "" : "none";
+    if (elNomObl)    elNomObl.style.display    = estCredit ? "" : "none";
+    if (elPrenomObl) elPrenomObl.style.display = estCredit ? "" : "none";
+
+    var elBlocTitre = document.getElementById("bloc-client-titre");
+    if (elBlocTitre) {
+      if (estCredit) elBlocTitre.textContent = "Client — paiement différé";
+      else if (aDesAvoirsTous) elBlocTitre.textContent = "Client — articles non livrés (avoir)";
+      else elBlocTitre.textContent = "Informations client";
     }
 
     // Afficher/masquer la colonne Avoir via classe CSS (max-width collapse)
     document.getElementById("tbl-kits").classList.toggle("avec-avoir", aDesAvoirsKit);
     document.getElementById("tbl-articles").classList.toggle("avec-avoir", aDesAvoirs);
 
-    var telOk = !aDesAvoirsTous || (elTelephone.value.trim().length >= 8);
-    var recuOk = (parseFloat(elMontantDonne.value) || 0) >= t;
-    elValider.disabled    = vide || envoiEnCours || !qteOk || !telOk || !recuOk;
-    elMontant.textContent = vide ? "" : (!qteOk ? " Quantité invalide" : (!telOk ? " Téléphone requis" : " " + fmt(t) + " F"));
+    var elNom    = document.getElementById("credit-nom");
+    var elPrenom = document.getElementById("credit-prenom");
+    var nomOk    = !estCredit || ((elNom && elNom.value.trim()) && (elPrenom && elPrenom.value.trim()));
+    var telOk    = !aDesAvoirsTous || estCredit || (elTelephone.value.trim().length >= 8);
+    var recuOk   = estCredit || (parseFloat(elMontantDonne.value) || 0) >= t;
+    elValider.disabled    = vide || envoiEnCours || !qteOk || !telOk || !recuOk || !nomOk;
+    elMontant.textContent = vide ? "" : (!qteOk ? " Quantité invalide" : (!telOk ? " Téléphone requis" : (!nomOk ? " Nom et prénom requis" : " " + fmt(t) + " F")));
+    appliquerMaxCredit();
     calculerMonnaie();
+  }
+
+  function appliquerMaxCredit() {
+    var estCr = !!(document.getElementById("credit-cb") && document.getElementById("credit-cb").checked);
+    // Articles
+    elArticlesBody.querySelectorAll("tr[data-row][data-item-id]").forEach(function(tr) {
+      var qIn = tr.querySelector(".qte-input");
+      if (!qIn) return;
+      if (estCr) {
+        var maxV = stockRestant(tr.dataset.itemId);
+        qIn.setAttribute("max", maxV);
+        var v = parseInt(qIn.value, 10) || 0;
+        if (v > maxV) qIn.value = maxV;
+      } else {
+        qIn.removeAttribute("max");
+      }
+    });
+    // Kits : max = qty actuelle + dispo restante (calculé par majTousLesKits)
+    elKitsBody.querySelectorAll("tr[data-row][data-item-id]").forEach(function(tr) {
+      var qIn = tr.querySelector(".qte-input");
+      var tdD = tr.querySelector(".col-dispo");
+      if (!qIn) return;
+      if (estCr) {
+        var qty  = parseInt(qIn.value, 10) || 0;
+        var rest = parseInt(tdD ? tdD.textContent : "0", 10) || 0;
+        var maxV = qty + rest;
+        qIn.setAttribute("max", maxV);
+        if (qty > maxV) qIn.value = maxV;
+      } else {
+        qIn.removeAttribute("max");
+      }
+    });
   }
 
   function calculerMonnaie() {
@@ -520,6 +618,9 @@ document.getElementById("remise").addEventListener("change", function() {
         if (!isKit && maxVal !== undefined && maxVal !== null) {
           qteInput.dataset.stockDisponible = maxVal;
         }
+        var elCb = document.getElementById("credit-cb");
+        if (elCb && elCb.checked && !isNaN(maxVal)) qteInput.setAttribute("max", maxVal);
+        else qteInput.removeAttribute("max");
         if (isKit) majMaxArticles();
       } else {
         delete tr.dataset.itemId;
@@ -532,7 +633,12 @@ document.getElementById("remise").addEventListener("change", function() {
 
     qteInput.addEventListener("input", function () {
       var v = parseInt(this.value, 10);
-      if (!isNaN(v) && v < 0) this.value = 0; // bloquer les négatifs seulement
+      if (!isNaN(v) && v < 0) this.value = 0;
+      var elCb = document.getElementById("credit-cb");
+      if (elCb && elCb.checked) {
+        var maxA = parseInt(this.getAttribute("max"), 10);
+        if (!isNaN(maxA) && !isNaN(v) && v > maxA) this.value = maxA;
+      }
       majLigne();
       if (isKit) majMaxArticles();
     });
@@ -540,6 +646,11 @@ document.getElementById("remise").addEventListener("change", function() {
     qteInput.addEventListener("blur", function () {
       var v = parseInt(this.value, 10);
       if (!isNaN(v) && v < 0) this.value = 0;
+      var elCb = document.getElementById("credit-cb");
+      if (elCb && elCb.checked) {
+        var maxA = parseInt(this.getAttribute("max"), 10);
+        if (!isNaN(maxA) && !isNaN(v) && v > maxA) this.value = maxA;
+      }
       majLigne();
       if (isKit) majMaxArticles();
     });
@@ -589,6 +700,10 @@ document.getElementById("remise").addEventListener("change", function() {
   if (elRemise) elRemise.addEventListener("change", rafraichir);
   if (elTelephone) elTelephone.addEventListener("input", rafraichir);
   elMontantDonne.addEventListener("input", rafraichir);
+  var _elNomInput    = document.getElementById("credit-nom");
+  var _elPrenomInput = document.getElementById("credit-prenom");
+  if (_elNomInput)    _elNomInput.addEventListener("input", rafraichir);
+  if (_elPrenomInput) _elPrenomInput.addEventListener("input", rafraichir);
 
   // ── Envoi ─────────────────────────────────────────────────────────────
   elValider.addEventListener("click", function () {
@@ -629,12 +744,25 @@ document.getElementById("remise").addEventListener("change", function() {
       }
     });
 
+    var elCredit  = document.getElementById("credit-cb");
+    var elNom     = document.getElementById("credit-nom");
+    var elPrenom  = document.getElementById("credit-prenom");
+    var estCredit = !!(elCredit && elCredit.checked);
+    if (estCredit && (!(elNom && elNom.value.trim()) || !(elPrenom && elPrenom.value.trim()))) {
+      alert("Veuillez renseigner le nom et le prénom du client pour une vente à crédit.");
+      envoiEnCours = false;
+      elLabel.textContent = "Enregistrer (crédit)";
+      return;
+    }
     var _recu = parseFloat(elMontantDonne.value) || 0;
     var payload = {
       uuid: uuid,
       remise_convention: !!(elRemise && elRemise.checked),
       telephone: elTelephone ? elTelephone.value.trim() : "",
-      montant_recu: _recu > 0 ? _recu : null,
+      montant_recu: estCredit ? null : (_recu > 0 ? _recu : null),
+      a_credit: estCredit,
+      client_nom:    estCredit && elNom    ? elNom.value.trim()    : "",
+      client_prenom: estCredit && elPrenom ? elPrenom.value.trim() : "",
       kits:   Array.from(kitsMap).map(function (e) { return { id: Number(e[0]), quantite: e[1].q, mode: e[1].mode }; }),
       detail: Array.from(artMap).map(function (e)  { return { id: Number(e[0]), quantite: e[1].q, mode: e[1].mode }; }),
     };

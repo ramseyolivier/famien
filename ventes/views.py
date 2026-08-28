@@ -138,6 +138,9 @@ def vente(request):
         "total_du_jour": Vente.objects.filter(
             ecole=ecole, vendeuse=u, horodatage__date=timezone.localdate()
         ).exclude(statut=StatutVente.ANNULEE).aggregate(t=Sum("montant_total"))["t"] or 0,
+        "encaisse_du_jour": Vente.objects.filter(
+            ecole=ecole, vendeuse=u, horodatage__date=timezone.localdate(), a_credit=False,
+        ).exclude(statut=StatutVente.ANNULEE).aggregate(t=Sum("montant_total"))["t"] or 0,
     }
     return render(request, "ventes/vente.html", contexte)
 
@@ -238,6 +241,10 @@ def _enregistrer(request, ecole):
     tous_modes = [m for _, _, m in lignes_kit + lignes_detail]
     mode_dominant = Counter(tous_modes).most_common(1)[0][0] if tous_modes else ModePaiement.ESPECES
 
+    a_credit   = bool(charge.get("a_credit"))
+    client_nom = (charge.get("client_nom") or "").strip()
+    client_prenom = (charge.get("client_prenom") or "").strip()
+
     try:
         v = enregistrer_vente(
             ecole=ecole,
@@ -248,7 +255,10 @@ def _enregistrer(request, ecole):
             appliquer_remise_convention=bool(charge.get("remise_convention")),
             uuid=charge.get("uuid"),
             telephone_client=(charge.get("telephone") or "").strip(),
-            montant_recu=charge.get("montant_recu") or None,
+            montant_recu=None if a_credit else (charge.get("montant_recu") or None),
+            a_credit=a_credit,
+            client_nom=client_nom,
+            client_prenom=client_prenom,
         )
     except VenteDejaEnregistree as doublon:
         # La requête précédente avait abouti : on renvoie la vente existante.
@@ -1065,6 +1075,112 @@ def _finance_annotee(ventes_qs):
 
 
 @login_required
+def creances_liste(request):
+    u      = request.user
+    ecoles = _ecoles_perimetre(u)
+    from django.db.models import Value, DecimalField as _DF
+    from django.db.models.functions import Coalesce
+    from .models import PaiementCredit
+
+    nom_f  = request.GET.get("nom", "").strip()
+    statut_f = request.GET.get("statut", "ouvert")  # ouvert | solde | tous
+
+    qs = (
+        Vente.objects.filter(ecole__in=ecoles, a_credit=True)
+        .exclude(statut=StatutVente.ANNULEE)
+        .annotate(
+            total_paye=Coalesce(
+                Sum("paiements_credit__montant"),
+                Value(0), output_field=_DF(max_digits=14, decimal_places=2),
+            )
+        )
+        .select_related("ecole", "vendeuse")
+        .order_by("-horodatage")
+    )
+    if nom_f:
+        qs = (
+            Vente.objects.filter(ecole__in=ecoles, a_credit=True)
+            .exclude(statut=StatutVente.ANNULEE)
+            .filter(Q(client_nom__icontains=nom_f) | Q(client_prenom__icontains=nom_f))
+            .annotate(
+                total_paye=Coalesce(
+                    Sum("paiements_credit__montant"),
+                    Value(0), output_field=_DF(max_digits=14, decimal_places=2),
+                )
+            )
+            .select_related("ecole", "vendeuse")
+            .order_by("-horodatage")
+        )
+
+    ventes = list(qs)
+    for v in ventes:
+        v.solde_restant = max(v.montant_total - v.total_paye, Decimal("0"))
+
+    if statut_f == "ouvert":
+        ventes = [v for v in ventes if v.solde_restant > 0]
+    elif statut_f == "solde":
+        ventes = [v for v in ventes if v.solde_restant == 0]
+
+    total_du = sum(v.montant_total for v in ventes)
+    total_paye_global = sum(v.total_paye for v in ventes)
+    total_restant = sum(v.solde_restant for v in ventes)
+
+    return render(request, "ventes/creances.html", {
+        "ventes":       ventes,
+        "nom_f":        nom_f,
+        "statut_f":     statut_f,
+        "total_du":     total_du,
+        "total_paye":   total_paye_global,
+        "total_restant": total_restant,
+    })
+
+
+@login_required
+def creance_detail(request, pk):
+    u      = request.user
+    ecoles = _ecoles_perimetre(u)
+    from .models import PaiementCredit
+
+    v = get_object_or_404(Vente, pk=pk, a_credit=True, ecole__in=ecoles)
+    paiements = v.paiements_credit.select_related("auteur").order_by("date", "cree_le")
+    total_paye  = paiements.aggregate(t=Sum("montant"))["t"] or Decimal("0")
+    solde_restant = max(v.montant_total - total_paye, Decimal("0"))
+
+    erreur = None
+    if request.method == "POST" and solde_restant > 0:
+        montant_str = request.POST.get("montant", "").strip().replace(" ", "")
+        note        = request.POST.get("note", "").strip()
+        date_str    = request.POST.get("date", "").strip()
+        try:
+            montant = Decimal(montant_str)
+            if montant <= 0:
+                raise ValueError()
+        except Exception:
+            erreur = "Montant invalide."
+        else:
+            if montant > solde_restant:
+                montant = solde_restant
+            try:
+                date_paiement = date_cls.fromisoformat(date_str) if date_str else timezone.localdate()
+            except ValueError:
+                date_paiement = timezone.localdate()
+            PaiementCredit.objects.create(
+                vente=v, montant=montant, date=date_paiement, auteur=u, note=note,
+            )
+            messages.success(request, f"Paiement de {montant:,.0f} F enregistré.")
+            return redirect("creance_detail", pk=v.pk)
+
+    return render(request, "ventes/creance_detail.html", {
+        "v":            v,
+        "paiements":    paiements,
+        "total_paye":   total_paye,
+        "solde_restant": solde_restant,
+        "aujourd_hui":  timezone.localdate(),
+        "erreur":       erreur,
+    })
+
+
+@login_required
 def hub_ventes(request):
     u = request.user
     if not u.peut_voir_ventes():
@@ -1086,12 +1202,23 @@ def hub_ventes(request):
         .exclude(vente__statut=StatutVente.ANNULEE)
         .count()
     )
+    from django.db.models import Sum as _Sum, Value as _Val, DecimalField as _DF
+    from django.db.models.functions import Coalesce as _Coa
+    from .models import PaiementCredit
+    credits_ouverts = (
+        Vente.objects.filter(ecole__in=ecoles, a_credit=True)
+        .exclude(statut=StatutVente.ANNULEE)
+        .annotate(total_paye=_Coa(_Sum("paiements_credit__montant"), _Val(0), output_field=_DF()))
+    )
+    nb_credits = sum(1 for v in credits_ouverts if v.montant_total - v.total_paye > 0)
+
     return render(request, "ventes/hub.html", {
         "nb_jour":      ventes_actives.filter(horodatage__date=timezone.localdate()).count(),
         "nb_total":     ventes_actives.count(),
         "peut_vendre":  u.peut_vendre(),
         "nb_demandes":  nb_demandes,
         "nb_avoirs":    nb_avoirs,
+        "nb_credits":   nb_credits,
     })
 
 

@@ -56,6 +56,13 @@
       <strong class="hub-carte-titre">Reste dû{% if nb_avoirs %} <span style="background:var(--marge);color:#fff;border-radius:10px;padding:1px 8px;font-size:.78rem;font-weight:700;vertical-align:middle">{{ nb_avoirs }}</span>{% endif %}</strong>
       <span class="hub-carte-desc">{% if nb_avoirs %}{{ nb_avoirs }} livraison{{ nb_avoirs|pluralize }} en attente{% else %}Marchandises payées non encore livrées{% endif %}</span>
     </a>
+    <a href="{% url 'creances_liste' %}" class="hub-carte{% if nb_credits %} hub-carte-principale{% endif %}">
+      <span class="hub-carte-icone">
+        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+      </span>
+      <strong class="hub-carte-titre">Créances{% if nb_credits %} <span style="background:var(--marge);color:#fff;border-radius:10px;padding:1px 8px;font-size:.78rem;font-weight:700;vertical-align:middle">{{ nb_credits }}</span>{% endif %}</strong>
+      <span class="hub-carte-desc">{% if nb_credits %}{{ nb_credits }} créance{{ nb_credits|pluralize }} en attente de paiement{% else %}Ventes à crédit — suivi des encaissements{% endif %}</span>
+    </a>
     {% if request.user.profil == 'CHEF_EQUIPE' or request.user.profil == 'SUPERVISEUR' or request.user.profil == 'DG' or request.user.profil == 'MANAGER' or request.user.is_superuser %}
     <a href="{% url 'historique_annulations' %}" class="hub-carte{% if nb_demandes %} hub-carte-principale{% endif %}">
       <span class="hub-carte-icone">

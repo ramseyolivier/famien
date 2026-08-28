@@ -55,6 +55,7 @@ def _besoins_en_produits(lignes_kit, lignes_detail):
 def enregistrer_vente(
     *, ecole, vendeuse, kits=(), detail=(), mode_paiement="ESPECES", observations="",
     appliquer_remise_convention=False, uuid=None, telephone_client="", montant_recu=None,
+    a_credit=False, client_nom="", client_prenom="",
 ):
     """
     kits   : itérable de (Kit, quantité, mode_paiement)
@@ -100,6 +101,9 @@ def enregistrer_vente(
         mode_paiement=mode_paiement,
         observations=observations,
         telephone_client=telephone_client or "",
+        a_credit=bool(a_credit),
+        client_nom=client_nom or "",
+        client_prenom=client_prenom or "",
         **({"montant_recu": Decimal(str(montant_recu))} if montant_recu else {}),
     )
 
@@ -118,6 +122,7 @@ def enregistrer_vente(
     besoins = _besoins_en_produits(kits, detail)
     # Verrou n°2 : les soldes, toujours dans l'ordre du code produit.
     a_des_avoirs = False
+    deduction_credit = Decimal("0")
     for produit in sorted(besoins, key=lambda p: p.code):
         due = besoins[produit]
         solde = get_ou_cree_solde(ecole, produit)
@@ -132,12 +137,20 @@ def enregistrer_vente(
                 reference_document=vente.numero,
             )
         prix_u = produit.prix_pour_ecole(ecole)
+        if a_credit and servie < due:
+            # Vente à crédit : pas d'avoir, le client prend ce qui est dispo.
+            deduction_credit += (due - servie) * prix_u
+            due = servie
         LigneProduitVente.objects.create(
             vente=vente, produit=produit, quantite_due=due, quantite_servie=servie,
             prix_unitaire_avoir=prix_u,
         )
         if servie < due:
             a_des_avoirs = True
+
+    if a_credit and deduction_credit:
+        vente.montant_total = max(Decimal("0"), vente.montant_total - deduction_credit)
+        vente.save(update_fields=["montant_total"])
 
     now = timezone.now()
     if a_des_avoirs:
