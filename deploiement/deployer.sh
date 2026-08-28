@@ -5,7 +5,7 @@ set -eu
 cd "$(dirname "$0")/.."
 
 echo "→ Sauvegarde avant migration"
-./sauvegardes/sauvegarde.sh
+./deploiement/sauvegarde.sh
 
 echo "→ Récupération du code"
 git pull --ff-only
