@@ -501,16 +501,15 @@ def rapport_kits_vendus(request):
     ecole_id  = request.GET.get("ecole", "")
     commune_id = request.GET.get("commune", "")
 
-    today = timezone.localdate()
     try:
-        debut = date_cls.fromisoformat(debut_str) if debut_str else today
+        debut = date_cls.fromisoformat(debut_str) if debut_str else None
     except ValueError:
-        debut = today
+        debut = None
         debut_str = ""
     try:
-        fin = date_cls.fromisoformat(fin_str) if fin_str else today
+        fin = date_cls.fromisoformat(fin_str) if fin_str else None
     except ValueError:
-        fin = today
+        fin = None
         fin_str = ""
 
     if commune_id.isdigit():
@@ -518,13 +517,11 @@ def rapport_kits_vendus(request):
     if ecole_id.isdigit():
         ecoles = ecoles.filter(pk=ecole_id)
 
-    ventes_qs = (
-        Vente.objects
-        .filter(ecole__in=ecoles, horodatage__date__gte=debut, horodatage__date__lte=fin)
-        .exclude(statut=StatutVente.ANNULEE)
-        .select_related("ecole")
-        .order_by("-horodatage")
-    )
+    ventes_qs = Vente.objects.filter(ecole__in=ecoles).exclude(statut=StatutVente.ANNULEE).select_related("ecole").order_by("-horodatage")
+    if debut:
+        ventes_qs = ventes_qs.filter(horodatage__date__gte=debut)
+    if fin:
+        ventes_qs = ventes_qs.filter(horodatage__date__lte=fin)
 
     ventes_ids_selectionnes = request.GET.getlist("vente")
     if ventes_ids_selectionnes:
@@ -536,50 +533,60 @@ def rapport_kits_vendus(request):
     else:
         ventes_filtrees = ventes_qs
 
-    from django.db.models import Sum as DSum, ExpressionWrapper, DecimalField as DField
-    montant_expr = ExpressionWrapper(F("quantite") * F("prix_unitaire"), output_field=DField(max_digits=14, decimal_places=2))
+    from decimal import Decimal as Dec
 
-    # Kits
-    kits_agg = (
+    # Calcul avec remise distribuée proportionnellement sur chaque ligne.
+    # Pour chaque LigneVente : montant_effectif = montant_brut × (vente.montant_total / total_brut_vente)
+    toutes_lignes = (
         LigneVente.objects
-        .filter(vente__in=ventes_filtrees, kit__isnull=False)
-        .annotate(montant_ligne=montant_expr)
-        .values("kit__id", "kit__classe__libelle")
-        .annotate(quantite=DSum("quantite"), montant=DSum("montant_ligne"))
-        .order_by("kit__classe__libelle")
+        .filter(vente__in=ventes_filtrees)
+        .select_related("vente", "kit", "kit__classe", "produit")
+        .order_by("vente_id", "pk")
     )
+
+    # Totaux bruts par vente pour calculer le ratio remise
+    gross_par_vente = {}
+    for l in toutes_lignes:
+        gross_par_vente[l.vente_id] = gross_par_vente.get(l.vente_id, Dec(0)) + l.quantite * l.prix_unitaire
+
+    kits_map    = {}  # kit_libelle → {quantite, montant}
+    articles_map = {}  # designation → {quantite, montant}
+
+    for l in toutes_lignes:
+        brut = l.quantite * l.prix_unitaire
+        gross_vente = gross_par_vente.get(l.vente_id, brut)
+        if gross_vente:
+            effectif = brut * l.vente.montant_total / gross_vente
+        else:
+            effectif = brut
+
+        if l.kit_id:
+            key = f"Kit {l.kit.classe.libelle}"
+            e = kits_map.setdefault(key, {"quantite": 0, "montant": Dec(0)})
+            e["quantite"] += l.quantite
+            e["montant"]  += effectif
+        else:
+            key = l.produit.designation
+            e = articles_map.setdefault(key, {"quantite": 0, "montant": Dec(0)})
+            e["quantite"] += l.quantite
+            e["montant"]  += effectif
+
     kits_data = [
-        {
-            "libelle": f"Kit {r['kit__classe__libelle']}",
-            "quantite": r["quantite"],
-            "montant": r["montant"] or 0,
-        }
-        for r in kits_agg
+        {"libelle": k, "quantite": v["quantite"], "montant": v["montant"]}
+        for k, v in sorted(kits_map.items())
     ]
+    articles_data = [
+        {"libelle": k, "quantite": v["quantite"], "montant": v["montant"]}
+        for k, v in sorted(articles_map.items())
+    ]
+
     sous_total_kits_qte = sum(r["quantite"] for r in kits_data)
     sous_total_kits_mnt = sum(r["montant"]  for r in kits_data)
+    sous_total_art_qte  = sum(r["quantite"] for r in articles_data)
+    sous_total_art_mnt  = sum(r["montant"]  for r in articles_data)
 
-    # Articles hors kit
-    articles_agg = (
-        LigneVente.objects
-        .filter(vente__in=ventes_filtrees, produit__isnull=False)
-        .annotate(montant_ligne=montant_expr)
-        .values("produit__designation")
-        .annotate(quantite=DSum("quantite"), montant=DSum("montant_ligne"))
-        .order_by("produit__designation")
-    )
-    articles_data = [
-        {
-            "libelle": r["produit__designation"],
-            "quantite": r["quantite"],
-            "montant": r["montant"] or 0,
-        }
-        for r in articles_agg
-    ]
-    sous_total_art_qte = sum(r["quantite"] for r in articles_data)
-    sous_total_art_mnt = sum(r["montant"]  for r in articles_data)
-
-    total_mnt = sous_total_kits_mnt + sous_total_art_mnt
+    # Total via montant_total — référence autoritaire, évite la dérive de l'arrondi.
+    total_mnt = ventes_filtrees.aggregate(t=Sum("montant_total"))["t"] or 0
 
     communes = Site.objects.filter(pk__in=ecoles.values("commune_id")).distinct() if hasattr(Site, "commune") else []
     ecoles_list = _ecoles_perimetre(u).order_by("nom")
@@ -620,16 +627,15 @@ def rapport_kits_detail(request):
     ecole_id   = request.GET.get("ecole", "")
     commune_id = request.GET.get("commune", "")
 
-    today = timezone.localdate()
     try:
-        debut = date_cls.fromisoformat(debut_str) if debut_str else today
+        debut = date_cls.fromisoformat(debut_str) if debut_str else None
     except ValueError:
-        debut = today
+        debut = None
         debut_str = ""
     try:
-        fin = date_cls.fromisoformat(fin_str) if fin_str else today
+        fin = date_cls.fromisoformat(fin_str) if fin_str else None
     except ValueError:
-        fin = today
+        fin = None
         fin_str = ""
 
     if commune_id.isdigit():
@@ -638,11 +644,11 @@ def rapport_kits_detail(request):
         ecoles = ecoles.filter(pk=ecole_id)
 
     ventes_ids = request.GET.getlist("vente")
-    qs = LigneProduitVente.objects.filter(
-        vente__ecole__in=ecoles,
-        vente__horodatage__date__gte=debut,
-        vente__horodatage__date__lte=fin,
-    ).exclude(vente__statut=StatutVente.ANNULEE)
+    qs = LigneProduitVente.objects.filter(vente__ecole__in=ecoles).exclude(vente__statut=StatutVente.ANNULEE)
+    if debut:
+        qs = qs.filter(vente__horodatage__date__gte=debut)
+    if fin:
+        qs = qs.filter(vente__horodatage__date__lte=fin)
 
     if ventes_ids:
         try:
@@ -1177,6 +1183,48 @@ def finances_entrees_sorties(request):
     total_sorties_val = dep_valide_qs.aggregate(t=Sum("montant_confirme"))["t"] or 0
     total_sorties_aff = sum((d.montant_confirme or 0) for d in depenses if d.statut == "CONFIRME")
 
+    # ── Dons (transferts DON acceptés) ───────────────────────
+    from transferts.models import TransfertLigne, StatutTransfert, TypeTransfert
+    from collections import defaultdict
+
+    don_qs = (
+        TransfertLigne.objects
+        .filter(
+            transfert__site_origine__in=dep_sites,
+            transfert__statut=StatutTransfert.ACCEPTE,
+            transfert__type_transfert=TypeTransfert.DON,
+        )
+        .select_related("transfert__site_origine", "produit")
+    )
+    if debut:
+        try:
+            don_qs = don_qs.filter(transfert__traite_le__date__gte=date_cls.fromisoformat(debut))
+        except ValueError:
+            pass
+    if fin:
+        try:
+            don_qs = don_qs.filter(transfert__traite_le__date__lte=date_cls.fromisoformat(fin))
+        except ValueError:
+            pass
+
+    _dons_par_t = defaultdict(lambda: {"valeur": Decimal(0), "nb": 0, "date": None, "site_nom": "", "pk": None, "observations": ""})
+    for ligne in don_qs:
+        t   = ligne.transfert
+        key = t.pk
+        e   = _dons_par_t[key]
+        e["pk"]           = t.pk
+        e["date"]         = t.traite_le.date() if t.traite_le else t.cree_le.date()
+        e["site_nom"]     = t.site_origine.nom
+        e["observations"] = t.observations or ""
+        e["valeur"]      += Decimal(ligne.quantite) * (ligne.produit.cout_achat or Decimal(0))
+        e["nb"]          += 1
+
+    dons_transfert = sorted(_dons_par_t.values(), key=lambda x: x["date"], reverse=True)
+    total_dons     = sum(d["valeur"] for d in dons_transfert)
+
+    total_sorties_val += total_dons
+    total_sorties_aff += total_dons
+
     total_entrees = totaux["total"]
     solde         = total_entrees - total_sorties_val
 
@@ -1184,6 +1232,7 @@ def finances_entrees_sorties(request):
         "finances":          finances,
         "totaux":            totaux,
         "depenses":          depenses,
+        "dons_transfert":    dons_transfert,
         "total_entrees":     total_entrees,
         "total_sorties":     total_sorties_aff,
         "total_sorties_val": total_sorties_val,
@@ -1465,12 +1514,23 @@ def hub_finances(request):
     )
     from depenses.models import StatutVersement, Versement
     from django.db.models import Q as _Q
+    from transferts.models import TransfertLigne, StatutTransfert, TypeTransfert
     _dep_q = _Q(site__in=sites)
     depenses_total = (
         Depense.objects.filter(_dep_q, statut=StatutDepense.CONFIRME)
         .aggregate(t=Sum("montant_confirme"))["t"] or 0
     )
-    sorties_total = depenses_total
+    dons_total = (
+        TransfertLigne.objects.filter(
+            transfert__site_origine__in=sites,
+            transfert__statut=StatutTransfert.ACCEPTE,
+            transfert__type_transfert=TypeTransfert.DON,
+        ).aggregate(t=Sum(ExpressionWrapper(
+            F("quantite") * F("produit__cout_achat"),
+            output_field=DecimalField(max_digits=14, decimal_places=2),
+        )))["t"] or 0
+    )
+    sorties_total = depenses_total + dons_total
     nb_depenses = Depense.objects.filter(_dep_q, statut=StatutDepense.SOUMIS).count()
     nb_depenses_confirmer = Depense.objects.filter(_dep_q, statut=StatutDepense.VALIDE, cree_par=u).count()
     nb_versements_attente = Versement.objects.filter(destinataire=u, statut=StatutVersement.EN_ATTENTE).count()
@@ -1558,6 +1618,7 @@ def versements_liste(request):
 
     # Pour le chef d'équipe : total ventes encaissées (non annulées)
     collecte_total = 0
+    collecte_dg    = 0
     depenses_total = 0
     if u.profil == Profil.CHEF_EQUIPE:
         ecoles = u.sites_autorises()
@@ -1571,6 +1632,12 @@ def versements_liste(request):
             .aggregate(t=Sum("montant_confirme"))["t"] or 0
         )
     elif est_dg_manager:
+        # Le DG vend directement : ses propres ventes alimentent sa caisse
+        collecte_dg = (
+            Vente.objects.filter(vendeuse__in=dg_managers)
+            .exclude(statut=StatutVente.ANNULEE)
+            .aggregate(t=Sum("montant_total"))["t"] or 0
+        )
         depenses_total = (
             Depense.objects.filter(cree_par__in=dg_managers, statut=StatutDepense.CONFIRME)
             .aggregate(t=Sum("montant_confirme"))["t"] or 0
@@ -1579,6 +1646,8 @@ def versements_liste(request):
     # Solde en main = collecté (ou reçu) − tout ce qui est parti − dépenses confirmées
     if u.profil == Profil.CHEF_EQUIPE:
         solde_en_main = collecte_total - envoye_engage - depenses_total
+    elif est_dg_manager:
+        solde_en_main = recu_confirme + collecte_dg - envoye_engage - depenses_total
     else:
         solde_en_main = recu_confirme - envoye_engage - depenses_total
 
@@ -1589,6 +1658,7 @@ def versements_liste(request):
         "recu_confirme": recu_confirme,
         "en_attente_recus": en_attente_recus,
         "collecte_total": collecte_total,
+        "collecte_dg":    collecte_dg,
         "depenses_total": depenses_total,
         "verse_banque": verse_banque,
         "solde_en_main": solde_en_main,
@@ -2110,9 +2180,16 @@ def rapport_financier_export(request):
 
 
 @login_required
-def finances_benefices(request):
+
+@login_required
+def tresorerie_globale(request):
     from datetime import date as date_type
+    from django.db.models import Q
+    from django.db.models.functions import Coalesce
     from depenses.models import Depense, StatutDepense
+    from stock.models import MouvementStock, SoldeStock, TypeMouvement
+    from transferts.models import TransfertLigne, StatutTransfert
+    from achats.models import ReceptionLigne, StatutReception
     from .models import LigneProduitVente
 
     u     = request.user
@@ -2124,345 +2201,16 @@ def finances_benefices(request):
     produit_id_f = request.GET.get("produit", "")
 
     try:
-        debut = date_type.fromisoformat(debut_str) if debut_str else today
+        debut = date_type.fromisoformat(debut_str) if debut_str else None
     except ValueError:
-        debut = today
-    try:
-        fin = date_type.fromisoformat(fin_str) if fin_str else today
-    except ValueError:
-        fin = today
-    if fin < debut:
-        fin = debut
-
-    tous_sites = u.sites_autorises()
-
-    communes_dispo = []
-    sites_dispo = tous_sites.order_by("nom")
-    produits_dispo = Produit.objects.filter(actif=True).order_by("categorie__nom", "code")
-
-    if site_id_f:
-        tous_sites = tous_sites.filter(pk=site_id_f)
-
-    ecoles     = tous_sites
-    sites_hors = tous_sites.none()
-
-    ventes_base = Vente.objects.filter(
-        ecole__in=ecoles,
-        horodatage__date__gte=debut,
-        horodatage__date__lte=fin,
-    ).exclude(statut=StatutVente.ANNULEE)
-
-    lignes_base = LigneProduitVente.objects.filter(
-        vente__ecole__in=ecoles,
-        vente__horodatage__date__gte=debut,
-        vente__horodatage__date__lte=fin,
-    ).exclude(vente__statut=StatutVente.ANNULEE)
-
-    _base_dep = dict(statut=StatutDepense.CONFIRME, date_depense__gte=debut, date_depense__lte=fin)
-    dep_all = Depense.objects.filter(site__in=tous_sites, **_base_dep)
-
-    # ── Vue filtrée par article ───────────────────────────────────────────────
-    produit_selectionne = None
-    lignes_article = []
-    total_art_qte = total_art_rec = total_art_cout = total_art_ben = 0
-
-    if produit_id_f.isdigit():
-        from .models import LigneVente as LV
-        try:
-            produit_selectionne = Produit.objects.get(pk=produit_id_f)
-        except Produit.DoesNotExist:
-            produit_id_f = ""
-
-    if produit_selectionne:
-        montant_expr = ExpressionWrapper(
-            F("quantite") * F("prix_unitaire"),
-            output_field=DecimalField(max_digits=14, decimal_places=2),
-        )
-        ventes_art = (
-            LV.objects
-            .filter(vente__in=ventes_base, produit=produit_selectionne)
-            .annotate(montant_ligne=montant_expr)
-            .values("vente__ecole_id", "vente__ecole__nom")
-            .annotate(quantite=Sum("quantite"), recettes=Sum("montant_ligne"))
-            .order_by("vente__ecole__nom")
-        )
-        cout_unit = produit_selectionne.cout_achat
-        for r in ventes_art:
-            qte  = r["quantite"] or 0
-            rec  = r["recettes"] or 0
-            cout = qte * cout_unit
-            ben  = rec - cout
-            lignes_article.append({
-                "nom": r["vente__ecole__nom"],
-                "quantite": qte,
-                "recettes": rec,
-                "cout": cout,
-                "benefice": ben,
-                "marge": round(float(ben) / float(rec) * 100, 1) if rec else None,
-            })
-        total_art_qte  = sum(l["quantite"]  for l in lignes_article)
-        total_art_rec  = sum(l["recettes"]  for l in lignes_article)
-        total_art_cout = sum(l["cout"]      for l in lignes_article)
-        total_art_ben  = total_art_rec - total_art_cout
-
-    # ── Vue globale (inchangée) ───────────────────────────────────────────────
-    recettes_map = {
-        r["ecole_id"]: r["total"]
-        for r in ventes_base.values("ecole_id").annotate(total=Sum("montant_total"))
-    }
-    cogs_map = {
-        r["vente__ecole_id"]: r["total"] or 0
-        for r in lignes_base
-        .annotate(
-            ligne_cout=ExpressionWrapper(
-                F("quantite_servie") * F("produit__cout_achat"),
-                output_field=DecimalField(max_digits=14, decimal_places=2),
-            )
-        )
-        .values("vente__ecole_id")
-        .annotate(total=Sum("ligne_cout"))
-    }
-    dep_ecoles_map = {
-        r["site_id"]: r["total"]
-        for r in dep_all.filter(site__in=ecoles).values("site_id").annotate(total=Sum("montant_confirme"))
-    }
-
-    nb_sans_cout = (
-        lignes_base.filter(produit__cout_achat=0)
-        .values("produit_id").distinct().count()
-    )
-
-    lignes_ecoles = []
-    for ecole in ecoles.order_by("nom"):
-        rec    = recettes_map.get(ecole.pk, 0) or 0
-        cog    = cogs_map.get(ecole.pk, 0)
-        dep    = dep_ecoles_map.get(ecole.pk, 0) or 0
-        contrib = rec - cog - dep
-        lignes_ecoles.append({
-            "nom":     ecole.nom,
-            "commune": "",
-            "recettes": rec,
-            "cogs":     cog,
-            "depenses": dep,
-            "contrib":  contrib,
-            "marge":    round(float(contrib) / float(rec) * 100, 1) if rec else None,
-        })
-
-    lignes_hors = []
-
-    total_rec    = sum(l["recettes"] for l in lignes_ecoles)
-    total_cog    = sum(l["cogs"]     for l in lignes_ecoles)
-    total_dep_e  = sum(l["depenses"] for l in lignes_ecoles)
-    total_dep_h  = sum(l["montant"]  for l in lignes_hors)
-    total_dep    = total_dep_e + total_dep_h
-    total_contrib = total_rec - total_cog - total_dep_e
-    total_ben    = total_contrib - total_dep_h
-
-    return render(request, "finances/benefices.html", {
-        "lignes_ecoles":    lignes_ecoles,
-        "lignes_hors":      lignes_hors,
-        "total_recettes":   total_rec,
-        "total_cogs":       total_cog,
-        "total_dep_ecoles": total_dep_e,
-        "total_dep_hors":   total_dep_h,
-        "total_depenses":   total_dep,
-        "total_contrib":    total_contrib,
-        "total_benefice":   total_ben,
-        "total_marge":      round(float(total_ben) / float(total_rec) * 100, 1) if total_rec else None,
-        "nb_sans_cout":     nb_sans_cout,
-        "communes_dispo":   communes_dispo,
-        "sites_dispo":      sites_dispo,
-        "produits_dispo":   produits_dispo,
-        "produit_selectionne": produit_selectionne,
-        "lignes_article":   lignes_article,
-        "total_art_qte":    total_art_qte,
-        "total_art_rec":    total_art_rec,
-        "total_art_cout":   total_art_cout,
-        "total_art_ben":    total_art_ben,
-        "debut":            debut,
-        "fin":              fin,
-        "filtres": {
-            "debut":    str(debut),
-            "fin":      str(fin),
-            "commune":  "",
-            "site":     site_id_f,
-            "produit":  produit_id_f,
-        },
-    })
-
-
-@login_required
-def finances_benefices_export(request):
-    import io
-    import openpyxl
-    from datetime import date as date_type
-    from django.http import HttpResponse
-    from openpyxl.styles import Alignment, Font, PatternFill
-    from openpyxl.utils import get_column_letter
-    from depenses.models import Depense, StatutDepense
-    from .models import LigneProduitVente
-
-    u     = request.user
-    today = timezone.localdate()
-
-    debut_str    = request.GET.get("debut", "")
-    fin_str      = request.GET.get("fin", "")
-    site_id_f    = request.GET.get("site", "")
-
-    try:
-        debut = date_type.fromisoformat(debut_str) if debut_str else today
-    except ValueError:
-        debut = today
-    try:
-        fin = date_type.fromisoformat(fin_str) if fin_str else today
-    except ValueError:
-        fin = today
-
-    tous_sites = u.sites_autorises()
-    if site_id_f:
-        tous_sites = tous_sites.filter(pk=site_id_f)
-
-    ecoles     = tous_sites
-    sites_hors = tous_sites.none()
-
-    ventes_base = Vente.objects.filter(
-        ecole__in=ecoles,
-        horodatage__date__gte=debut,
-        horodatage__date__lte=fin,
-    ).exclude(statut=StatutVente.ANNULEE)
-
-    lignes_base = LigneProduitVente.objects.filter(
-        vente__ecole__in=ecoles,
-        vente__horodatage__date__gte=debut,
-        vente__horodatage__date__lte=fin,
-    ).exclude(vente__statut=StatutVente.ANNULEE)
-
-    _base_dep = dict(statut=StatutDepense.CONFIRME, date_depense__gte=debut, date_depense__lte=fin)
-    dep_all = Depense.objects.filter(site__in=tous_sites, **_base_dep)
-
-    recettes_map = {
-        r["ecole_id"]: r["total"]
-        for r in ventes_base.values("ecole_id").annotate(total=Sum("montant_total"))
-    }
-    cogs_map = {
-        r["vente__ecole_id"]: r["total"] or 0
-        for r in lignes_base
-        .annotate(
-            ligne_cout=ExpressionWrapper(
-                F("quantite_servie") * F("produit__cout_achat"),
-                output_field=DecimalField(max_digits=14, decimal_places=2),
-            )
-        )
-        .values("vente__ecole_id")
-        .annotate(total=Sum("ligne_cout"))
-    }
-    dep_ecoles_map = {
-        r["site_id"]: r["total"]
-        for r in dep_all.filter(site__in=ecoles).values("site_id").annotate(total=Sum("montant_confirme"))
-    }
-    dep_hors_rows = []
-    dep_sup_rows = []
-
-    wb = openpyxl.Workbook()
-
-    # ── Feuille 1 : Sites ─────────────────────────────────────────
-    ws = wb.active
-    ws.title = "Sites"
-    hdr_style = lambda c: (setattr(c, "font", Font(bold=True, color="FFFFFF", size=11)) or
-                           setattr(c, "fill", PatternFill("solid", fgColor="16233F")) or
-                           setattr(c, "alignment", Alignment(horizontal="center")))
-
-    entetes = ["Site", "Commune", "Recettes (F)", "Coût marchandises (F)", "Dépenses site (F)", "Contribution (F)", "Marge (%)"]
-    for col, titre in enumerate(entetes, 1):
-        hdr_style(ws.cell(row=1, column=col, value=titre))
-
-    t_rec = t_cog = t_dep_e = 0
-    for row, ecole in enumerate(ecoles.order_by("nom"), 2):
-        rec    = float(recettes_map.get(ecole.pk, 0) or 0)
-        cog    = float(cogs_map.get(ecole.pk, 0))
-        dep    = float(dep_ecoles_map.get(ecole.pk, 0) or 0)
-        contrib = rec - cog - dep
-        t_rec += rec; t_cog += cog; t_dep_e += dep
-        ws.cell(row=row, column=1, value=ecole.nom)
-        ws.cell(row=row, column=2, value="")
-        ws.cell(row=row, column=3, value=rec)
-        ws.cell(row=row, column=4, value=cog)
-        ws.cell(row=row, column=5, value=dep)
-        ws.cell(row=row, column=6, value=contrib)
-        ws.cell(row=row, column=7, value=round(contrib / rec * 100, 1) if rec else "")
-
-    last_e = ecoles.count() + 2
-    t_contrib = t_rec - t_cog - t_dep_e
-    for col, val in enumerate(["TOTAL SITES", "", t_rec, t_cog, t_dep_e, t_contrib,
-                                round(t_contrib / t_rec * 100, 1) if t_rec else ""], 1):
-        ws.cell(row=last_e, column=col, value=val).font = Font(bold=True)
-
-    for col in ws.columns:
-        ws.column_dimensions[get_column_letter(col[0].column)].width = min(
-            max(len(str(c.value or "")) for c in col) + 4, 50)
-
-    # ── Feuille 2 : Dépenses hors sites ──────────────────────────
-    ws2 = wb.create_sheet("Dépenses hors sites")
-    for col, titre in enumerate(["Site", "Niveau", "Commune", "Dépenses (F)"], 1):
-        hdr_style(ws2.cell(row=1, column=col, value=titre))
-
-    t_dep_h = 0
-    all_hors_rows = []
-    for row, d in enumerate(all_hors_rows, 2):
-        t_dep_h += d["montant"]
-        ws2.cell(row=row, column=1, value=d["nom"])
-        ws2.cell(row=row, column=2, value=d["niveau"])
-        ws2.cell(row=row, column=3, value=d["commune"])
-        ws2.cell(row=row, column=4, value=d["montant"])
-
-    last_h = len(all_hors_rows) + 2
-    for col, val in enumerate(["TOTAL HORS ÉCOLES", "", "", t_dep_h], 1):
-        ws2.cell(row=last_h, column=col, value=val).font = Font(bold=True)
-
-    # ── Ligne bénéfice net global ─────────────────────────────────
-    ws2.cell(row=last_h + 2, column=1, value="BÉNÉFICE NET GLOBAL (F)").font = Font(bold=True, size=12)
-    t_ben = t_contrib - t_dep_h
-    ws2.cell(row=last_h + 2, column=4, value=t_ben).font = Font(bold=True, size=12)
-
-    for col in ws2.columns:
-        ws2.column_dimensions[get_column_letter(col[0].column)].width = min(
-            max(len(str(c.value or "")) for c in col) + 4, 50)
-
-    buf = io.BytesIO()
-    wb.save(buf)
-    buf.seek(0)
-    fname = f"benefices_{debut}_{fin}.xlsx"
-    response = HttpResponse(buf, content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-    response["Content-Disposition"] = f'attachment; filename="{fname}"'
-    return response
-
-
-@login_required
-def tresorerie_globale(request):
-    from datetime import date as date_type
-    from depenses.models import Depense, StatutDepense
-    from stock.models import Ajustement, AjustementLigne, SoldeStock, StatutAjustement
-    from transferts.models import Transfert, TransfertLigne, StatutTransfert
-    from .models import LigneProduitVente
-
-    u     = request.user
-    today = timezone.localdate()
-
-    debut_str = request.GET.get("debut", "")
-    fin_str   = request.GET.get("fin", "")
-    site_id_f = request.GET.get("site", "")
-
-    try:
-        debut = date_type.fromisoformat(debut_str) if debut_str else today
-    except ValueError:
-        debut = today
+        debut = None
         debut_str = ""
     try:
-        fin = date_type.fromisoformat(fin_str) if fin_str else today
+        fin = date_type.fromisoformat(fin_str) if fin_str else None
     except ValueError:
-        fin = today
+        fin = None
         fin_str = ""
-    if fin < debut:
+    if debut and fin and fin < debut:
         fin = debut
 
     tous_sites = u.sites_autorises()
@@ -2471,98 +2219,239 @@ def tresorerie_globale(request):
         tous_sites = tous_sites.filter(pk=site_id_f)
     ecoles = tous_sites
 
-    # ── 1. Valeur stock à la fin de la période ────────────────────────────────
-    # On recompose depuis MouvementStock pour respecter le filtre de dates.
-    from stock.models import MouvementStock
-    valeur_stock_qs = (
-        MouvementStock.objects.filter(
-            site__in=ecoles,
-            horodatage__date__lte=fin,
+    produits_filtre = Produit.objects.filter(actif=True).order_by("code")
+    pq = {}  # filtre produit appliqué à chaque queryset si renseigné
+    if produit_id_f.isdigit():
+        pq = {"produit_id": int(produit_id_f)}
+    else:
+        produit_id_f = ""
+
+    def _dkw(gte_key, lte_key):
+        """Construit les kwargs de filtre date uniquement si les dates sont renseignées."""
+        d = {}
+        if debut: d[gte_key] = debut
+        if fin:   d[lte_key] = fin
+        return d
+
+    # ── 1. Valeur des achats (réceptions validées sur la période) ─────────────
+    achats_map = {
+        r["site_effectif_id"]: r["total"] or 0
+        for r in ReceptionLigne.objects.filter(
+            Q(reception__site_destination__in=ecoles) | Q(reception__commande__site_destination__in=ecoles),
+            reception__statut__in=[StatutReception.VALIDE, StatutReception.CLOTURE],
+            **_dkw("reception__valide_le__date__gte", "reception__valide_le__date__lte"),
+            **pq,
         )
+        .annotate(site_effectif_id=Coalesce(
+            F("reception__site_destination_id"),
+            F("reception__commande__site_destination_id"),
+        ))
+        .values("site_effectif_id")
+        .annotate(total=Sum(ExpressionWrapper(
+            F("quantite_recue") * F("prix_unitaire"),
+            output_field=DecimalField(max_digits=14, decimal_places=2)
+        )))
+    }
+
+    # ── 2. Recettes ───────────────────────────────────────────────────────────
+    # Avec filtre produit : on calcule en Python pour distribuer la remise proportionnellement.
+    # Sans filtre : montant_total de la vente (déjà net de remise).
+    from .models import LigneVente
+    from decimal import Decimal as _Dec
+    if pq:
+        prod_id = pq["produit_id"]
+        lignes_prod = (
+            LigneVente.objects
+            .filter(
+                vente__ecole__in=ecoles,
+                produit_id=prod_id,
+                **_dkw("vente__horodatage__date__gte", "vente__horodatage__date__lte"),
+            )
+            .exclude(vente__statut=StatutVente.ANNULEE)
+            .select_related("vente")
+        )
+        vente_ids_prod = list(lignes_prod.values_list("vente_id", flat=True).distinct())
+        gross_par_vente_prod = {
+            r["vente_id"]: r["total"] or _Dec(0)
+            for r in LigneVente.objects.filter(vente_id__in=vente_ids_prod)
+            .values("vente_id")
+            .annotate(total=Sum(ExpressionWrapper(
+                F("quantite") * F("prix_unitaire"),
+                output_field=DecimalField(max_digits=14, decimal_places=2),
+            )))
+        }
+        recettes_map = {}
+        for _l in lignes_prod:
+            _brut  = _l.quantite * _l.prix_unitaire
+            _gross = gross_par_vente_prod.get(_l.vente_id, _brut)
+            _eff   = _brut * _l.vente.montant_total / _gross if _gross else _brut
+            recettes_map[_l.vente.ecole_id] = recettes_map.get(_l.vente.ecole_id, _Dec(0)) + _eff
+    else:
+        recettes_map = {
+            r["ecole_id"]: r["total"] or 0
+            for r in Vente.objects.filter(
+                ecole__in=ecoles,
+                **_dkw("horodatage__date__gte", "horodatage__date__lte"),
+            ).exclude(statut=StatutVente.ANNULEE)
+            .values("ecole_id").annotate(total=Sum("montant_total"))
+        }
+
+    # ── 3. Coût des marchandises vendues ──────────────────────────────────────
+    cogs_map = {
+        r["vente__ecole_id"]: r["total"] or 0
+        for r in LigneProduitVente.objects.filter(
+            vente__ecole__in=ecoles,
+            **_dkw("vente__horodatage__date__gte", "vente__horodatage__date__lte"),
+            **pq,
+        ).exclude(vente__statut=StatutVente.ANNULEE)
+        .values("vente__ecole_id")
+        .annotate(total=Sum(ExpressionWrapper(
+            F("quantite_servie") * F("produit__cout_achat"),
+            output_field=DecimalField(max_digits=14, decimal_places=2)
+        )))
+    }
+
+    # ── 4. Ajustements (MouvementStock type AJUSTEMENT, toutes sources : manuelle + inventaire)
+    _adj_expr = ExpressionWrapper(
+        F("quantite") * F("produit__cout_achat"),
+        output_field=DecimalField(max_digits=14, decimal_places=2)
+    )
+    adj_base = MouvementStock.objects.filter(
+        site__in=ecoles,
+        type=TypeMouvement.AJUSTEMENT,
+        **_dkw("horodatage__date__gte", "horodatage__date__lte"),
+        **pq,
+    )
+    adj_pos_map = {
+        r["site_id"]: r["total"] or 0
+        for r in adj_base.filter(quantite__gt=0)
+        .values("site_id")
+        .annotate(total=Sum(_adj_expr))
+    }
+    adj_neg_map = {
+        r["site_id"]: abs(r["total"] or 0)
+        for r in adj_base.filter(quantite__lt=0)
+        .values("site_id")
+        .annotate(total=Sum(_adj_expr))
+    }
+
+    # ── 5. Dépenses diverses (pas de dimension produit) ───────────────────────
+    dep_map = {}
+    if not pq:
+        dep_map = {
+            r["site_id"]: r["total"] or 0
+            for r in Depense.objects.filter(
+                site__in=ecoles,
+                statut=StatutDepense.CONFIRME,
+                **_dkw("date_depense__gte", "date_depense__lte"),
+            ).values("site_id").annotate(total=Sum("montant_confirme"))
+        }
+
+    # ── 6. Transferts normaux (valorisés au coût d'achat, DON/SURPLUS exclus) ──
+    from transferts.models import TypeTransfert
+    _trf_filtre = dict(
+        transfert__statut=StatutTransfert.ACCEPTE,
+        transfert__type_transfert=TypeTransfert.NORMAL,
+        **_dkw("transfert__traite_le__date__gte", "transfert__traite_le__date__lte"),
+    )
+    _trf_expr = ExpressionWrapper(
+        F("quantite") * F("produit__cout_achat"),
+        output_field=DecimalField(max_digits=14, decimal_places=2)
+    )
+    trf_emis_map = {
+        r["transfert__site_origine_id"]: r["total"] or 0
+        for r in TransfertLigne.objects.filter(
+            transfert__site_origine__in=ecoles, **_trf_filtre, **pq
+        )
+        .values("transfert__site_origine_id")
+        .annotate(total=Sum(_trf_expr))
+    }
+    trf_recu_map = {
+        r["transfert__site_destination_id"]: r["total"] or 0
+        for r in TransfertLigne.objects.filter(
+            transfert__site_destination__in=ecoles, **_trf_filtre, **pq
+        )
+        .values("transfert__site_destination_id")
+        .annotate(total=Sum(_trf_expr))
+    }
+
+    # ── 6b. Transferts DON (valorisés au coût d'achat, dissociés des dépenses) ──
+    don_map = {
+        r["transfert__site_origine_id"]: r["total"] or 0
+        for r in TransfertLigne.objects.filter(
+            transfert__site_origine__in=ecoles,
+            transfert__statut=StatutTransfert.ACCEPTE,
+            transfert__type_transfert=TypeTransfert.DON,
+            **_dkw("transfert__traite_le__date__gte", "transfert__traite_le__date__lte"),
+            **pq,
+        )
+        .values("transfert__site_origine_id")
+        .annotate(total=Sum(_trf_expr))
+    }
+
+    # ── 6c. Erreurs de saisie (SURPLUS acceptés) → déduites des achats ─────────
+    # Le stock retiré n'a jamais été vraiment reçu, donc l'achat correspondant est fictif.
+    surplus_map = {}
+    for r in (
+        TransfertLigne.objects.filter(
+            transfert__site_origine__in=ecoles,
+            transfert__statut=StatutTransfert.ACCEPTE,
+            transfert__type_transfert=TypeTransfert.SURPLUS,
+            **_dkw("transfert__traite_le__date__gte", "transfert__traite_le__date__lte"),
+            **pq,
+        )
+        .values("transfert__site_origine_id")
+        .annotate(total=Sum(_trf_expr))
+    ):
+        surplus_map[r["transfert__site_origine_id"]] = r["total"] or 0
+
+    # ── 7. Stock actuel restant (snapshot temps réel, pas filtré par date) ────
+    stock_map = {
+        r["site_id"]: r["total"] or 0
+        for r in SoldeStock.objects.filter(site__in=ecoles, **pq)
         .values("site_id")
         .annotate(total=Sum(ExpressionWrapper(
             F("quantite") * F("produit__cout_achat"),
             output_field=DecimalField(max_digits=14, decimal_places=2)
         )))
-    )
-    stock_map = {r["site_id"]: r["total"] or 0 for r in valeur_stock_qs}
-
-    # ── 2. Recettes ───────────────────────────────────────────────────────────
-    ventes_base = Vente.objects.filter(
-        ecole__in=ecoles,
-        horodatage__date__gte=debut,
-        horodatage__date__lte=fin,
-    ).exclude(statut=StatutVente.ANNULEE)
-    recettes_map = {
-        r["ecole_id"]: r["total"] or 0
-        for r in ventes_base.values("ecole_id").annotate(total=Sum("montant_total"))
     }
 
-    # ── 3. COGS (coût des marchandises vendues) ───────────────────────────────
-    lignes_base = LigneProduitVente.objects.filter(
-        vente__ecole__in=ecoles,
-        vente__horodatage__date__gte=debut,
-        vente__horodatage__date__lte=fin,
-    ).exclude(vente__statut=StatutVente.ANNULEE)
-    cogs_map = {
-        r["vente__ecole_id"]: r["total"] or 0
-        for r in lignes_base.annotate(
-            ligne_cout=ExpressionWrapper(
-                F("quantite_servie") * F("produit__cout_achat"),
-                output_field=DecimalField(max_digits=14, decimal_places=2)
-            )
-        ).values("vente__ecole_id").annotate(total=Sum("ligne_cout"))
-    }
+    # ── Quantités globales pour les encarts ──────────────────────────────────
+    def _agg(qs, field="quantite"):
+        return qs.aggregate(t=Sum(field))["t"] or 0
 
-    # ── 4. Ajustements validés ────────────────────────────────────────────────
-    adj_qs = AjustementLigne.objects.filter(
-        ajustement__site__in=ecoles,
-        ajustement__statut=StatutAjustement.VALIDE,
-        ajustement__valide_le__date__gte=debut,
-        ajustement__valide_le__date__lte=fin,
-    ).annotate(
-        valeur=ExpressionWrapper(
-            F("quantite") * F("produit__cout_achat"),
-            output_field=DecimalField(max_digits=14, decimal_places=2)
-        )
-    )
-    adj_pos_map = {
-        r["ajustement__site_id"]: r["total"] or 0
-        for r in adj_qs.filter(quantite__gt=0).values("ajustement__site_id").annotate(total=Sum("valeur"))
-    }
-    adj_neg_map = {
-        r["ajustement__site_id"]: abs(r["total"] or 0)
-        for r in adj_qs.filter(quantite__lt=0).values("ajustement__site_id").annotate(total=Sum("valeur"))
-    }
-
-    # ── 5. Dépenses ───────────────────────────────────────────────────────────
-    dep_map = {
-        r["site_id"]: r["total"] or 0
-        for r in Depense.objects.filter(
-            site__in=ecoles,
-            statut=StatutDepense.CONFIRME,
-            date_depense__gte=debut,
-            date_depense__lte=fin,
-        ).values("site_id").annotate(total=Sum("montant_confirme"))
-    }
-
-    # ── 6. Transferts (valeur au coût d'achat, transferts acceptés) ───────────
-    trf_base = dict(transfert__statut=StatutTransfert.ACCEPTE, transfert__traite_le__date__gte=debut, transfert__traite_le__date__lte=fin)
-    trf_val_expr = ExpressionWrapper(
-        F("quantite") * F("produit__cout_achat"),
-        output_field=DecimalField(max_digits=14, decimal_places=2)
-    )
-    # Valeur émise par site (sortie)
-    trf_emis_map = {
-        r["transfert__site_origine_id"]: r["total"] or 0
-        for r in TransfertLigne.objects.filter(transfert__site_origine__in=ecoles, **trf_base)
-        .annotate(valeur=trf_val_expr).values("transfert__site_origine_id").annotate(total=Sum("valeur"))
-    }
-    # Valeur reçue par site (entrée)
-    trf_recu_map = {
-        r["transfert__site_destination_id"]: r["total"] or 0
-        for r in TransfertLigne.objects.filter(transfert__site_destination__in=ecoles, **trf_base)
-        .annotate(valeur=trf_val_expr).values("transfert__site_destination_id").annotate(total=Sum("valeur"))
+    nb = {
+        "achats":    _agg(ReceptionLigne.objects.filter(
+            Q(reception__site_destination__in=ecoles) | Q(reception__commande__site_destination__in=ecoles),
+            reception__statut__in=[StatutReception.VALIDE, StatutReception.CLOTURE],
+            **_dkw("reception__valide_le__date__gte", "reception__valide_le__date__lte"),
+            **pq,
+        ), "quantite_recue"),
+        "recettes":  _agg(LigneProduitVente.objects.filter(
+            vente__ecole__in=ecoles,
+            **_dkw("vente__horodatage__date__gte", "vente__horodatage__date__lte"),
+            **pq,
+        ).exclude(vente__statut=StatutVente.ANNULEE), "quantite_servie"),
+        "adj_pos":   _agg(adj_base.filter(quantite__gt=0)),
+        "adj_neg":   abs(_agg(adj_base.filter(quantite__lt=0))),
+        "trf_emis":  _agg(TransfertLigne.objects.filter(
+            transfert__site_origine__in=ecoles, **_trf_filtre, **pq
+        )),
+        "trf_recu":  _agg(TransfertLigne.objects.filter(
+            transfert__site_destination__in=ecoles, **_trf_filtre, **pq
+        )),
+        "dons":      _agg(TransfertLigne.objects.filter(
+            transfert__site_origine__in=ecoles,
+            transfert__statut=StatutTransfert.ACCEPTE,
+            transfert__type_transfert=TypeTransfert.DON,
+            **_dkw("transfert__traite_le__date__gte", "transfert__traite_le__date__lte"),
+            **pq,
+        )),
+        "depenses":  Depense.objects.filter(
+            site__in=ecoles, statut=StatutDepense.CONFIRME,
+            **_dkw("date_depense__gte", "date_depense__lte"),
+        ).count() if not pq else 0,
+        "stock":     _agg(SoldeStock.objects.filter(site__in=ecoles, quantite__gt=0, **pq)),
     }
 
     # ── Tableau par site ──────────────────────────────────────────────────────
@@ -2571,35 +2460,38 @@ def tresorerie_globale(request):
         pk  = site.pk
         rec = recettes_map.get(pk, 0)
         cog = cogs_map.get(pk, 0)
-        adj_p = adj_pos_map.get(pk, 0)
-        adj_n = adj_neg_map.get(pk, 0)
-        dep   = dep_map.get(pk, 0)
-        t_emi = trf_emis_map.get(pk, 0)
-        t_rec = trf_recu_map.get(pk, 0)
-        stk   = stock_map.get(pk, 0)
-        ben   = rec - cog - adj_n - dep
+        dep = dep_map.get(pk, 0)
+        don = don_map.get(pk, 0)
+        ben = rec - cog - don - dep
         lignes.append({
-            "nom": site.nom,
-            "stock": stk,
+            "nom":      site.nom,
+            "achats":   achats_map.get(pk, 0) - surplus_map.get(pk, 0),
             "recettes": rec,
-            "cogs": cog,
-            "adj_pos": adj_p,
-            "adj_neg": adj_n,
+            "cogs":     cog,
+            "adj_pos":  adj_pos_map.get(pk, 0),
+            "adj_neg":  adj_neg_map.get(pk, 0),
+            "trf_emis": trf_emis_map.get(pk, 0),
+            "trf_recu": trf_recu_map.get(pk, 0),
+            "dons":     don_map.get(pk, 0),
             "depenses": dep,
-            "trf_emis": t_emi,
-            "trf_recu": t_rec,
+            "stock":    stock_map.get(pk, 0),
             "benefice": ben,
+            "marge":    round(float(ben) / float(rec) * 100, 1) if rec else None,
         })
 
     # ── Totaux ────────────────────────────────────────────────────────────────
     def _s(key): return sum(l[key] for l in lignes)
-    tot = {k: _s(k) for k in ("stock","recettes","cogs","adj_pos","adj_neg","depenses","trf_emis","trf_recu","benefice")}
+    tot = {k: _s(k) for k in ("achats","recettes","cogs","adj_pos","adj_neg","trf_emis","trf_recu","dons","depenses","stock")}
+    tot["benefice"] = tot["recettes"] - tot["cogs"] - tot["dons"] - tot["depenses"]
+    tot["marge"]    = round(float(tot["benefice"]) / float(tot["recettes"]) * 100, 1) if tot["recettes"] else None
 
     return render(request, "finances/tresorerie.html", {
         "lignes": lignes,
-        "tot": tot,
-        "sites_dispo": sites_dispo,
-        "filtres": {"debut": str(debut), "fin": str(fin), "site": site_id_f},
+        "tot":    tot,
+        "nb":     nb,
+        "sites_dispo":    sites_dispo,
+        "produits_filtre": produits_filtre,
+        "filtres": {"debut": str(debut) if debut else "", "fin": str(fin) if fin else "", "site": site_id_f, "produit": produit_id_f},
     })
 
 

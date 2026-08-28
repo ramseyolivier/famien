@@ -2,6 +2,10 @@
 Transferts de stock entre sites (M11 — section 7.5 du CDC).
 Cycle : émetteur envoie → stock débité immédiatement (EN_ATTENTE) →
 destinataire accepte (stock crédité) ou rejette (stock recrédité à l'émetteur).
+
+Types spéciaux DON et SURPLUS : pas de site destination réel.
+- DON   : stock donné, validé DG uniquement, comptabilisé en dépense.
+- SURPLUS : correction de stock, validé DG uniquement, neutre sur le bénéfice.
 """
 from django.core.validators import MinValueValidator
 from django.db import models
@@ -13,9 +17,22 @@ class StatutTransfert(models.TextChoices):
     REJETE = "REJETE", "Rejeté"
 
 
+class TypeTransfert(models.TextChoices):
+    NORMAL  = "NORMAL",  "Normal"
+    DON     = "DON",     "Don"
+    SURPLUS = "SURPLUS", "Erreur de saisie"
+
+
 class Transfert(models.Model):
     site_origine = models.ForeignKey("core.Site", on_delete=models.PROTECT, related_name="transferts_emis")
-    site_destination = models.ForeignKey("core.Site", on_delete=models.PROTECT, related_name="transferts_recus")
+    # Nullable pour les types DON et SURPLUS qui n'ont pas de site destinataire réel.
+    site_destination = models.ForeignKey(
+        "core.Site", on_delete=models.PROTECT, related_name="transferts_recus",
+        null=True, blank=True,
+    )
+    type_transfert = models.CharField(
+        max_length=10, choices=TypeTransfert.choices, default=TypeTransfert.NORMAL,
+    )
     statut = models.CharField(max_length=12, choices=StatutTransfert.choices, default=StatutTransfert.EN_ATTENTE)
     observations = models.TextField(blank=True)
     cree_le = models.DateTimeField(auto_now_add=True, db_index=True)
@@ -33,14 +50,23 @@ class Transfert(models.Model):
         verbose_name = "transfert"
         ordering = ["-cree_le"]
         constraints = [
+            # La contrainte ne s'applique que quand site_destination est renseigné (transferts normaux).
             models.CheckConstraint(
-                condition=~models.Q(site_origine=models.F("site_destination")),
+                condition=(
+                    models.Q(site_destination__isnull=True) |
+                    ~models.Q(site_origine=models.F("site_destination"))
+                ),
                 name="transfert_origine_destination_differents",
             )
         ]
 
     def __str__(self):
-        return f"Transfert #{self.pk} : {self.site_origine.nom} → {self.site_destination.nom}"
+        dest = self.site_destination.nom if self.site_destination_id else self.get_type_transfert_display()
+        return f"Transfert #{self.pk} : {self.site_origine.nom} → {dest}"
+
+    @property
+    def est_special(self):
+        return self.type_transfert != TypeTransfert.NORMAL
 
 
 class TransfertLigne(models.Model):

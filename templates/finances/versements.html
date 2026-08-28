@@ -56,8 +56,12 @@
   </div>
   {% else %}
   <div class="indicateur valide">
+    <div class="valeur chiffre">{{ collecte_dg|floatformat:0 }}</div>
+    <div class="libelle">F encaissés (ventes)</div>
+  </div>
+  <div class="indicateur valide">
     <div class="valeur chiffre">{{ recu_confirme|floatformat:0 }}</div>
-    <div class="libelle">F reçus (confirmés)</div>
+    <div class="libelle">F reçus (versements)</div>
   </div>
   <div class="indicateur alerte">
     <div class="valeur chiffre">{{ depenses_total|floatformat:0 }}</div>

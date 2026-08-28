@@ -34,6 +34,8 @@ class TypeMouvement(models.TextChoices):
     # Approvisionnement magasin depuis dépôt (M17)
     SORTIE_APPRO_MAGASIN = "SORTIE_APPRO_MAGASIN", "Sortie — expédition vers magasin"
     ENTREE_APPRO_MAGASIN = "ENTREE_APPRO_MAGASIN", "Entrée — réception depuis dépôt"
+    SORTIE_DON = "SORTIE_DON", "Sortie — don"
+    SORTIE_SURPLUS = "SORTIE_SURPLUS", "Sortie — surplus retiré"
 
 
 class SoldeStock(models.Model):

@@ -54,17 +54,17 @@
 </div>
 {% endif %}
 
-<!-- ── Rapports ───────────────────────────────────────── -->
+<!-- ── Trésorerie / Bénéfices ─────────────────────────── -->
 {% if request.user.profil == 'DG' or request.user.profil == 'MANAGER' or request.user.is_superuser %}
 <div class="hub-section">
-  <div class="etiquette" style="margin-bottom:10px">Rapports</div>
+  <div class="etiquette" style="margin-bottom:10px">Trésorerie &amp; Résultats</div>
   <div class="hub-grille">
-    <a href="{% url 'finances_benefices' %}" class="hub-carte">
+    <a href="{% url 'tresorerie_globale' %}" class="hub-carte">
       <span class="hub-carte-icone">
         <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
       </span>
-      <strong class="hub-carte-titre">Bénéfices</strong>
-      <span class="hub-carte-desc">Recettes · Coût marchandises · Dépenses · Marge nette</span>
+      <strong class="hub-carte-titre">Trésorerie globale</strong>
+      <span class="hub-carte-desc">Achats · Ventes · COGS · Transferts · Bénéfice net · Marge</span>
     </a>
   </div>
 </div>

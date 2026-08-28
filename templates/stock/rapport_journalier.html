@@ -74,6 +74,8 @@
       {% if afficher_vendue %}<th class="nombre">{% include "stock/_th_tri.html" with champ="vendue" label="Vendu" filtres=filtres %}</th>{% endif %}
       {% if afficher_livree %}<th class="nombre">{% include "stock/_th_tri.html" with champ="livree" label="Livré" filtres=filtres %}</th>{% endif %}
       <th class="nombre">{% include "stock/_th_tri.html" with champ="ajuste" label="Ajusté" filtres=filtres %}</th>
+      <th class="nombre">{% include "stock/_th_tri.html" with champ="don" label="Don" filtres=filtres %}</th>
+      <th class="nombre">{% include "stock/_th_tri.html" with champ="surplus" label="Erreur saisie" filtres=filtres %}</th>
       <th class="nombre">{% include "stock/_th_tri.html" with champ="cloture" label="Final" filtres=filtres %}</th>
       {% if afficher_reservee %}<th class="nombre">{% include "stock/_th_tri.html" with champ="reservee" label="Réservé" filtres=filtres %}</th>{% endif %}
     </tr>
@@ -104,6 +106,12 @@
       {% endif %}
       <td class="nombre chiffre" style="color:{% if l.ajuste > 0 %}var(--valide){% elif l.ajuste < 0 %}var(--marge){% else %}var(--encre-pale){% endif %}">
         {% if l.ajuste > 0 %}+{{ l.ajuste }}{% elif l.ajuste < 0 %}{{ l.ajuste }}{% else %}—{% endif %}
+      </td>
+      <td class="nombre chiffre" style="color:{% if l.don %}var(--marge){% else %}var(--encre-pale){% endif %}">
+        {% if l.don %}-{{ l.don }}{% else %}—{% endif %}
+      </td>
+      <td class="nombre chiffre" style="color:{% if l.surplus %}#9333ea{% else %}var(--encre-pale){% endif %}">
+        {% if l.surplus %}-{{ l.surplus }}{% else %}—{% endif %}
       </td>
       <td class="nombre chiffre" style="font-weight:700">{{ l.cloture }}</td>
       {% if afficher_reservee %}

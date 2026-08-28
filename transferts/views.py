@@ -10,7 +10,8 @@ from django.shortcuts import get_object_or_404, redirect, render
 from catalogue.models import Produit
 from stock.models import SoldeStock
 
-from .models import StatutTransfert, Transfert, TransfertLigne
+from core.models import Profil
+from .models import StatutTransfert, Transfert, TransfertLigne, TypeTransfert
 from .services import accepter_transfert, destinations_possibles, envoyer_transfert, rejeter_transfert
 
 
@@ -28,9 +29,14 @@ def _filtrer_transferts(request):
 
     qs = (
         Transfert.objects
-        .filter(models.Q(site_origine__in=sites) | models.Q(site_destination__in=sites))
+        .filter(
+            models.Q(site_origine__in=sites) |
+            models.Q(site_destination__in=sites) |
+            models.Q(type_transfert__in=[TypeTransfert.DON, TypeTransfert.SURPLUS], site_origine__in=sites)
+        )
         .select_related("site_origine", "site_destination", "cree_par")
         .order_by("-cree_le")
+        .distinct()
     )
     if statut_filtre:
         qs = qs.filter(statut=statut_filtre)
@@ -137,7 +143,10 @@ def transfert_formulaire(request):
     stocks_disponibles = dict(soldes)
 
     if request.method == "POST":
-        destination_id = request.POST.get("site_destination")
+        type_t = request.POST.get("type_transfert", TypeTransfert.NORMAL)
+        if type_t not in TypeTransfert.values:
+            type_t = TypeTransfert.NORMAL
+        destination_id = request.POST.get("site_destination") if type_t == TypeTransfert.NORMAL else None
         observations = request.POST.get("observations", "").strip()
         produit_ids = request.POST.getlist("produit_id")
         quantites = request.POST.getlist("quantite")
@@ -157,12 +166,17 @@ def transfert_formulaire(request):
             except (ValueError, TypeError):
                 pass
 
+        destination_valide = (
+            type_t != TypeTransfert.NORMAL or
+            destinations.filter(pk=destination_id).exists()
+        )
+
         if erreurs:
             for e in erreurs:
                 messages.error(request, e)
         elif not lignes:
             messages.error(request, "Ajoutez au moins une ligne.")
-        elif not destinations.filter(pk=destination_id).exists():
+        elif not destination_valide:
             messages.error(request, "Destination non autorisée.")
         else:
             try:
@@ -170,6 +184,7 @@ def transfert_formulaire(request):
                     t = Transfert.objects.create(
                         site_origine=site_origine,
                         site_destination_id=destination_id,
+                        type_transfert=type_t,
                         observations=observations,
                         cree_par=request.user,
                     )
@@ -178,7 +193,11 @@ def transfert_formulaire(request):
                         for pid, q in lignes
                     ])
                     envoyer_transfert(t, par=request.user)
-                messages.success(request, "Transfert envoyé — stock débité, le destinataire a été notifié.")
+                if type_t == TypeTransfert.NORMAL:
+                    messages.success(request, "Transfert envoyé — stock débité, le destinataire a été notifié.")
+                else:
+                    label = "Don" if type_t == TypeTransfert.DON else "Surplus"
+                    messages.success(request, f"Transfert {label} créé — en attente de validation par le DG.")
                 return redirect("transfert_detail", pk=t.pk)
             except ValidationError as e:
                 messages.error(request, str(e))
@@ -190,6 +209,7 @@ def transfert_formulaire(request):
         "destinations": destinations,
         "produits": produits,
         "stocks_json": json.dumps(stocks_disponibles),
+        "types_transfert": TypeTransfert.choices,
     })
 
 
@@ -200,12 +220,19 @@ def transfert_detail(request, pk):
         Transfert.objects.select_related("site_origine", "site_destination", "cree_par", "traite_par"),
         pk=pk,
     )
-    if not sites.filter(pk__in=[t.site_origine_id, t.site_destination_id]).exists():
+    site_ids_impliques = [t.site_origine_id]
+    if t.site_destination_id:
+        site_ids_impliques.append(t.site_destination_id)
+    est_dg = request.user.profil == Profil.DG or request.user.is_superuser
+    if not sites.filter(pk__in=site_ids_impliques).exists() and not est_dg:
         messages.error(request, "Accès refusé.")
         return redirect("transferts_liste")
 
-    est_destinataire = sites.filter(pk=t.site_destination_id).exists()
-    peut_traiter = est_destinataire and t.statut == StatutTransfert.EN_ATTENTE
+    if t.est_special:
+        peut_traiter = est_dg and t.statut == StatutTransfert.EN_ATTENTE
+    else:
+        est_destinataire = sites.filter(pk=t.site_destination_id).exists()
+        peut_traiter = est_destinataire and t.statut == StatutTransfert.EN_ATTENTE
 
     lignes = t.lignes.select_related("produit").order_by("produit__code")
     return render(request, "transferts/detail.html", {
@@ -218,13 +245,22 @@ def transfert_detail(request, pk):
 @login_required
 def transfert_accepter(request, pk):
     t = get_object_or_404(Transfert, pk=pk, statut=StatutTransfert.EN_ATTENTE)
-    if not request.user.sites_autorises().filter(pk=t.site_destination_id).exists():
-        messages.error(request, "Vous ne pouvez accepter que les transferts destinés à votre site.")
-        return redirect("transfert_detail", pk=pk)
+    est_dg = request.user.profil == Profil.DG or request.user.is_superuser
+    if t.est_special:
+        if not est_dg:
+            messages.error(request, "Seul le DG peut valider un transfert Don ou Surplus.")
+            return redirect("transfert_detail", pk=pk)
+    else:
+        if not request.user.sites_autorises().filter(pk=t.site_destination_id).exists():
+            messages.error(request, "Vous ne pouvez accepter que les transferts destinés à votre site.")
+            return redirect("transfert_detail", pk=pk)
     if request.method == "POST":
         try:
             accepter_transfert(t, par=request.user)
-            messages.success(request, "Transfert accepté — stock crédité.")
+            if t.est_special:
+                messages.success(request, f"Transfert {t.get_type_transfert_display()} validé.")
+            else:
+                messages.success(request, "Transfert accepté — stock crédité.")
         except ValidationError as e:
             messages.error(request, str(e))
     return redirect("transfert_detail", pk=pk)
@@ -233,7 +269,12 @@ def transfert_accepter(request, pk):
 @login_required
 def transfert_rejeter(request, pk):
     t = get_object_or_404(Transfert, pk=pk, statut=StatutTransfert.EN_ATTENTE)
-    if not request.user.sites_autorises().filter(pk=t.site_destination_id).exists():
+    est_dg = request.user.profil == Profil.DG or request.user.is_superuser
+    if t.est_special:
+        if not est_dg:
+            messages.error(request, "Seul le DG peut rejeter un transfert Don ou Surplus.")
+            return redirect("transfert_detail", pk=pk)
+    elif not request.user.sites_autorises().filter(pk=t.site_destination_id).exists():
         messages.error(request, "Vous ne pouvez rejeter que les transferts destinés à votre site.")
         return redirect("transfert_detail", pk=pk)
     if request.method == "POST":

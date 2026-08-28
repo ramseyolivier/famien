@@ -49,8 +49,6 @@ urlpatterns = [
     path("finances/versements/global/", ventes_views.versements_global, name="versements_global"),
     path("finances/rapport-journalier/", ventes_views.rapport_financier, name="rapport_financier"),
     path("finances/rapport-journalier/export/", ventes_views.rapport_financier_export, name="rapport_financier_export"),
-    path("finances/benefices/", ventes_views.finances_benefices, name="finances_benefices"),
-    path("finances/benefices/export/", ventes_views.finances_benefices_export, name="finances_benefices_export"),
     path("finances/tresorerie/", ventes_views.tresorerie_globale, name="tresorerie_globale"),
 
     # ─── Vente ───────────────────────────────────────────────────────────────

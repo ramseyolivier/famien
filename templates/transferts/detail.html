@@ -23,10 +23,21 @@
     <div class="valeur" style="font-size:1.4rem">→</div>
     <div class="libelle">&nbsp;</div>
   </div>
+  {% if transfert.site_destination %}
   <div class="indicateur">
     <div class="valeur" style="font-size:1rem">{{ transfert.site_destination.nom }}</div>
     <div class="libelle">Destinataire</div>
   </div>
+  {% else %}
+  <div class="indicateur" style="border-top-color:{% if transfert.type_transfert == 'DON' %}var(--marge){% else %}#9333ea{% endif %}">
+    <div class="valeur" style="font-size:1rem;color:{% if transfert.type_transfert == 'DON' %}var(--marge){% else %}#9333ea{% endif %}">
+      {{ transfert.get_type_transfert_display }}
+    </div>
+    <div class="libelle">
+      {% if transfert.type_transfert == 'DON' %}Comptabilisé en dépense{% else %}Correction neutre{% endif %}
+    </div>
+  </div>
+  {% endif %}
 </div>
 
 <p style="font-size:.85rem;color:var(--encre-clair)">
@@ -64,7 +75,15 @@
 {% if peut_traiter %}
 <div class="etiquette" style="margin-top:24px">Action requise</div>
 <p style="font-size:.88rem;color:var(--encre-clair);margin-bottom:12px">
-  Ce transfert vous est destiné. Acceptez pour créditer votre stock, ou rejetez pour le renvoyer à l'expéditeur.
+  {% if transfert.est_special %}
+    {% if transfert.type_transfert == 'DON' %}
+      Validez pour confirmer le don — le stock quittera définitivement le système et sera comptabilisé en dépense.
+    {% else %}
+      Validez pour retirer ce surplus — le stock sera supprimé du système de façon neutre.
+    {% endif %}
+  {% else %}
+    Ce transfert vous est destiné. Acceptez pour créditer votre stock, ou rejetez pour le renvoyer à l'expéditeur.
+  {% endif %}
 </p>
 <div style="display:flex;gap:12px">
   <form method="post" action="{% url 'transfert_accepter' transfert.pk %}">

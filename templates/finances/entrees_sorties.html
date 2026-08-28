@@ -65,7 +65,7 @@
   </div>
   <div class="indicateur alerte">
     <div class="valeur chiffre">{{ total_sorties_val|floatformat:0 }}</div>
-    <div class="libelle">Sorties — dépenses validées</div>
+    <div class="libelle">Sorties — dépenses et dons validés</div>
   </div>
   <div class="indicateur {% if solde < 0 %}manque{% elif solde > 0 %}valide{% endif %}">
     <div class="valeur chiffre">{{ solde|floatformat:0 }}</div>
@@ -162,11 +162,24 @@
         <a href="{% url 'depense_detail' dep.pk %}" class="bouton-secondaire" style="font-size:.82rem;padding:4px 10px;min-height:0">Détail →</a>
       </td>
     </tr>
-  {% empty %}
-    <tr><td colspan="7" style="color:var(--encre-clair);text-align:center;padding:20px">Aucune dépense pour cette période.</td></tr>
   {% endfor %}
+  {% for don in dons_transfert %}
+    <tr>
+      <td class="chiffre" style="white-space:nowrap">{{ don.date|date:"d/m/Y" }}</td>
+      <td>{{ don.site_nom }}</td>
+      <td style="font-size:.85rem">Don{% if don.observations %} — {{ don.observations|truncatechars:50 }}{% endif %}</td>
+      <td><span class="badge" style="background:var(--marge);color:#fff">Don accepté</span></td>
+      <td class="nombre chiffre" style="font-weight:700">{{ don.valeur|floatformat:0 }}</td>
+      <td style="text-align:right">
+        <a href="{% url 'transfert_detail' don.pk %}" class="bouton-secondaire" style="font-size:.82rem;padding:4px 10px;min-height:0">Détail →</a>
+      </td>
+    </tr>
+  {% endfor %}
+  {% if not depenses and not dons_transfert %}
+    <tr><td colspan="6" style="color:var(--encre-clair);text-align:center;padding:20px">Aucune sortie pour cette période.</td></tr>
+  {% endif %}
   </tbody>
-  {% if depenses %}
+  {% if depenses or dons_transfert %}
   <tfoot>
     <tr style="background:var(--craie);font-weight:700">
       <td colspan="4">Total confirmé(s)</td>

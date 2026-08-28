@@ -420,8 +420,10 @@ def _construire_rapport(user, site_id, commune_id, debut, fin, produit_id=""):
         transfert = types.get("ENTREE_TRANSFERT", 0) + types.get("SORTIE_TRANSFERT", 0)
         vendue    = max(0, abs(types.get("SORTIE_VENTE", 0)) - types.get("ANNULATION", 0))
         livree    = abs(types.get("SORTIE_LIVRAISON_ECOLE", 0)) + abs(types.get("SORTIE_APPRO_MAGASIN", 0))
-        ajuste   = types.get("AJUSTEMENT", 0)
-        reservee = reserves_index.get(key, 0)
+        ajuste    = types.get("AJUSTEMENT", 0)
+        don       = abs(types.get("SORTIE_DON", 0))
+        surplus   = abs(types.get("SORTIE_SURPLUS", 0))
+        reservee  = reserves_index.get(key, 0)
 
         if s.quantite == 0 and not types:
             continue
@@ -435,6 +437,8 @@ def _construire_rapport(user, site_id, commune_id, debut, fin, produit_id=""):
             "vendue":    vendue,
             "livree":    livree,
             "ajuste":    ajuste,
+            "don":       don,
+            "surplus":   surplus,
             "cloture":   cloture,
             "reservee":  reservee,
         })
@@ -486,11 +490,13 @@ def rapport_journalier(request):
         "initiale":    lambda r: r["initiale"],
         "recue":       lambda r: r["recue"],
         "transfert":   lambda r: r["transfert"],
-        "vendue":  lambda r: r["vendue"],
-        "livree":  lambda r: r["livree"],
-        "ajuste":   lambda r: r["ajuste"],
-        "cloture":  lambda r: r["cloture"],
-        "reservee": lambda r: r["reservee"],
+        "vendue":      lambda r: r["vendue"],
+        "livree":      lambda r: r["livree"],
+        "ajuste":      lambda r: r["ajuste"],
+        "don":         lambda r: r["don"],
+        "surplus":     lambda r: r["surplus"],
+        "cloture":     lambda r: r["cloture"],
+        "reservee":    lambda r: r["reservee"],
     }
     if tri in CHAMPS:
         lignes.sort(key=CHAMPS[tri], reverse=(sens == "desc"))
@@ -559,7 +565,7 @@ def rapport_journalier_export(request):
         entetes.append("Vendue")
     if meta["afficher_livree"]:
         entetes.append("Livrée")
-    entetes += ["Ajustée", "Final", "Réservée"]
+    entetes += ["Ajustée", "Don", "Erreur saisie", "Final", "Réservée"]
 
     for col, titre in enumerate(entetes, 1):
         c = ws.cell(row=1, column=col, value=titre)
@@ -579,8 +585,10 @@ def rapport_journalier_export(request):
             ws.cell(row=row, column=col, value=-l["vendue"] if l["vendue"] else None); col += 1
         if meta["afficher_livree"]:
             ws.cell(row=row, column=col, value=-l["livree"] if l["livree"] else None); col += 1
-        ws.cell(row=row, column=col, value=l["ajuste"] or None);   col += 1
-        ws.cell(row=row, column=col, value=l["cloture"]);           col += 1
+        ws.cell(row=row, column=col, value=l["ajuste"] or None);    col += 1
+        ws.cell(row=row, column=col, value=-l["don"] if l["don"] else None); col += 1
+        ws.cell(row=row, column=col, value=-l["surplus"] if l["surplus"] else None); col += 1
+        ws.cell(row=row, column=col, value=l["cloture"]);            col += 1
         ws.cell(row=row, column=col, value=l["reservee"] or None)
 
     for col in ws.columns:

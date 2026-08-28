@@ -8,7 +8,7 @@
 </div>
 
 <p style="font-size:.88rem;color:var(--encre-clair);margin-bottom:20px">
-  Le stock est débité immédiatement à l'envoi. Le destinataire recevra une notification pour accepter ou rejeter.
+  Le stock est débité immédiatement à l'envoi. Les transferts Don et Surplus sont validés par le DG.
 </p>
 
 <form method="post" id="form-transfert">
@@ -20,9 +20,24 @@
   <div class="libelle">{{ site_origine.get_type_display }}</div>
 </div>
 
-<div class="etiquette">Destination</div>
-<div style="margin-bottom:20px;max-width:420px">
-  <select name="site_destination" required style="width:100%">
+<div class="etiquette">Type de transfert</div>
+<div style="margin-bottom:20px;display:flex;gap:12px;flex-wrap:wrap">
+  <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:10px 16px;border:1.5px solid var(--reglure);border-radius:var(--rayon);min-height:44px">
+    <input type="radio" name="type_transfert" value="NORMAL" checked onchange="majType()"> Normal
+  </label>
+  <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:10px 16px;border:1.5px solid var(--reglure);border-radius:var(--rayon);min-height:44px">
+    <input type="radio" name="type_transfert" value="DON" onchange="majType()"> Don
+    <span style="font-size:.8rem;color:var(--encre-clair)">(comptabilisé en dépense)</span>
+  </label>
+  <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:10px 16px;border:1.5px solid var(--reglure);border-radius:var(--rayon);min-height:44px">
+    <input type="radio" name="type_transfert" value="SURPLUS" onchange="majType()"> Erreur de saisie
+    <span style="font-size:.8rem;color:var(--encre-clair)">(correction neutre)</span>
+  </label>
+</div>
+
+<div id="bloc-destination" style="margin-bottom:20px;max-width:420px">
+  <div class="etiquette">Destination</div>
+  <select name="site_destination" id="sel-destination" style="width:100%">
     <option value="">— Choisir un destinataire —</option>
     {% for s in destinations %}
     <option value="{{ s.pk }}">{{ s.nom }} ({{ s.get_type_display }})</option>
@@ -31,6 +46,10 @@
   {% if not destinations %}
   <p style="color:var(--marge);font-size:.85rem;margin-top:6px">Aucun site autorisé disponible comme destination.</p>
   {% endif %}
+</div>
+
+<div id="bloc-special" style="display:none;margin-bottom:20px;padding:12px 16px;background:var(--fond-alt,#f7f7f5);border-radius:8px;border:1px solid var(--reglure)">
+  <p style="font-size:.88rem;margin:0" id="msg-special"></p>
 </div>
 
 <div class="etiquette">Articles à transférer</div>
@@ -251,12 +270,36 @@ function validerAvantEnvoi(e) {
   }
 }
 
+/* ── Type de transfert ────────────────────────────────────────────────── */
+function majType() {
+  const type = document.querySelector('input[name="type_transfert"]:checked').value;
+  const blocDest = document.getElementById('bloc-destination');
+  const blocSpec = document.getElementById('bloc-special');
+  const msgSpec  = document.getElementById('msg-special');
+  const selDest  = document.getElementById('sel-destination');
+  if (type === 'NORMAL') {
+    blocDest.style.display = '';
+    blocSpec.style.display = 'none';
+    selDest.required = true;
+  } else {
+    blocDest.style.display = 'none';
+    blocSpec.style.display = '';
+    selDest.required = false;
+    if (type === 'DON') {
+      msgSpec.textContent = 'Le stock quittera le site et sera comptabilisé comme une dépense (valorisé au coût d\'achat). Le DG devra valider ce transfert.';
+    } else {
+      msgSpec.textContent = 'Le stock en surplus sera retiré du système de façon neutre (correction d\'erreur de saisie). Le DG devra valider ce transfert.';
+    }
+  }
+}
+
 /* ── Init ─────────────────────────────────────────────────────────────── */
 document.addEventListener('DOMContentLoaded', function () {
   chargerProduits();
   document.querySelectorAll('#lignes-body tr.ligne-transfert').forEach(attacherLigne);
   document.getElementById('btn-ajouter').addEventListener('click', ajouterLigne);
   document.getElementById('btn-envoyer').addEventListener('click', validerAvantEnvoi);
+  majType();
 });
 </script>
 {% endblock %}
