@@ -116,7 +116,7 @@
   {% endif %}
 
   <div class="ticket-entete">
-    <div class="enseigne">Coopérative {{ v.ecole.nom }}</div>
+    <div class="enseigne">FAMIEN</div>
     {% if v.ecole.commune %}<div class="info">{{ v.ecole.commune }}</div>{% endif %}
     <div class="info" style="margin-top:4px">{{ v.horodatage|date:"d/m/Y à H:i" }}</div>
     <div class="info">N° <strong>{{ v.numero }}</strong></div>
@@ -181,7 +181,7 @@
       <span>Monnaie : <strong>{{ v.monnaie_rendue|floatformat:0 }} F</strong></span>
     </div>
     {% endif %}
-    <div class="vendeur">{{ v.vendeuse.get_full_name|default:v.vendeuse.username }}</div>
+    <div class="vendeur">{{ v.vendeuse.get_profil_display }}</div>
     <div class="merci">Merci de votre confiance</div>
   </div>
 

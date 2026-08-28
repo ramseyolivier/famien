@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+{% block titre %}Kits / Articles vendus{% endblock %}
+{% block lieu %}Ventes — {{ perimetre }}{% endblock %}
+
+{% block contenu %}
+<div class="admin-entete">
+  <h1>Kits / Articles vendus</h1>
+  <a href="{% url 'rapport_kits_detail' %}?{{ filtres_get }}{% for v in ventes_ids_selectionnes %}&vente={{ v }}{% endfor %}"
+     class="bouton-secondaire" style="background:var(--accent);color:#fff;border-color:var(--accent)">
+    Détail physique →
+  </a>
+</div>
+
+<form method="get" class="finance-filtres" id="form-kits">
+  <div class="filtre-champ filtre-champ--large">
+    <label>Site</label>
+    <select name="ecole" onchange="this.form.submit()">
+      <option value="">Tous les sites</option>
+      {% for e in ecoles %}
+      <option value="{{ e.pk }}" {% if filtres.ecole == e.pk|stringformat:"s" %}selected{% endif %}>{{ e.nom }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="filtre-champ" style="flex:0 0 118px">
+    <label>Du</label>
+    <input type="date" name="debut" value="{{ filtres.debut }}" onchange="this.form.submit()">
+  </div>
+  <div class="filtre-champ" style="flex:0 0 118px">
+    <label>Au</label>
+    <input type="date" name="fin" value="{{ filtres.fin }}" onchange="this.form.submit()">
+  </div>
+
+  {# ── Filtre ventes ── #}
+  <div class="filtre-champ" style="position:relative">
+    <label>Ventes</label>
+    <details id="dropdown-ventes" style="position:relative">
+      <summary style="cursor:pointer;padding:9px 12px;border:1.5px solid var(--reglure);border-radius:var(--rayon);background:var(--papier);user-select:none;list-style:none;display:flex;align-items:center;gap:6px;white-space:nowrap">
+        {% if ventes_ids_selectionnes %}{{ ventes_ids_selectionnes|length }} sélectionnée{{ ventes_ids_selectionnes|length|pluralize }}{% else %}Toutes{% endif %}
+        <span style="margin-left:auto;font-size:.7rem;color:var(--encre-pale)">▾</span>
+      </summary>
+      <div style="position:absolute;top:100%;left:0;z-index:200;background:var(--papier);border:1.5px solid var(--reglure);border-radius:var(--rayon);box-shadow:var(--ombre-lg);min-width:260px;max-height:300px;overflow-y:auto;padding:8px 0">
+        <label style="display:flex;align-items:center;gap:8px;padding:6px 14px;font-size:.85rem;font-weight:700;border-bottom:var(--filet);cursor:pointer">
+          <input type="checkbox" id="ventes-tout" {% if not ventes_ids_selectionnes %}checked{% endif %}> Tout / Aucun
+        </label>
+        {% for v in ventes %}
+        <label style="display:flex;align-items:center;gap:8px;padding:5px 14px;font-size:.82rem;cursor:pointer;white-space:nowrap">
+          <input type="checkbox" name="vente" value="{{ v.pk }}" class="cb-vente"
+            {% if not ventes_ids_selectionnes or v.pk in ventes_ids_selectionnes %}checked{% endif %}>
+          <span style="font-family:monospace;font-weight:700;color:var(--accent)">{{ v.numero }}</span>
+          <span style="color:var(--encre-clair)">{{ v.horodatage|date:"d/m H:i" }} · {{ v.ecole.nom }}</span>
+        </label>
+        {% empty %}
+        <p style="padding:10px 14px;color:var(--encre-pale);font-size:.85rem">Aucune vente sur cette période.</p>
+        {% endfor %}
+      </div>
+    </details>
+  </div>
+
+  <div style="display:flex;align-items:flex-end;padding-bottom:2px">
+    <a href="{% url 'rapport_kits_vendus' %}" class="bouton-secondaire" title="Réinitialiser" style="min-width:0;padding:6px 12px">↺</a>
+  </div>
+</form>
+
+{% if kits_data or articles_data %}
+<table class="registre" style="margin-top:12px">
+  <thead>
+    <tr>
+      <th>Désignation</th>
+      <th class="nombre" style="width:100px">Quantité</th>
+      <th class="nombre" style="width:140px">Montant</th>
+    </tr>
+  </thead>
+  <tbody>
+
+    {# ── Section Kits ── #}
+    <tr style="background:var(--craie);pointer-events:none">
+      <td colspan="3" style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--encre-clair);padding:8px 12px;border-top:2px solid var(--reglure)">Kits</td>
+    </tr>
+    {% for r in kits_data %}
+    <tr>
+      <td>{{ r.libelle }}</td>
+      <td class="nombre chiffre">{{ r.quantite }}</td>
+      <td class="nombre chiffre">{{ r.montant|floatformat:0 }} F</td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="3" style="color:var(--encre-pale);font-size:.85rem;padding:10px">Aucun kit vendu.</td></tr>
+    {% endfor %}
+    <tr style="background:#e8f0fe">
+      <td style="font-weight:700;color:var(--accent);font-size:.88rem;padding:8px 12px">Sous-total kits</td>
+      <td class="nombre chiffre" style="font-weight:700;color:var(--accent)">{{ sous_total_kits_qte }}</td>
+      <td class="nombre chiffre" style="font-weight:700;color:var(--accent)">{{ sous_total_kits_mnt|floatformat:0 }} F</td>
+    </tr>
+
+    {# ── Section Articles hors kit ── #}
+    <tr style="background:var(--craie);pointer-events:none">
+      <td colspan="3" style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--encre-clair);padding:8px 12px;border-top:2px solid var(--reglure)">Articles hors kit</td>
+    </tr>
+    {% for r in articles_data %}
+    <tr>
+      <td>{{ r.libelle }}</td>
+      <td class="nombre chiffre">{{ r.quantite }}</td>
+      <td class="nombre chiffre">{{ r.montant|floatformat:0 }} F</td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="3" style="color:var(--encre-pale);font-size:.85rem;padding:10px">Aucun article vendu à l'unité.</td></tr>
+    {% endfor %}
+    <tr style="background:#e8f0fe">
+      <td style="font-weight:700;color:var(--accent);font-size:.88rem;padding:8px 12px">Sous-total articles</td>
+      <td class="nombre chiffre" style="font-weight:700;color:var(--accent)">{{ sous_total_art_qte }}</td>
+      <td class="nombre chiffre" style="font-weight:700;color:var(--accent)">{{ sous_total_art_mnt|floatformat:0 }} F</td>
+    </tr>
+
+  </tbody>
+  <tfoot>
+    <tr style="background:var(--papier);border-top:2px solid var(--accent)">
+      <td style="font-weight:800;font-size:1rem;padding:12px">TOTAL GÉNÉRAL</td>
+      <td class="nombre chiffre" style="font-weight:800;font-size:1rem"></td>
+      <td class="nombre chiffre" style="font-weight:800;font-size:1rem;color:var(--accent)">{{ total_mnt|floatformat:0 }} F</td>
+    </tr>
+  </tfoot>
+</table>
+{% else %}
+<p class="vide-liste" style="margin-top:20px">Aucune vente sur cette période.</p>
+{% endif %}
+
+<div class="pied">
+  <a href="{% url 'historique_ventes' %}" class="bouton-secondaire" style="min-width:180px;text-align:center">← Retour historique</a>
+</div>
+
+<script>
+(function () {
+  var form     = document.getElementById('form-kits');
+  var dropdown = document.getElementById('dropdown-ventes');
+  var cbTout   = document.getElementById('ventes-tout');
+  var cbVentes = document.querySelectorAll('.cb-vente');
+
+  function soumettre() {
+    // Fermer le dropdown avant de soumettre pour éviter le flash
+    dropdown.removeAttribute('open');
+    form.submit();
+  }
+
+  cbTout.addEventListener('change', function () {
+    cbVentes.forEach(function (cb) { cb.checked = cbTout.checked; });
+    soumettre();
+  });
+
+  cbVentes.forEach(function (cb) {
+    cb.addEventListener('change', function () {
+      var tousCoches = Array.from(cbVentes).every(function (c) { return c.checked; });
+      cbTout.checked = tousCoches;
+      soumettre();
+    });
+  });
+
+  // Fermer au clic extérieur
+  document.addEventListener('click', function (e) {
+    if (!dropdown.contains(e.target)) dropdown.removeAttribute('open');
+  });
+})();
+</script>
+{% endblock %}

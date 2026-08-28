@@ -51,12 +51,17 @@ urlpatterns = [
     path("finances/rapport-journalier/export/", ventes_views.rapport_financier_export, name="rapport_financier_export"),
     path("finances/benefices/", ventes_views.finances_benefices, name="finances_benefices"),
     path("finances/benefices/export/", ventes_views.finances_benefices_export, name="finances_benefices_export"),
+    path("finances/tresorerie/", ventes_views.tresorerie_globale, name="tresorerie_globale"),
 
     # ─── Vente ───────────────────────────────────────────────────────────────
     path("vente/", ventes_views.vente, name="vente"),
+    path("proforma/", ventes_views.proforma_formulaire, name="proforma_formulaire"),
+    path("proforma/apercu/", ventes_views.proforma_apercu, name="proforma_apercu"),
     path("recu/<uuid:uuid>/", ventes_views.recu, name="recu"),
     path("recu/<uuid:uuid>/imprimer/", ventes_views.recu_imprimer, name="recu_imprimer"),
     path("historique/", ventes_views.historique_ventes, name="historique_ventes"),
+    path("historique/kits/", ventes_views.rapport_kits_vendus, name="rapport_kits_vendus"),
+    path("historique/kits/detail/", ventes_views.rapport_kits_detail, name="rapport_kits_detail"),
     path("ventes/finances/", ventes_views.finances_ventes, name="finances_ventes"),
     path("historique/export/", export_ventes_excel, name="export_ventes"),
     path("facture/<uuid:uuid>/", ventes_views.facture_vente, name="facture_vente"),

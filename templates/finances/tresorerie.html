@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+{% block titre %}Trésorerie globale — FAMIEN{% endblock %}
+{% block lieu %}Finances — Trésorerie globale{% endblock %}
+
+{% block contenu %}
+<div class="admin-entete">
+  <h1>Trésorerie globale</h1>
+</div>
+
+<!-- Filtres -->
+<form method="get" class="finance-filtres">
+  <div class="filtre-champ filtre-champ--date">
+    <label>Du</label>
+    <input type="date" name="debut" value="{{ filtres.debut }}" onchange="this.form.submit()">
+  </div>
+  <div class="filtre-champ filtre-champ--date">
+    <label>Au</label>
+    <input type="date" name="fin" value="{{ filtres.fin }}" onchange="this.form.submit()">
+  </div>
+  <div class="filtre-champ filtre-champ--large">
+    <label>Site</label>
+    <select name="site" data-no-combobox onchange="this.form.submit()">
+      <option value="">Tous</option>
+      {% for s in sites_dispo %}
+      <option value="{{ s.pk }}" {% if filtres.site == s.pk|stringformat:"s" %}selected{% endif %}>{{ s.nom }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div style="display:flex;align-items:flex-end;padding-bottom:2px">
+    <a href="{% url 'tresorerie_globale' %}" class="bouton-secondaire" title="Réinitialiser" style="min-width:0;padding:8px 12px">↺</a>
+  </div>
+</form>
+
+<!-- Indicateurs globaux -->
+<div class="indicateurs" style="margin-top:20px;margin-bottom:24px;flex-wrap:wrap;gap:12px">
+  <div class="indicateur" style="border-top-color:#1a6fc4">
+    <div class="valeur chiffre" style="color:#1a6fc4">{{ tot.stock|floatformat:0 }}</div>
+    <div class="libelle">Valeur stock au {{ filtres.fin }}</div>
+  </div>
+  <div class="indicateur valide">
+    <div class="valeur chiffre">{{ tot.recettes|floatformat:0 }}</div>
+    <div class="libelle">Recettes</div>
+  </div>
+  <div class="indicateur" style="border-top-color:#1a6fc4">
+    <div class="valeur chiffre" style="color:#1a6fc4">{{ tot.cogs|floatformat:0 }}</div>
+    <div class="libelle">Coût marchandises vendues</div>
+  </div>
+  <div class="indicateur valide">
+    <div class="valeur chiffre">+{{ tot.adj_pos|floatformat:0 }}</div>
+    <div class="libelle">Ajustements positifs</div>
+  </div>
+  <div class="indicateur alerte">
+    <div class="valeur chiffre">−{{ tot.adj_neg|floatformat:0 }}</div>
+    <div class="libelle">Ajustements négatifs</div>
+  </div>
+  <div class="indicateur alerte">
+    <div class="valeur chiffre">{{ tot.depenses|floatformat:0 }}</div>
+    <div class="libelle">Dépenses</div>
+  </div>
+  <div class="indicateur" style="border-top-color:#9333ea">
+    <div class="valeur chiffre" style="color:#9333ea">{{ tot.trf_emis|floatformat:0 }}</div>
+    <div class="libelle">Transferts émis</div>
+  </div>
+  <div class="indicateur" style="border-top-color:#9333ea">
+    <div class="valeur chiffre" style="color:#9333ea">{{ tot.trf_recu|floatformat:0 }}</div>
+    <div class="libelle">Transferts reçus</div>
+  </div>
+  <div class="indicateur" style="border-top-color:{% if tot.benefice < 0 %}#e00000{% elif tot.benefice > 0 %}var(--valide){% else %}var(--reglure){% endif %}">
+    <div class="valeur chiffre" style="color:{% if tot.benefice < 0 %}#e00000{% elif tot.benefice > 0 %}var(--valide){% endif %}">{{ tot.benefice|floatformat:0 }}</div>
+    <div class="libelle">Bénéfice net (recettes − COGS − adj. − dépenses)</div>
+  </div>
+</div>
+
+<!-- Tableau par site -->
+<div class="etiquette" style="margin-top:20px;margin-bottom:8px">Détail par site</div>
+
+{% if lignes %}
+<div style="overflow-x:auto">
+<table class="registre" style="min-width:900px">
+  <thead>
+    <tr>
+      <th>Site</th>
+      <th class="nombre" style="font-size:.78rem">Stock au {{ filtres.fin }}</th>
+      <th class="nombre">Recettes</th>
+      <th class="nombre">COGS</th>
+      <th class="nombre">Adj. +</th>
+      <th class="nombre">Adj. −</th>
+      <th class="nombre">Dépenses</th>
+      <th class="nombre" style="font-size:.78rem">Trf. émis</th>
+      <th class="nombre" style="font-size:.78rem">Trf. reçus</th>
+      <th class="nombre">Bénéfice</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for l in lignes %}
+    <tr>
+      <td>{{ l.nom }}</td>
+      <td class="nombre chiffre" style="color:#1a6fc4;font-size:.9rem">
+        {% if l.stock %}{{ l.stock|floatformat:0 }}{% else %}—{% endif %}
+      </td>
+      <td class="nombre chiffre" style="color:{% if l.recettes %}var(--valide){% else %}var(--encre-pale){% endif %}">
+        {% if l.recettes %}{{ l.recettes|floatformat:0 }}{% else %}—{% endif %}
+      </td>
+      <td class="nombre chiffre" style="color:{% if l.cogs %}var(--marge){% else %}var(--encre-pale){% endif %}">
+        {% if l.cogs %}{{ l.cogs|floatformat:0 }}{% else %}—{% endif %}
+      </td>
+      <td class="nombre chiffre" style="color:{% if l.adj_pos %}var(--valide){% else %}var(--encre-pale){% endif %}">
+        {% if l.adj_pos %}+{{ l.adj_pos|floatformat:0 }}{% else %}—{% endif %}
+      </td>
+      <td class="nombre chiffre" style="color:{% if l.adj_neg %}var(--marge){% else %}var(--encre-pale){% endif %}">
+        {% if l.adj_neg %}−{{ l.adj_neg|floatformat:0 }}{% else %}—{% endif %}
+      </td>
+      <td class="nombre chiffre" style="color:{% if l.depenses %}var(--marge){% else %}var(--encre-pale){% endif %}">
+        {% if l.depenses %}{{ l.depenses|floatformat:0 }}{% else %}—{% endif %}
+      </td>
+      <td class="nombre chiffre" style="color:{% if l.trf_emis %}#9333ea{% else %}var(--encre-pale){% endif %};font-size:.9rem">
+        {% if l.trf_emis %}{{ l.trf_emis|floatformat:0 }}{% else %}—{% endif %}
+      </td>
+      <td class="nombre chiffre" style="color:{% if l.trf_recu %}#9333ea{% else %}var(--encre-pale){% endif %};font-size:.9rem">
+        {% if l.trf_recu %}{{ l.trf_recu|floatformat:0 }}{% else %}—{% endif %}
+      </td>
+      <td class="nombre chiffre" style="font-weight:700;color:{% if l.benefice < 0 %}var(--marge){% elif l.benefice > 0 %}var(--valide){% else %}var(--encre-pale){% endif %}">
+        {{ l.benefice|floatformat:0 }}
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+  <tfoot>
+    <tr style="border-top:2px solid var(--reglure)">
+      <td style="font-weight:700">Total</td>
+      <td class="nombre chiffre" style="font-weight:700;color:#1a6fc4">{{ tot.stock|floatformat:0 }}</td>
+      <td class="nombre chiffre" style="font-weight:700;color:var(--valide)">{{ tot.recettes|floatformat:0 }}</td>
+      <td class="nombre chiffre" style="font-weight:700;color:var(--marge)">{{ tot.cogs|floatformat:0 }}</td>
+      <td class="nombre chiffre" style="font-weight:700;color:var(--valide)">+{{ tot.adj_pos|floatformat:0 }}</td>
+      <td class="nombre chiffre" style="font-weight:700;color:var(--marge)">−{{ tot.adj_neg|floatformat:0 }}</td>
+      <td class="nombre chiffre" style="font-weight:700;color:var(--marge)">{{ tot.depenses|floatformat:0 }}</td>
+      <td class="nombre chiffre" style="font-weight:700;color:#9333ea">{{ tot.trf_emis|floatformat:0 }}</td>
+      <td class="nombre chiffre" style="font-weight:700;color:#9333ea">{{ tot.trf_recu|floatformat:0 }}</td>
+      <td class="nombre chiffre" style="font-weight:800;color:{% if tot.benefice < 0 %}var(--marge){% else %}var(--valide){% endif %}">{{ tot.benefice|floatformat:0 }}</td>
+    </tr>
+  </tfoot>
+</table>
+</div>
+{% else %}
+<p class="vide-liste">Aucune donnée sur cette période.</p>
+{% endif %}
+
+<!-- Bénéfice net global -->
+<div style="margin-top:24px;padding:16px 20px;background:var(--fond-alt,#f7f7f5);border-radius:8px;border:1px solid var(--reglure);display:flex;align-items:center;gap:24px;flex-wrap:wrap">
+  <span style="font-weight:700;font-size:1rem;flex:1">Bénéfice net global</span>
+  <span class="chiffre" style="font-size:1.4rem;font-weight:700;color:{% if tot.benefice < 0 %}var(--marge){% else %}var(--valide){% endif %}">
+    {{ tot.benefice|floatformat:0 }} F
+  </span>
+</div>
+
+<div class="pied">
+  <a href="{% url 'hub_finances' %}" class="bouton-secondaire">← Finances</a>
+</div>
+{% endblock %}

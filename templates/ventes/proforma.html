@@ -1,0 +1,194 @@
+{% extends "base.html" %}
+{% block titre %}Proforma — {{ ecole.nom }}{% endblock %}
+{% block lieu %}Proforma{% endblock %}
+
+{% block contenu %}
+<div class="admin-entete">
+  <h1>Établir un proforma</h1>
+</div>
+
+<form method="post" action="{% url 'proforma_apercu' %}" target="_blank" id="form-proforma">
+  {% csrf_token %}
+  <input type="hidden" name="site_nom" value="{{ ecole.nom }}">
+
+  <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:20px">
+    <div class="filtre-champ filtre-champ--large">
+      <label>Client / Établissement</label>
+      <input type="text" name="client" placeholder="Nom du client ou de l'établissement" style="width:100%;padding:10px;border:1.5px solid var(--reglure);border-radius:var(--rayon);font:inherit">
+    </div>
+    <div class="filtre-champ" style="flex:0 0 140px">
+      <label>Date</label>
+      <input type="date" name="date" value="{{ today }}" style="width:100%;padding:10px;border:1.5px solid var(--reglure);border-radius:var(--rayon);font:inherit">
+    </div>
+  </div>
+
+  <div class="etiquette" style="margin-bottom:8px">Lignes du proforma</div>
+  <div class="table-caisse-scroll">
+  <table class="registre" id="tbl-proforma">
+    <thead>
+      <tr>
+        <th>Désignation</th>
+        <th style="width:90px;text-align:center">Quantité</th>
+        <th style="width:130px;text-align:right">Prix unitaire (F)</th>
+        <th style="width:130px;text-align:right">Total (F)</th>
+        <th style="width:36px"></th>
+      </tr>
+    </thead>
+    <tbody id="lignes-body">
+      <tr id="lignes-vide">
+        <td colspan="5" style="color:var(--encre-clair);text-align:center;padding:14px">Aucune ligne ajoutée.</td>
+      </tr>
+    </tbody>
+    <tfoot>
+      <tr style="background:var(--craie)">
+        <td colspan="3" style="font-weight:700;padding:10px">TOTAL</td>
+        <td style="text-align:right;font-weight:800;font-size:1rem;color:var(--accent);padding:10px" id="total-general">—</td>
+        <td></td>
+      </tr>
+    </tfoot>
+  </table>
+  </div>
+
+  <div style="margin-top:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+    <button type="button" id="btn-ajouter" class="bouton-secondaire" style="background:var(--accent);color:#fff;border-color:var(--accent)">+ Ajouter une ligne</button>
+    <button type="submit" class="bouton-primaire" id="btn-generer" disabled style="margin-left:auto">Générer le proforma →</button>
+  </div>
+</form>
+
+<div class="pied">
+  <a href="{% url 'vente' %}" class="bouton-secondaire" style="min-width:180px;text-align:center">← Retour caisse</a>
+</div>
+
+{{ articles_js|json_script:"articles-data" }}
+<script>
+(function () {
+  "use strict";
+
+  var ARTICLES = JSON.parse(document.getElementById("articles-data").textContent);
+  var tbody    = document.getElementById("lignes-body");
+  var vide     = document.getElementById("lignes-vide");
+  var total    = document.getElementById("total-general");
+  var btnGen   = document.getElementById("btn-generer");
+  var rowIdx   = 0;
+
+  function fmt(n) { return Math.round(n).toLocaleString("fr-FR"); }
+
+  function majTotal() {
+    var t = 0;
+    tbody.querySelectorAll("tr[data-idx]").forEach(function (tr) {
+      var q = parseInt(tr.querySelector(".inp-qte").value, 10) || 0;
+      var p = parseInt(tr.querySelector(".inp-prix").value, 10) || 0;
+      t += q * p;
+      tr.querySelector(".col-total").textContent = (q && p) ? fmt(q * p) + " F" : "—";
+    });
+    total.textContent = t > 0 ? fmt(t) + " F" : "—";
+    btnGen.disabled = tbody.querySelectorAll("tr[data-idx]").length === 0;
+  }
+
+  function ajouterLigne() {
+    var idx = rowIdx++;
+    vide.style.display = "none";
+
+    var tr = document.createElement("tr");
+    tr.dataset.idx = idx;
+
+    // Désignation (select + champ texte libre)
+    var tdDes = document.createElement("td");
+    var sel = document.createElement("select");
+    sel.className = "sel-article";
+    sel.style.cssText = "width:100%;padding:8px;border:1.5px solid var(--reglure);border-radius:var(--rayon);font:inherit;margin-bottom:4px";
+    var optVide = document.createElement("option");
+    optVide.value = "";
+    optVide.textContent = "— Choisir un article —";
+    sel.appendChild(optVide);
+    ARTICLES.forEach(function (a) {
+      var opt = document.createElement("option");
+      opt.value = a.id;
+      opt.dataset.prix = a.prix;
+      opt.dataset.designation = a.designation;
+      opt.textContent = a.libelle;
+      sel.appendChild(opt);
+    });
+
+    var inp = document.createElement("input");
+    inp.type = "text";
+    inp.name = "designation_" + idx;
+    inp.className = "inp-designation";
+    inp.placeholder = "ou saisie libre";
+    inp.style.cssText = "width:100%;padding:6px 8px;border:1.5px solid var(--reglure);border-radius:var(--rayon);font:inherit;font-size:.88rem";
+
+    sel.addEventListener("change", function () {
+      var opt = sel.options[sel.selectedIndex];
+      if (opt && opt.value) {
+        inp.value = opt.dataset.designation;
+        tr.querySelector(".inp-prix").value = opt.dataset.prix;
+      }
+      majTotal();
+    });
+
+    tdDes.appendChild(sel);
+    tdDes.appendChild(inp);
+    tr.appendChild(tdDes);
+
+    // Quantité
+    var inpQte = document.createElement("input");
+    inpQte.type = "number";
+    inpQte.name = "quantite_" + idx;
+    inpQte.className = "inp-qte";
+    inpQte.value = "1";
+    inpQte.min = "1";
+    inpQte.style.cssText = "width:100%;padding:8px;border:1.5px solid var(--reglure);border-radius:var(--rayon);font:inherit;text-align:center";
+    inpQte.addEventListener("input", majTotal);
+    var tdQte = document.createElement("td");
+    tdQte.style.textAlign = "center";
+    tdQte.appendChild(inpQte);
+    tr.appendChild(tdQte);
+
+    // Prix unitaire
+    var inpPrix = document.createElement("input");
+    inpPrix.type = "number";
+    inpPrix.name = "prix_" + idx;
+    inpPrix.className = "inp-prix";
+    inpPrix.value = "0";
+    inpPrix.min = "0";
+    inpPrix.style.cssText = "width:100%;padding:8px;border:1.5px solid var(--reglure);border-radius:var(--rayon);font:inherit;text-align:right";
+    inpPrix.addEventListener("input", majTotal);
+    var tdPrix = document.createElement("td");
+    tdPrix.style.textAlign = "right";
+    tdPrix.appendChild(inpPrix);
+    tr.appendChild(tdPrix);
+
+    // Total
+    var tdTotal = document.createElement("td");
+    tdTotal.className = "col-total chiffre";
+    tdTotal.style.cssText = "text-align:right;font-weight:700;color:var(--encre)";
+    tdTotal.textContent = "—";
+    tr.appendChild(tdTotal);
+
+    // Supprimer
+    var btnSup = document.createElement("button");
+    btnSup.type = "button";
+    btnSup.innerHTML = "✕";
+    btnSup.style.cssText = "background:none;border:0;color:var(--marge);cursor:pointer;font-size:1.1rem";
+    btnSup.addEventListener("click", function () {
+      tr.remove();
+      if (!tbody.querySelectorAll("tr[data-idx]").length) vide.style.display = "";
+      majTotal();
+    });
+    var tdSup = document.createElement("td");
+    tdSup.appendChild(btnSup);
+    tr.appendChild(tdSup);
+
+    tbody.appendChild(tr);
+
+    if (window.initCombobox) window.initCombobox(sel);
+    majTotal();
+  }
+
+  document.getElementById("btn-ajouter").addEventListener("click", ajouterLigne);
+
+  // Pré-ajouter une ligne vide
+  ajouterLigne();
+}());
+</script>
+{% endblock %}

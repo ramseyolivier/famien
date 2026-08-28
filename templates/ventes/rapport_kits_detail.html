@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block titre %}Détail physique — Kits vendus{% endblock %}
+{% block lieu %}Ventes — {{ perimetre }}{% endblock %}
+
+{% block contenu %}
+<div class="admin-entete">
+  <h1>Détail physique des kits</h1>
+</div>
+
+<p style="font-size:.85rem;color:var(--encre-clair);margin-bottom:16px">
+  Produits issus des kits vendus — quantités dues au client.
+  {% if filtres.debut %}Du <strong>{{ filtres.debut }}</strong>{% endif %}
+  {% if filtres.fin %} au <strong>{{ filtres.fin }}</strong>{% endif %}
+</p>
+
+{% if lignes %}
+<table class="registre" style="margin-top:8px">
+  <thead>
+    <tr>
+      <th>Désignation</th>
+      <th class="nombre" style="width:120px">Quantité due</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for l in lignes %}
+    <tr>
+      <td>{{ l.produit__designation }}</td>
+      <td class="nombre chiffre"><strong>{{ l.total }}</strong></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+  <tfoot>
+    <tr style="background:var(--craie)">
+      <td style="font-weight:700;padding:10px">TOTAL</td>
+      <td class="nombre chiffre" style="font-weight:800;font-size:1rem;color:var(--accent)">{{ total_qte }}</td>
+    </tr>
+  </tfoot>
+</table>
+{% else %}
+<p class="vide-liste" style="margin-top:20px">Aucune donnée sur cette période.</p>
+{% endif %}
+
+<div class="pied">
+  <a href="{% url 'rapport_kits_vendus' %}?{{ retour_get }}" class="bouton-secondaire" style="min-width:180px;text-align:center">← Retour kits / articles</a>
+</div>
+{% endblock %}

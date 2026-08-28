@@ -5,6 +5,10 @@
 {% block contenu %}
 <div class="admin-entete">
   <h1>Historique des ventes</h1>
+  <a href="{% url 'rapport_kits_vendus' %}?{% if filtres.debut %}debut={{ filtres.debut }}&{% endif %}{% if filtres.fin %}fin={{ filtres.fin }}&{% endif %}{% if filtres.ecole %}ecole={{ filtres.ecole }}&{% endif %}{% if filtres.commune %}commune={{ filtres.commune }}{% endif %}"
+     class="bouton-secondaire" style="background:var(--accent);color:#fff;border-color:var(--accent)">
+    Kits / Articles vendus
+  </a>
 </div>
 
 <form method="get" class="finance-filtres" id="form-historique">

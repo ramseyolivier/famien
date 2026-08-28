@@ -116,9 +116,21 @@ document.getElementById("remise").addEventListener("change", function() {
         <span id="monnaie-valeur" style="font-size:1.1rem;font-weight:700;color:var(--encre)">0</span>
         <span style="font-size:.85rem;color:var(--encre-clair)">F</span>
       </div>
+      <button type="button" id="btn-proforma" disabled style="flex:0 0 auto;padding:14px 20px;background:#fff;color:#7c4a1e;border:2px solid #7c4a1e;border-radius:var(--rayon);font:inherit;font-weight:700;font-size:.92rem;cursor:pointer;white-space:nowrap">
+        Proforma
+      </button>
     </div>
   </div>
 </div>
+
+{# Formulaire caché pour générer le proforma dans un nouvel onglet #}
+<form id="form-proforma" method="post" action="{% url 'proforma_apercu' %}" target="_blank" style="display:none">
+  {% csrf_token %}
+  <input type="hidden" name="site_nom" value="{{ ecole.nom }}">
+  <input type="hidden" name="client" value="">
+  <input type="hidden" name="date" id="proforma-date" value="">
+  <div id="proforma-lignes"></div>
+</form>
 
 {% endblock %}
 
@@ -651,6 +663,58 @@ document.getElementById("remise").addEventListener("change", function() {
 
   ajouterLigne(false);
   ajouterLigne(true);
+
+  // ── Proforma ──────────────────────────────────────────────────────────────
+  var elBtnProforma   = document.getElementById("btn-proforma");
+  var elFormProforma  = document.getElementById("form-proforma");
+  var elProformaLignes = document.getElementById("proforma-lignes");
+  var elProformaDate  = document.getElementById("proforma-date");
+
+  function majBtnProforma() {
+    var aDesLignes = (
+      elKitsBody.querySelectorAll("tr[data-row][data-item-id]").length > 0 ||
+      elArticlesBody.querySelectorAll("tr[data-row][data-item-id]").length > 0
+    );
+    elBtnProforma.disabled = !aDesLignes;
+  }
+
+  var _rafraichirOriginal = rafraichir;
+  rafraichir = function () { _rafraichirOriginal(); majBtnProforma(); };
+
+  elBtnProforma.addEventListener("click", function () {
+    elProformaLignes.innerHTML = "";
+    var idx = 0;
+
+    function ajouterInputs(designation, quantite, prix) {
+      function hidden(name, val) {
+        var i = document.createElement("input");
+        i.type = "hidden"; i.name = name; i.value = val;
+        elProformaLignes.appendChild(i);
+      }
+      hidden("designation_" + idx, designation);
+      hidden("quantite_" + idx, quantite);
+      hidden("prix_" + idx, prix);
+      idx++;
+    }
+
+    elArticlesBody.querySelectorAll("tr[data-row][data-item-id]").forEach(function (tr) {
+      var art = ARTICLES_MAP[tr.dataset.itemId];
+      var qte = parseInt(tr.querySelector(".qte-input").value, 10) || 0;
+      var prix = parseFloat(tr.dataset.prix) || 0;
+      if (art && qte > 0) ajouterInputs(art.libelle, qte, Math.round(prix));
+    });
+
+    elKitsBody.querySelectorAll("tr[data-row][data-item-id]").forEach(function (tr) {
+      var kit = KITS_MAP[tr.dataset.itemId];
+      var qte = parseInt(tr.querySelector(".qte-input").value, 10) || 0;
+      var prix = parseFloat(tr.dataset.prix) || 0;
+      if (kit && qte > 0) ajouterInputs(kit.libelle, qte, Math.round(prix));
+    });
+
+    elProformaDate.value = new Date().toISOString().slice(0, 10);
+    elFormProforma.submit();
+  });
 }());
 </script>
+
 {% endblock %}

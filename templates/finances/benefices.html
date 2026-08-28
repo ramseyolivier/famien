@@ -43,8 +43,17 @@
       {% endfor %}
     </select>
   </div>
+  <div class="filtre-champ filtre-champ--large">
+    <label>Article</label>
+    <select name="produit" onchange="this.form.submit()">
+      <option value="">Tous les articles</option>
+      {% for p in produits_dispo %}
+      <option value="{{ p.pk }}" {% if filtres.produit == p.pk|stringformat:"s" %}selected{% endif %}>{{ p.code }} — {{ p.designation }}</option>
+      {% endfor %}
+    </select>
+  </div>
   <div style="display:flex;align-items:flex-end;padding-bottom:2px">
-    <a href="{% url 'finances_benefices' %}?debut={{ filtres.debut }}&fin={{ filtres.fin }}" class="bouton-secondaire" title="Réinitialiser commune et site" style="min-width:0;padding:8px 12px">↺</a>
+    <a href="{% url 'finances_benefices' %}?debut={{ filtres.debut }}&fin={{ filtres.fin }}" class="bouton-secondaire" title="Réinitialiser" style="min-width:0;padding:8px 12px">↺</a>
   </div>
   <a href="{% url 'finances_benefices_export' %}?debut={{ filtres.debut }}&fin={{ filtres.fin }}&commune={{ filtres.commune }}&site={{ filtres.site }}"
      class="bouton-secondaire" title="Télécharger en Excel" style="align-self:flex-end;min-width:0;padding:8px 12px;margin-left:auto">⬇</a>
@@ -75,6 +84,56 @@
     <div class="libelle">Bénéfice net{% if total_marge is not None %} · {{ total_marge }}%{% endif %}</div>
   </div>
 </div>
+
+<!-- ── Bloc article sélectionné ───────────────────────── -->
+{% if produit_selectionne %}
+<div class="etiquette" style="margin-top:20px;margin-bottom:8px">
+  Analyse — {{ produit_selectionne.code }} · {{ produit_selectionne.designation }}
+  <span style="font-size:.8rem;font-weight:400;color:var(--encre-clair)">
+    — Coût achat : {{ produit_selectionne.cout_achat|floatformat:0 }} F · Vendu à l'unité uniquement
+  </span>
+</div>
+{% if lignes_article %}
+<div style="overflow-x:auto">
+<table class="registre" style="min-width:600px">
+  <thead>
+    <tr>
+      <th>Site</th>
+      <th class="nombre">Qté vendue</th>
+      <th class="nombre">Recettes</th>
+      <th class="nombre">Coût achat</th>
+      <th class="nombre">Bénéfice</th>
+      <th class="nombre">Marge</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for l in lignes_article %}
+    <tr>
+      <td>{{ l.nom }}</td>
+      <td class="nombre chiffre">{{ l.quantite }}</td>
+      <td class="nombre chiffre" style="color:var(--valide)">{{ l.recettes|floatformat:0 }} F</td>
+      <td class="nombre chiffre" style="color:var(--marge)">{{ l.cout|floatformat:0 }} F</td>
+      <td class="nombre chiffre" style="font-weight:700;color:{% if l.benefice < 0 %}var(--marge){% else %}var(--valide){% endif %}">{{ l.benefice|floatformat:0 }} F</td>
+      <td class="nombre chiffre" style="color:var(--encre-clair)">{% if l.marge is not None %}{{ l.marge }}%{% else %}—{% endif %}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+  <tfoot>
+    <tr style="border-top:2px solid var(--reglure)">
+      <td style="font-weight:700">Total</td>
+      <td class="nombre chiffre" style="font-weight:700">{{ total_art_qte }}</td>
+      <td class="nombre chiffre" style="font-weight:700;color:var(--valide)">{{ total_art_rec|floatformat:0 }} F</td>
+      <td class="nombre chiffre" style="font-weight:700;color:var(--marge)">{{ total_art_cout|floatformat:0 }} F</td>
+      <td class="nombre chiffre" style="font-weight:800;color:{% if total_art_ben < 0 %}var(--marge){% else %}var(--valide){% endif %}">{{ total_art_ben|floatformat:0 }} F</td>
+      <td></td>
+    </tr>
+  </tfoot>
+</table>
+</div>
+{% else %}
+<p class="vide-liste">Cet article n'a pas été vendu à l'unité sur cette période.</p>
+{% endif %}
+{% endif %}
 
 <!-- ── Bloc 1 : Bénéfices par site ────────────────────── -->
 <div class="etiquette" style="margin-top:20px;margin-bottom:8px">Bénéfices par site</div>
@@ -172,7 +231,8 @@
   </span>
 </div>
 
-<div class="pied">
+<div class="pied" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
   <a href="{% url 'hub_finances' %}" class="bouton-secondaire">← Finances</a>
+  <a href="{% url 'tresorerie_globale' %}?debut={{ filtres.debut }}&fin={{ filtres.fin }}&site={{ filtres.site }}" class="bouton-secondaire">Trésorerie globale →</a>
 </div>
 {% endblock %}

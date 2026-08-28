@@ -117,7 +117,7 @@ def vente(request):
         "articles": [
             {
                 "id": str(p["produit"].pk),
-                "libelle": f"{p['produit'].code} — {p['produit'].designation}",
+                "libelle": p['produit'].designation,
                 "prix": int(prix_ecoles_map.get(p["produit"].pk, p["produit"].prix_detail)),
                 "stock": p["stock"],
             }
@@ -140,6 +140,74 @@ def vente(request):
         ).exclude(statut=StatutVente.ANNULEE).aggregate(t=Sum("montant_total"))["t"] or 0,
     }
     return render(request, "ventes/vente.html", contexte)
+
+
+# ─── Proforma ────────────────────────────────────────────────────────────────
+
+@login_required
+def proforma_formulaire(request):
+    u = request.user
+    ecole = u.site
+    prix_ecoles_map = {
+        pe.produit_id: pe.prix_detail
+        for pe in PrixEcole.objects.filter(ecole=ecole)
+    }
+    articles_js = [
+        {
+            "id": str(p.pk),
+            "libelle": p.designation,
+            "designation": p.designation,
+            "prix": int(prix_ecoles_map.get(p.pk, p.prix_detail)),
+        }
+        for p in Produit.objects.filter(actif=True).select_related("categorie").order_by("code")
+    ]
+    from django.utils import timezone as tz
+    return render(request, "ventes/proforma.html", {
+        "ecole": ecole,
+        "articles_js": articles_js,
+        "today": tz.localdate().isoformat(),
+    })
+
+
+@login_required
+def proforma_apercu(request):
+    if request.method != "POST":
+        return redirect("proforma_formulaire")
+
+    client     = request.POST.get("client", "").strip()
+    date_str   = request.POST.get("date", "")
+    site_nom   = request.POST.get("site_nom", "")
+
+    lignes = []
+    i = 0
+    while True:
+        designation = request.POST.get(f"designation_{i}", "")
+        if not designation:
+            break
+        try:
+            quantite = int(request.POST.get(f"quantite_{i}", 1))
+            prix     = int(request.POST.get(f"prix_{i}", 0))
+        except (ValueError, TypeError):
+            quantite, prix = 1, 0
+        if quantite > 0:
+            lignes.append({
+                "designation": designation,
+                "quantite": quantite,
+                "prix": prix,
+                "total": quantite * prix,
+            })
+        i += 1
+        if i > 100:
+            break
+
+    total = sum(l["total"] for l in lignes)
+    return render(request, "ventes/proforma_apercu.html", {
+        "client": client,
+        "date_str": date_str,
+        "site_nom": site_nom,
+        "lignes": lignes,
+        "total": total,
+    })
 
 
 def _enregistrer(request, ecole):
@@ -414,6 +482,192 @@ def historique_ventes(request):
         "perimetre": _perimetre_label(u),
         "caissiere": False,
         "multi_communes": False,
+    })
+
+
+# ─── Rapport kits vendus ─────────────────────────────────────────────────────
+
+
+@login_required
+def rapport_kits_vendus(request):
+    from .models import LigneVente, LigneProduitVente
+    u = request.user
+    if not u.peut_voir_ventes():
+        return redirect("hub_stock")
+
+    ecoles = _ecoles_perimetre(u)
+    debut_str = request.GET.get("debut", "")
+    fin_str   = request.GET.get("fin", "")
+    ecole_id  = request.GET.get("ecole", "")
+    commune_id = request.GET.get("commune", "")
+
+    today = timezone.localdate()
+    try:
+        debut = date_cls.fromisoformat(debut_str) if debut_str else today
+    except ValueError:
+        debut = today
+        debut_str = ""
+    try:
+        fin = date_cls.fromisoformat(fin_str) if fin_str else today
+    except ValueError:
+        fin = today
+        fin_str = ""
+
+    if commune_id.isdigit():
+        ecoles = ecoles.filter(commune_id=commune_id)
+    if ecole_id.isdigit():
+        ecoles = ecoles.filter(pk=ecole_id)
+
+    ventes_qs = (
+        Vente.objects
+        .filter(ecole__in=ecoles, horodatage__date__gte=debut, horodatage__date__lte=fin)
+        .exclude(statut=StatutVente.ANNULEE)
+        .select_related("ecole")
+        .order_by("-horodatage")
+    )
+
+    ventes_ids_selectionnes = request.GET.getlist("vente")
+    if ventes_ids_selectionnes:
+        try:
+            ventes_ids_selectionnes = [int(v) for v in ventes_ids_selectionnes]
+        except ValueError:
+            ventes_ids_selectionnes = []
+        ventes_filtrees = ventes_qs.filter(pk__in=ventes_ids_selectionnes)
+    else:
+        ventes_filtrees = ventes_qs
+
+    from django.db.models import Sum as DSum, ExpressionWrapper, DecimalField as DField
+    montant_expr = ExpressionWrapper(F("quantite") * F("prix_unitaire"), output_field=DField(max_digits=14, decimal_places=2))
+
+    # Kits
+    kits_agg = (
+        LigneVente.objects
+        .filter(vente__in=ventes_filtrees, kit__isnull=False)
+        .annotate(montant_ligne=montant_expr)
+        .values("kit__id", "kit__classe__libelle")
+        .annotate(quantite=DSum("quantite"), montant=DSum("montant_ligne"))
+        .order_by("kit__classe__libelle")
+    )
+    kits_data = [
+        {
+            "libelle": f"Kit {r['kit__classe__libelle']}",
+            "quantite": r["quantite"],
+            "montant": r["montant"] or 0,
+        }
+        for r in kits_agg
+    ]
+    sous_total_kits_qte = sum(r["quantite"] for r in kits_data)
+    sous_total_kits_mnt = sum(r["montant"]  for r in kits_data)
+
+    # Articles hors kit
+    articles_agg = (
+        LigneVente.objects
+        .filter(vente__in=ventes_filtrees, produit__isnull=False)
+        .annotate(montant_ligne=montant_expr)
+        .values("produit__designation")
+        .annotate(quantite=DSum("quantite"), montant=DSum("montant_ligne"))
+        .order_by("produit__designation")
+    )
+    articles_data = [
+        {
+            "libelle": r["produit__designation"],
+            "quantite": r["quantite"],
+            "montant": r["montant"] or 0,
+        }
+        for r in articles_agg
+    ]
+    sous_total_art_qte = sum(r["quantite"] for r in articles_data)
+    sous_total_art_mnt = sum(r["montant"]  for r in articles_data)
+
+    total_mnt = sous_total_kits_mnt + sous_total_art_mnt
+
+    communes = Site.objects.filter(pk__in=ecoles.values("commune_id")).distinct() if hasattr(Site, "commune") else []
+    ecoles_list = _ecoles_perimetre(u).order_by("nom")
+
+    filtres_get = ""
+    if debut_str: filtres_get += f"&debut={debut_str}"
+    if fin_str:   filtres_get += f"&fin={fin_str}"
+    if ecole_id:  filtres_get += f"&ecole={ecole_id}"
+    if commune_id: filtres_get += f"&commune={commune_id}"
+
+    return render(request, "ventes/rapport_kits.html", {
+        "ventes": ventes_qs,
+        "ventes_ids_selectionnes": ventes_ids_selectionnes,
+        "kits_data": kits_data,
+        "articles_data": articles_data,
+        "sous_total_kits_qte": sous_total_kits_qte,
+        "sous_total_kits_mnt": sous_total_kits_mnt,
+        "sous_total_art_qte": sous_total_art_qte,
+        "sous_total_art_mnt": sous_total_art_mnt,
+        "total_mnt": total_mnt,
+        "ecoles": ecoles_list,
+        "filtres": {"debut": debut_str, "fin": fin_str, "ecole": ecole_id, "commune": commune_id},
+        "filtres_get": filtres_get.lstrip("&"),
+        "perimetre": _perimetre_label(u),
+    })
+
+
+@login_required
+def rapport_kits_detail(request):
+    from .models import LigneProduitVente
+    u = request.user
+    if not u.peut_voir_ventes():
+        return redirect("hub_stock")
+
+    ecoles = _ecoles_perimetre(u)
+    debut_str  = request.GET.get("debut", "")
+    fin_str    = request.GET.get("fin", "")
+    ecole_id   = request.GET.get("ecole", "")
+    commune_id = request.GET.get("commune", "")
+
+    today = timezone.localdate()
+    try:
+        debut = date_cls.fromisoformat(debut_str) if debut_str else today
+    except ValueError:
+        debut = today
+        debut_str = ""
+    try:
+        fin = date_cls.fromisoformat(fin_str) if fin_str else today
+    except ValueError:
+        fin = today
+        fin_str = ""
+
+    if commune_id.isdigit():
+        ecoles = ecoles.filter(commune_id=commune_id)
+    if ecole_id.isdigit():
+        ecoles = ecoles.filter(pk=ecole_id)
+
+    ventes_ids = request.GET.getlist("vente")
+    qs = LigneProduitVente.objects.filter(
+        vente__ecole__in=ecoles,
+        vente__horodatage__date__gte=debut,
+        vente__horodatage__date__lte=fin,
+    ).exclude(vente__statut=StatutVente.ANNULEE)
+
+    if ventes_ids:
+        try:
+            qs = qs.filter(vente_id__in=[int(v) for v in ventes_ids])
+        except ValueError:
+            pass
+
+    from django.db.models import Sum as DSum
+    lignes = (
+        qs
+        .values("produit__designation")
+        .annotate(total=DSum("quantite_due"))
+        .order_by("produit__designation")
+    )
+    lignes = list(lignes)
+    total_qte = sum(l["total"] for l in lignes)
+
+    retour_get = request.GET.urlencode()
+
+    return render(request, "ventes/rapport_kits_detail.html", {
+        "lignes": lignes,
+        "total_qte": total_qte,
+        "filtres": {"debut": debut_str, "fin": fin_str, "ecole": ecole_id, "commune": commune_id},
+        "retour_get": retour_get,
+        "perimetre": _perimetre_label(u),
     })
 
 
@@ -1867,6 +2121,7 @@ def finances_benefices(request):
     debut_str    = request.GET.get("debut", "")
     fin_str      = request.GET.get("fin", "")
     site_id_f    = request.GET.get("site", "")
+    produit_id_f = request.GET.get("produit", "")
 
     try:
         debut = date_type.fromisoformat(debut_str) if debut_str else today
@@ -1881,11 +2136,10 @@ def finances_benefices(request):
 
     tous_sites = u.sites_autorises()
 
-    # Listes pour les menus déroulants
     communes_dispo = []
     sites_dispo = tous_sites.order_by("nom")
+    produits_dispo = Produit.objects.filter(actif=True).order_by("categorie__nom", "code")
 
-    # Application des filtres
     if site_id_f:
         tous_sites = tous_sites.filter(pk=site_id_f)
 
@@ -1907,6 +2161,51 @@ def finances_benefices(request):
     _base_dep = dict(statut=StatutDepense.CONFIRME, date_depense__gte=debut, date_depense__lte=fin)
     dep_all = Depense.objects.filter(site__in=tous_sites, **_base_dep)
 
+    # ── Vue filtrée par article ───────────────────────────────────────────────
+    produit_selectionne = None
+    lignes_article = []
+    total_art_qte = total_art_rec = total_art_cout = total_art_ben = 0
+
+    if produit_id_f.isdigit():
+        from .models import LigneVente as LV
+        try:
+            produit_selectionne = Produit.objects.get(pk=produit_id_f)
+        except Produit.DoesNotExist:
+            produit_id_f = ""
+
+    if produit_selectionne:
+        montant_expr = ExpressionWrapper(
+            F("quantite") * F("prix_unitaire"),
+            output_field=DecimalField(max_digits=14, decimal_places=2),
+        )
+        ventes_art = (
+            LV.objects
+            .filter(vente__in=ventes_base, produit=produit_selectionne)
+            .annotate(montant_ligne=montant_expr)
+            .values("vente__ecole_id", "vente__ecole__nom")
+            .annotate(quantite=Sum("quantite"), recettes=Sum("montant_ligne"))
+            .order_by("vente__ecole__nom")
+        )
+        cout_unit = produit_selectionne.cout_achat
+        for r in ventes_art:
+            qte  = r["quantite"] or 0
+            rec  = r["recettes"] or 0
+            cout = qte * cout_unit
+            ben  = rec - cout
+            lignes_article.append({
+                "nom": r["vente__ecole__nom"],
+                "quantite": qte,
+                "recettes": rec,
+                "cout": cout,
+                "benefice": ben,
+                "marge": round(float(ben) / float(rec) * 100, 1) if rec else None,
+            })
+        total_art_qte  = sum(l["quantite"]  for l in lignes_article)
+        total_art_rec  = sum(l["recettes"]  for l in lignes_article)
+        total_art_cout = sum(l["cout"]      for l in lignes_article)
+        total_art_ben  = total_art_rec - total_art_cout
+
+    # ── Vue globale (inchangée) ───────────────────────────────────────────────
     recettes_map = {
         r["ecole_id"]: r["total"]
         for r in ventes_base.values("ecole_id").annotate(total=Sum("montant_total"))
@@ -1973,6 +2272,13 @@ def finances_benefices(request):
         "nb_sans_cout":     nb_sans_cout,
         "communes_dispo":   communes_dispo,
         "sites_dispo":      sites_dispo,
+        "produits_dispo":   produits_dispo,
+        "produit_selectionne": produit_selectionne,
+        "lignes_article":   lignes_article,
+        "total_art_qte":    total_art_qte,
+        "total_art_rec":    total_art_rec,
+        "total_art_cout":   total_art_cout,
+        "total_art_ben":    total_art_ben,
         "debut":            debut,
         "fin":              fin,
         "filtres": {
@@ -1980,6 +2286,7 @@ def finances_benefices(request):
             "fin":      str(fin),
             "commune":  "",
             "site":     site_id_f,
+            "produit":  produit_id_f,
         },
     })
 
@@ -2128,6 +2435,172 @@ def finances_benefices_export(request):
     response = HttpResponse(buf, content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     response["Content-Disposition"] = f'attachment; filename="{fname}"'
     return response
+
+
+@login_required
+def tresorerie_globale(request):
+    from datetime import date as date_type
+    from depenses.models import Depense, StatutDepense
+    from stock.models import Ajustement, AjustementLigne, SoldeStock, StatutAjustement
+    from transferts.models import Transfert, TransfertLigne, StatutTransfert
+    from .models import LigneProduitVente
+
+    u     = request.user
+    today = timezone.localdate()
+
+    debut_str = request.GET.get("debut", "")
+    fin_str   = request.GET.get("fin", "")
+    site_id_f = request.GET.get("site", "")
+
+    try:
+        debut = date_type.fromisoformat(debut_str) if debut_str else today
+    except ValueError:
+        debut = today
+        debut_str = ""
+    try:
+        fin = date_type.fromisoformat(fin_str) if fin_str else today
+    except ValueError:
+        fin = today
+        fin_str = ""
+    if fin < debut:
+        fin = debut
+
+    tous_sites = u.sites_autorises()
+    sites_dispo = tous_sites.order_by("nom")
+    if site_id_f:
+        tous_sites = tous_sites.filter(pk=site_id_f)
+    ecoles = tous_sites
+
+    # ── 1. Valeur stock à la fin de la période ────────────────────────────────
+    # On recompose depuis MouvementStock pour respecter le filtre de dates.
+    from stock.models import MouvementStock
+    valeur_stock_qs = (
+        MouvementStock.objects.filter(
+            site__in=ecoles,
+            horodatage__date__lte=fin,
+        )
+        .values("site_id")
+        .annotate(total=Sum(ExpressionWrapper(
+            F("quantite") * F("produit__cout_achat"),
+            output_field=DecimalField(max_digits=14, decimal_places=2)
+        )))
+    )
+    stock_map = {r["site_id"]: r["total"] or 0 for r in valeur_stock_qs}
+
+    # ── 2. Recettes ───────────────────────────────────────────────────────────
+    ventes_base = Vente.objects.filter(
+        ecole__in=ecoles,
+        horodatage__date__gte=debut,
+        horodatage__date__lte=fin,
+    ).exclude(statut=StatutVente.ANNULEE)
+    recettes_map = {
+        r["ecole_id"]: r["total"] or 0
+        for r in ventes_base.values("ecole_id").annotate(total=Sum("montant_total"))
+    }
+
+    # ── 3. COGS (coût des marchandises vendues) ───────────────────────────────
+    lignes_base = LigneProduitVente.objects.filter(
+        vente__ecole__in=ecoles,
+        vente__horodatage__date__gte=debut,
+        vente__horodatage__date__lte=fin,
+    ).exclude(vente__statut=StatutVente.ANNULEE)
+    cogs_map = {
+        r["vente__ecole_id"]: r["total"] or 0
+        for r in lignes_base.annotate(
+            ligne_cout=ExpressionWrapper(
+                F("quantite_servie") * F("produit__cout_achat"),
+                output_field=DecimalField(max_digits=14, decimal_places=2)
+            )
+        ).values("vente__ecole_id").annotate(total=Sum("ligne_cout"))
+    }
+
+    # ── 4. Ajustements validés ────────────────────────────────────────────────
+    adj_qs = AjustementLigne.objects.filter(
+        ajustement__site__in=ecoles,
+        ajustement__statut=StatutAjustement.VALIDE,
+        ajustement__valide_le__date__gte=debut,
+        ajustement__valide_le__date__lte=fin,
+    ).annotate(
+        valeur=ExpressionWrapper(
+            F("quantite") * F("produit__cout_achat"),
+            output_field=DecimalField(max_digits=14, decimal_places=2)
+        )
+    )
+    adj_pos_map = {
+        r["ajustement__site_id"]: r["total"] or 0
+        for r in adj_qs.filter(quantite__gt=0).values("ajustement__site_id").annotate(total=Sum("valeur"))
+    }
+    adj_neg_map = {
+        r["ajustement__site_id"]: abs(r["total"] or 0)
+        for r in adj_qs.filter(quantite__lt=0).values("ajustement__site_id").annotate(total=Sum("valeur"))
+    }
+
+    # ── 5. Dépenses ───────────────────────────────────────────────────────────
+    dep_map = {
+        r["site_id"]: r["total"] or 0
+        for r in Depense.objects.filter(
+            site__in=ecoles,
+            statut=StatutDepense.CONFIRME,
+            date_depense__gte=debut,
+            date_depense__lte=fin,
+        ).values("site_id").annotate(total=Sum("montant_confirme"))
+    }
+
+    # ── 6. Transferts (valeur au coût d'achat, transferts acceptés) ───────────
+    trf_base = dict(transfert__statut=StatutTransfert.ACCEPTE, transfert__traite_le__date__gte=debut, transfert__traite_le__date__lte=fin)
+    trf_val_expr = ExpressionWrapper(
+        F("quantite") * F("produit__cout_achat"),
+        output_field=DecimalField(max_digits=14, decimal_places=2)
+    )
+    # Valeur émise par site (sortie)
+    trf_emis_map = {
+        r["transfert__site_origine_id"]: r["total"] or 0
+        for r in TransfertLigne.objects.filter(transfert__site_origine__in=ecoles, **trf_base)
+        .annotate(valeur=trf_val_expr).values("transfert__site_origine_id").annotate(total=Sum("valeur"))
+    }
+    # Valeur reçue par site (entrée)
+    trf_recu_map = {
+        r["transfert__site_destination_id"]: r["total"] or 0
+        for r in TransfertLigne.objects.filter(transfert__site_destination__in=ecoles, **trf_base)
+        .annotate(valeur=trf_val_expr).values("transfert__site_destination_id").annotate(total=Sum("valeur"))
+    }
+
+    # ── Tableau par site ──────────────────────────────────────────────────────
+    lignes = []
+    for site in ecoles.order_by("nom"):
+        pk  = site.pk
+        rec = recettes_map.get(pk, 0)
+        cog = cogs_map.get(pk, 0)
+        adj_p = adj_pos_map.get(pk, 0)
+        adj_n = adj_neg_map.get(pk, 0)
+        dep   = dep_map.get(pk, 0)
+        t_emi = trf_emis_map.get(pk, 0)
+        t_rec = trf_recu_map.get(pk, 0)
+        stk   = stock_map.get(pk, 0)
+        ben   = rec - cog - adj_n - dep
+        lignes.append({
+            "nom": site.nom,
+            "stock": stk,
+            "recettes": rec,
+            "cogs": cog,
+            "adj_pos": adj_p,
+            "adj_neg": adj_n,
+            "depenses": dep,
+            "trf_emis": t_emi,
+            "trf_recu": t_rec,
+            "benefice": ben,
+        })
+
+    # ── Totaux ────────────────────────────────────────────────────────────────
+    def _s(key): return sum(l[key] for l in lignes)
+    tot = {k: _s(k) for k in ("stock","recettes","cogs","adj_pos","adj_neg","depenses","trf_emis","trf_recu","benefice")}
+
+    return render(request, "finances/tresorerie.html", {
+        "lignes": lignes,
+        "tot": tot,
+        "sites_dispo": sites_dispo,
+        "filtres": {"debut": str(debut), "fin": str(fin), "site": site_id_f},
+    })
 
 
 @login_required
