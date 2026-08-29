@@ -1,0 +1,164 @@
+{% extends "base.html" %}
+{% block titre %}Rapport journalier poussé — FAMIEN{% endblock %}
+{% block lieu %}Stock — Rapport journalier poussé{% endblock %}
+
+{% block contenu %}
+<div class="admin-entete">
+  <h1>Rapport journalier poussé</h1>
+</div>
+
+<form method="get" class="finance-filtres">
+  <div class="filtre-champ filtre-champ--date">
+    <label>Du</label>
+    <input type="date" name="debut" value="{{ filtres.debut }}" onchange="this.form.submit()">
+  </div>
+  <div class="filtre-champ filtre-champ--date">
+    <label>Au</label>
+    <input type="date" name="fin" value="{{ filtres.fin }}" onchange="this.form.submit()">
+  </div>
+
+  {% if sites_filtre %}
+  <div class="filtre-champ filtre-champ--large">
+    <label>Site</label>
+    <select name="site" onchange="this.form.submit()">
+      <option value="">Tous les sites</option>
+      {% for s in sites_filtre %}
+      <option value="{{ s.pk }}" {% if filtres.site == s.pk|stringformat:"s" %}selected{% endif %}>{{ s.nom }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% endif %}
+
+  <div class="filtre-champ filtre-champ--large">
+    <label>Produit</label>
+    <select name="produit" onchange="this.form.submit()">
+      <option value="">Tous les produits</option>
+      {% for p in produits_filtre %}
+      <option value="{{ p.pk }}" {% if filtres.produit == p.pk|stringformat:"s" %}selected{% endif %}>{{ p.designation }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <input type="hidden" name="tri"  value="{{ filtres.tri }}">
+  <input type="hidden" name="sens" value="{{ filtres.sens }}">
+
+  <a href="{% url 'rapport_journalier_pousse' %}" class="bouton-secondaire" title="Réinitialiser" style="align-self:flex-end;min-width:0;padding:8px 12px">↺</a>
+  <a href="{% url 'rapport_journalier_pousse_export' %}?debut={{ filtres.debut }}&fin={{ filtres.fin }}&site={{ filtres.site }}&produit={{ filtres.produit }}"
+     class="bouton-secondaire" title="Télécharger en Excel" style="align-self:flex-end;min-width:0;padding:8px 12px">⬇</a>
+</form>
+
+<div style="margin:8px 0 12px;font-size:.78rem;color:var(--encre-clair);display:flex;gap:16px;flex-wrap:wrap">
+  <span>Qté = quantité physique</span>
+  <span>Val = valeur en F CFA (coût achat, sauf Vendu et Avoir au prix de vente)</span>
+</div>
+
+{% if lignes %}
+<div style="overflow-x:auto;margin-top:8px">
+<table class="registre" style="min-width:1400px;font-size:.8rem">
+  <thead>
+    <tr>
+      {% if afficher_site %}<th rowspan="2">Site</th>{% endif %}
+      <th rowspan="2">Produit</th>
+      <th colspan="2" class="nombre" style="border-bottom:1px solid var(--reglure)">Initial</th>
+      <th colspan="2" class="nombre" style="border-bottom:1px solid var(--reglure)">Reçu</th>
+      <th colspan="2" class="nombre" style="border-bottom:1px solid var(--reglure)">Transféré</th>
+      {% if afficher_vendue %}<th colspan="2" class="nombre" style="border-bottom:1px solid var(--reglure)">Vendu</th>{% endif %}
+      {% if afficher_livree %}<th colspan="2" class="nombre" style="border-bottom:1px solid var(--reglure)">Livré</th>{% endif %}
+      <th colspan="2" class="nombre" style="border-bottom:1px solid var(--reglure)">Ajusté</th>
+      <th colspan="2" class="nombre" style="border-bottom:1px solid var(--reglure)">Don</th>
+      <th colspan="2" class="nombre" style="border-bottom:1px solid var(--reglure)">Err. saisie</th>
+      <th colspan="2" class="nombre" style="border-bottom:1px solid var(--reglure)">Final</th>
+      {% if afficher_reservee %}<th class="nombre" rowspan="2">Réservé</th>{% endif %}
+      <th colspan="2" class="nombre" style="border-bottom:1px solid var(--reglure);color:#f59e0b">Avoir dû</th>
+    </tr>
+    <tr style="font-size:.72rem;color:var(--encre-clair)">
+      <th class="nombre">Qté</th><th class="nombre">Val F</th>
+      <th class="nombre">Qté</th><th class="nombre">Val F</th>
+      <th class="nombre">Qté</th><th class="nombre">Val F</th>
+      {% if afficher_vendue %}<th class="nombre">Qté</th><th class="nombre">Val F</th>{% endif %}
+      {% if afficher_livree %}<th class="nombre">Qté</th><th class="nombre">Val F</th>{% endif %}
+      <th class="nombre">Qté</th><th class="nombre">Val F</th>
+      <th class="nombre">Qté</th><th class="nombre">Val F</th>
+      <th class="nombre">Qté</th><th class="nombre">Val F</th>
+      <th class="nombre">Qté</th><th class="nombre">Val F</th>
+      <th class="nombre" style="color:#f59e0b">Qté</th><th class="nombre" style="color:#f59e0b">Val F</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for l in lignes %}
+    <tr>
+      {% if afficher_site %}<td style="font-size:.78rem;color:var(--encre-clair)">{{ l.site.nom }}</td>{% endif %}
+      <td>{{ l.produit.designation }}</td>
+      <td class="nombre chiffre">{{ l.initiale }}</td>
+      <td class="nombre chiffre" style="color:var(--encre-clair)">{% if l.initiale_val %}{{ l.initiale_val|floatformat:0 }}{% else %}—{% endif %}</td>
+      <td class="nombre chiffre" style="color:{% if l.recue %}var(--valide){% else %}var(--encre-pale){% endif %}">{% if l.recue %}+{{ l.recue }}{% else %}—{% endif %}</td>
+      <td class="nombre chiffre" style="color:{% if l.recue_val %}var(--valide){% else %}var(--encre-pale){% endif %}">{% if l.recue_val %}+{{ l.recue_val|floatformat:0 }}{% else %}—{% endif %}</td>
+      <td class="nombre chiffre" style="color:{% if l.transfert > 0 %}var(--valide){% elif l.transfert < 0 %}var(--marge){% else %}var(--encre-pale){% endif %}">{% if l.transfert > 0 %}+{{ l.transfert }}{% elif l.transfert < 0 %}{{ l.transfert }}{% else %}—{% endif %}</td>
+      <td class="nombre chiffre" style="color:{% if l.transfert_val > 0 %}var(--valide){% elif l.transfert_val < 0 %}var(--marge){% else %}var(--encre-pale){% endif %}">{% if l.transfert_val > 0 %}+{{ l.transfert_val|floatformat:0 }}{% elif l.transfert_val < 0 %}{{ l.transfert_val|floatformat:0 }}{% else %}—{% endif %}</td>
+      {% if afficher_vendue %}
+      <td class="nombre chiffre" style="color:{% if l.vendue %}var(--marge){% else %}var(--encre-pale){% endif %}">{% if l.vendue %}-{{ l.vendue }}{% else %}—{% endif %}</td>
+      <td class="nombre chiffre" style="color:{% if l.vendue_val %}var(--marge){% else %}var(--encre-pale){% endif %}">{% if l.vendue_val %}-{{ l.vendue_val|floatformat:0 }}{% else %}—{% endif %}</td>
+      {% endif %}
+      {% if afficher_livree %}
+      <td class="nombre chiffre" style="color:{% if l.livree %}var(--marge){% else %}var(--encre-pale){% endif %}">{% if l.livree %}-{{ l.livree }}{% else %}—{% endif %}</td>
+      <td class="nombre chiffre" style="color:{% if l.livree_val %}var(--marge){% else %}var(--encre-pale){% endif %}">{% if l.livree_val %}-{{ l.livree_val|floatformat:0 }}{% else %}—{% endif %}</td>
+      {% endif %}
+      <td class="nombre chiffre" style="color:{% if l.ajuste > 0 %}var(--valide){% elif l.ajuste < 0 %}var(--marge){% else %}var(--encre-pale){% endif %}">{% if l.ajuste > 0 %}+{{ l.ajuste }}{% elif l.ajuste < 0 %}{{ l.ajuste }}{% else %}—{% endif %}</td>
+      <td class="nombre chiffre" style="color:{% if l.ajuste_val > 0 %}var(--valide){% elif l.ajuste_val < 0 %}var(--marge){% else %}var(--encre-pale){% endif %}">{% if l.ajuste_val > 0 %}+{{ l.ajuste_val|floatformat:0 }}{% elif l.ajuste_val < 0 %}{{ l.ajuste_val|floatformat:0 }}{% else %}—{% endif %}</td>
+      <td class="nombre chiffre" style="color:{% if l.don %}var(--marge){% else %}var(--encre-pale){% endif %}">{% if l.don %}-{{ l.don }}{% else %}—{% endif %}</td>
+      <td class="nombre chiffre" style="color:{% if l.don_val %}var(--marge){% else %}var(--encre-pale){% endif %}">{% if l.don_val %}-{{ l.don_val|floatformat:0 }}{% else %}—{% endif %}</td>
+      <td class="nombre chiffre" style="color:{% if l.surplus %}var(--marge){% else %}var(--encre-pale){% endif %}">{% if l.surplus %}-{{ l.surplus }}{% else %}—{% endif %}</td>
+      <td class="nombre chiffre" style="color:{% if l.surplus_val %}var(--marge){% else %}var(--encre-pale){% endif %}">{% if l.surplus_val %}-{{ l.surplus_val|floatformat:0 }}{% else %}—{% endif %}</td>
+      <td class="nombre chiffre" style="font-weight:700">{{ l.cloture }}</td>
+      <td class="nombre chiffre" style="font-weight:700;color:{% if l.cloture_val %}var(--encre){% else %}var(--encre-pale){% endif %}">{% if l.cloture_val %}{{ l.cloture_val|floatformat:0 }}{% else %}—{% endif %}</td>
+      {% if afficher_reservee %}
+      <td class="nombre chiffre" style="color:{% if l.reservee %}var(--or){% else %}var(--encre-pale){% endif %}">{% if l.reservee %}{{ l.reservee }}{% else %}—{% endif %}</td>
+      {% endif %}
+      <td class="nombre chiffre" style="color:{% if l.avoir_qte %}#f59e0b{% else %}var(--encre-pale){% endif %}">{% if l.avoir_qte %}{{ l.avoir_qte }}{% else %}—{% endif %}</td>
+      <td class="nombre chiffre" style="color:{% if l.avoir_val %}#f59e0b{% else %}var(--encre-pale){% endif %}">{% if l.avoir_val %}{{ l.avoir_val|floatformat:0 }}{% else %}—{% endif %}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+  <tfoot>
+    <tr style="border-top:2px solid var(--reglure);font-weight:700;background:var(--papier)">
+      {% if afficher_site %}<td>—</td>{% endif %}
+      <td>Total</td>
+      <td class="nombre chiffre">{{ totaux.initiale }}</td>
+      <td class="nombre chiffre" style="color:var(--encre-clair)">{% if totaux.initiale_val %}{{ totaux.initiale_val|floatformat:0 }}{% else %}—{% endif %}</td>
+      <td class="nombre chiffre" style="color:{% if totaux.recue %}var(--valide){% else %}var(--encre-pale){% endif %}">{% if totaux.recue %}+{{ totaux.recue }}{% else %}—{% endif %}</td>
+      <td class="nombre chiffre" style="color:{% if totaux.recue_val %}var(--valide){% else %}var(--encre-pale){% endif %}">{% if totaux.recue_val %}+{{ totaux.recue_val|floatformat:0 }}{% else %}—{% endif %}</td>
+      <td class="nombre chiffre" style="color:{% if totaux.transfert > 0 %}var(--valide){% elif totaux.transfert < 0 %}var(--marge){% else %}var(--encre-pale){% endif %}">{% if totaux.transfert > 0 %}+{{ totaux.transfert }}{% elif totaux.transfert < 0 %}{{ totaux.transfert }}{% else %}—{% endif %}</td>
+      <td class="nombre chiffre" style="color:{% if totaux.transfert_val > 0 %}var(--valide){% elif totaux.transfert_val < 0 %}var(--marge){% else %}var(--encre-pale){% endif %}">{% if totaux.transfert_val > 0 %}+{{ totaux.transfert_val|floatformat:0 }}{% elif totaux.transfert_val < 0 %}{{ totaux.transfert_val|floatformat:0 }}{% else %}—{% endif %}</td>
+      {% if afficher_vendue %}
+      <td class="nombre chiffre" style="color:{% if totaux.vendue %}var(--marge){% else %}var(--encre-pale){% endif %}">{% if totaux.vendue %}-{{ totaux.vendue }}{% else %}—{% endif %}</td>
+      <td class="nombre chiffre" style="color:{% if totaux.vendue_val %}var(--marge){% else %}var(--encre-pale){% endif %}">{% if totaux.vendue_val %}-{{ totaux.vendue_val|floatformat:0 }}{% else %}—{% endif %}</td>
+      {% endif %}
+      {% if afficher_livree %}
+      <td class="nombre chiffre" style="color:{% if totaux.livree %}var(--marge){% else %}var(--encre-pale){% endif %}">{% if totaux.livree %}-{{ totaux.livree }}{% else %}—{% endif %}</td>
+      <td class="nombre chiffre" style="color:{% if totaux.livree_val %}var(--marge){% else %}var(--encre-pale){% endif %}">{% if totaux.livree_val %}-{{ totaux.livree_val|floatformat:0 }}{% else %}—{% endif %}</td>
+      {% endif %}
+      <td class="nombre chiffre" style="color:{% if totaux.ajuste > 0 %}var(--valide){% elif totaux.ajuste < 0 %}var(--marge){% else %}var(--encre-pale){% endif %}">{% if totaux.ajuste > 0 %}+{{ totaux.ajuste }}{% elif totaux.ajuste < 0 %}{{ totaux.ajuste }}{% else %}—{% endif %}</td>
+      <td class="nombre chiffre" style="color:{% if totaux.ajuste_val > 0 %}var(--valide){% elif totaux.ajuste_val < 0 %}var(--marge){% else %}var(--encre-pale){% endif %}">{% if totaux.ajuste_val > 0 %}+{{ totaux.ajuste_val|floatformat:0 }}{% elif totaux.ajuste_val < 0 %}{{ totaux.ajuste_val|floatformat:0 }}{% else %}—{% endif %}</td>
+      <td class="nombre chiffre" style="color:{% if totaux.don %}var(--marge){% else %}var(--encre-pale){% endif %}">{% if totaux.don %}-{{ totaux.don }}{% else %}—{% endif %}</td>
+      <td class="nombre chiffre" style="color:{% if totaux.don_val %}var(--marge){% else %}var(--encre-pale){% endif %}">{% if totaux.don_val %}-{{ totaux.don_val|floatformat:0 }}{% else %}—{% endif %}</td>
+      <td class="nombre chiffre" style="color:{% if totaux.surplus %}var(--marge){% else %}var(--encre-pale){% endif %}">{% if totaux.surplus %}-{{ totaux.surplus }}{% else %}—{% endif %}</td>
+      <td class="nombre chiffre" style="color:{% if totaux.surplus_val %}var(--marge){% else %}var(--encre-pale){% endif %}">{% if totaux.surplus_val %}-{{ totaux.surplus_val|floatformat:0 }}{% else %}—{% endif %}</td>
+      <td class="nombre chiffre">{{ totaux.cloture }}</td>
+      <td class="nombre chiffre" style="color:{% if totaux.cloture_val %}var(--encre){% else %}var(--encre-pale){% endif %}">{% if totaux.cloture_val %}{{ totaux.cloture_val|floatformat:0 }}{% else %}—{% endif %}</td>
+      {% if afficher_reservee %}
+      <td class="nombre chiffre" style="color:{% if totaux.reservee %}var(--or){% else %}var(--encre-pale){% endif %}">{% if totaux.reservee %}{{ totaux.reservee }}{% else %}—{% endif %}</td>
+      {% endif %}
+      <td class="nombre chiffre" style="color:{% if totaux.avoir_qte %}#f59e0b{% else %}var(--encre-pale){% endif %}">{% if totaux.avoir_qte %}{{ totaux.avoir_qte }}{% else %}—{% endif %}</td>
+      <td class="nombre chiffre" style="color:{% if totaux.avoir_val %}#f59e0b{% else %}var(--encre-pale){% endif %}">{% if totaux.avoir_val %}{{ totaux.avoir_val|floatformat:0 }}{% else %}—{% endif %}</td>
+    </tr>
+  </tfoot>
+</table>
+</div>
+{% else %}
+<p class="vide-liste">Aucune activité enregistrée sur cette période.</p>
+{% endif %}
+
+<div class="pied">
+  <a href="{% url 'rapport_journalier' %}" class="bouton-secondaire" style="min-width:180px;text-align:center">← Rapport journalier</a>
+</div>
+{% endblock %}

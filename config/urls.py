@@ -100,6 +100,8 @@ urlpatterns = [
     path("stock/ruptures/export/", export_ruptures_excel, name="export_ruptures"),
     path("stock/rapport-journalier/", stock_views.rapport_journalier, name="rapport_journalier"),
     path("stock/rapport-journalier/export/", stock_views.rapport_journalier_export, name="rapport_journalier_export"),
+    path("stock/rapport-journalier-pousse/", stock_views.rapport_journalier_pousse, name="rapport_journalier_pousse"),
+    path("stock/rapport-journalier-pousse/export/", stock_views.rapport_journalier_pousse_export, name="rapport_journalier_pousse_export"),
 
     # ─── Transferts (M11) ────────────────────────────────────────────────────
     path("transferts/", include("transferts.urls")),

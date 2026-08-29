@@ -603,3 +603,333 @@ def rapport_journalier_export(request):
     response = HttpResponse(buf, content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     response["Content-Disposition"] = f'attachment; filename="{nom}"'
     return response
+
+
+def _vendue_val_par_site_produit(site_ids, debut, fin, produit_id=None):
+    """Valeur des ventes par (site_id, produit_id) avec répartition proportionnelle des kits."""
+    from decimal import Decimal
+    from django.db.models import ExpressionWrapper, DecimalField, Sum, F
+    from ventes.models import LigneVente, StatutVente, Vente
+
+    _ZERO = Decimal(0)
+    _vente_base = dict(
+        vente__ecole_id__in=site_ids,
+        vente__horodatage__date__gte=debut,
+        vente__horodatage__date__lte=fin,
+    )
+    vente_ids = list(
+        LigneVente.objects.filter(**_vente_base)
+        .exclude(vente__statut=StatutVente.ANNULEE)
+        .values_list("vente_id", flat=True).distinct()
+    )
+    if not vente_ids:
+        return {}
+
+    _val_expr = ExpressionWrapper(F("prix_unitaire") * F("quantite"), output_field=DecimalField(max_digits=14, decimal_places=2))
+    gross_by_vente = {r["vente_id"]: r["brut"] or _ZERO for r in LigneVente.objects.filter(vente_id__in=vente_ids).annotate(val=_val_expr).values("vente_id").annotate(brut=Sum("val"))}
+    remise_by_vente = {v["id"]: v["remise"] or _ZERO for v in Vente.objects.filter(id__in=vente_ids).values("id", "remise")}
+
+    def _facteur(vente_id):
+        remise = remise_by_vente.get(vente_id, _ZERO)
+        brut   = gross_by_vente.get(vente_id, _ZERO)
+        if remise and brut:
+            return (brut - remise) / brut
+        return Decimal(1)
+
+    result = {}
+    kit_qs = (
+        LigneVente.objects.filter(kit__isnull=False, **_vente_base)
+        .exclude(vente__statut=StatutVente.ANNULEE)
+        .select_related("vente", "kit")
+        .prefetch_related("kit__lignes__produit")
+    )
+    if produit_id:
+        kit_qs = kit_qs.filter(kit__lignes__produit_id=produit_id).distinct()
+    for lv in kit_qs:
+        composants = list(lv.kit.lignes.all())
+        cout_total = sum(kl.produit.cout_achat * kl.quantite for kl in composants)
+        if not cout_total:
+            continue
+        revenu  = lv.prix_unitaire * lv.quantite * _facteur(lv.vente_id)
+        site_id = lv.vente.ecole_id
+        for kl in composants:
+            if produit_id and kl.produit_id != int(produit_id):
+                continue
+            part = (kl.produit.cout_achat * kl.quantite) / cout_total
+            key  = (site_id, kl.produit_id)
+            result[key] = result.get(key, _ZERO) + revenu * part
+
+    prod_qs = (
+        LigneVente.objects.filter(produit__isnull=False, **_vente_base)
+        .exclude(vente__statut=StatutVente.ANNULEE)
+        .select_related("vente")
+    )
+    if produit_id:
+        prod_qs = prod_qs.filter(produit_id=produit_id)
+    for lv in prod_qs:
+        val = lv.prix_unitaire * lv.quantite * _facteur(lv.vente_id)
+        key = (lv.vente.ecole_id, lv.produit_id)
+        result[key] = result.get(key, _ZERO) + val
+    return result
+
+
+@login_required
+def rapport_journalier_pousse(request):
+    """Rapport journalier enrichi avec colonnes monétaires — DG uniquement."""
+    from datetime import date as date_type
+    from decimal import Decimal
+    from django.db.models import DecimalField, ExpressionWrapper
+
+    u = request.user
+    if not (u.is_superuser or u.profil == Profil.DG):
+        messages.error(request, "Accès réservé à la Direction.")
+        return redirect("rapport_journalier")
+
+    today = timezone.localdate()
+    debut_str  = request.GET.get("debut", "")
+    fin_str    = request.GET.get("fin", "")
+    site_id    = request.GET.get("site", "")
+    produit_id = request.GET.get("produit", "")
+    tri        = request.GET.get("tri", "produit")
+    sens       = request.GET.get("sens", "asc")
+
+    try:
+        debut = date_type.fromisoformat(debut_str) if debut_str else today
+    except ValueError:
+        debut = today
+    try:
+        fin = date_type.fromisoformat(fin_str) if fin_str else today
+    except ValueError:
+        fin = today
+    if fin < debut:
+        fin = debut
+
+    lignes, meta = _construire_rapport(u, site_id, "", debut, fin, produit_id)
+
+    sites_qs = meta["sites_base"]
+    if site_id:
+        sites_qs = sites_qs.filter(pk=site_id)
+    site_ids = list(sites_qs.values_list("pk", flat=True))
+
+    from ventes.models import LigneProduitVente, StatutVente
+
+    vendue_val_map = _vendue_val_par_site_produit(site_ids, debut, fin, produit_id or None)
+
+    _prix_avoir_expr = ExpressionWrapper(
+        (F("quantite_due") - F("quantite_servie")) * F("prix_unitaire_avoir"),
+        output_field=DecimalField(max_digits=14, decimal_places=2),
+    )
+    avoir_map = {
+        (r["vente__ecole_id"], r["produit_id"]): {"qte": r["qte"] or 0, "val": r["val"] or Decimal(0)}
+        for r in LigneProduitVente.objects.filter(
+            vente__ecole_id__in=site_ids,
+            vente__horodatage__date__gte=debut,
+            vente__horodatage__date__lte=fin,
+            avoir_annule=False,
+            quantite_servie__lt=F("quantite_due"),
+        ).values("vente__ecole_id", "produit_id").annotate(
+            qte=Sum(F("quantite_due") - F("quantite_servie")),
+            val=Sum(_prix_avoir_expr),
+        )
+    }
+
+    for l in lignes:
+        pk_s, pk_p = l["site"].pk, l["produit"].pk
+        cout = l["produit"].cout_achat or Decimal(0)
+        l["initiale_val"]  = l["initiale"] * cout
+        l["recue_val"]     = l["recue"] * cout
+        l["transfert_val"] = l["transfert"] * cout
+        l["vendue_val"]    = vendue_val_map.get((pk_s, pk_p), Decimal(0))
+        l["livree_val"]    = l["livree"] * cout
+        l["ajuste_val"]    = l["ajuste"] * cout
+        l["don_val"]       = l["don"] * cout
+        l["surplus_val"]   = l["surplus"] * cout
+        l["cloture_val"]   = l["cloture"] * cout
+        avoir = avoir_map.get((pk_s, pk_p), {"qte": 0, "val": Decimal(0)})
+        l["avoir_qte"] = avoir["qte"]
+        l["avoir_val"] = avoir["val"]
+
+    CHAMPS = {
+        "produit":   lambda r: r["produit"].designation,
+        "site":      lambda r: r["site"].nom,
+        "initiale":  lambda r: r["initiale"],
+        "recue":     lambda r: r["recue"],
+        "transfert": lambda r: r["transfert"],
+        "vendue":    lambda r: r["vendue"],
+        "livree":    lambda r: r["livree"],
+        "ajuste":    lambda r: r["ajuste"],
+        "don":       lambda r: r["don"],
+        "surplus":   lambda r: r["surplus"],
+        "cloture":   lambda r: r["cloture"],
+        "reservee":  lambda r: r["reservee"],
+    }
+    if tri in CHAMPS:
+        lignes.sort(key=CHAMPS[tri], reverse=(sens == "desc"))
+
+    _cols_num = ["initiale", "recue", "transfert", "vendue", "livree", "ajuste", "don", "surplus", "cloture", "reservee", "avoir_qte"]
+    _cols_val = ["initiale_val", "recue_val", "transfert_val", "vendue_val", "livree_val", "ajuste_val", "don_val", "surplus_val", "cloture_val", "avoir_val"]
+    totaux = {c: sum(l[c] for l in lignes) for c in _cols_num + _cols_val}
+
+    sites_filtre    = meta["sites_base"].order_by("nom")
+    produits_filtre = Produit.objects.filter(actif=True).order_by("designation")
+
+    filtres = {
+        "debut":   str(debut),
+        "fin":     str(fin),
+        "site":    site_id,
+        "produit": produit_id,
+        "tri":     tri,
+        "sens":    sens,
+    }
+
+    return render(request, "stock/rapport_journalier_pousse.html", {
+        "lignes":          lignes,
+        "totaux":          totaux,
+        "debut":           debut,
+        "fin":             fin,
+        "filtres":         filtres,
+        "sites_filtre":    sites_filtre,
+        "produits_filtre": produits_filtre,
+        **meta,
+    })
+
+
+@login_required
+def rapport_journalier_pousse_export(request):
+    import io
+    import openpyxl
+    from datetime import date as date_type
+    from decimal import Decimal
+    from django.db.models import DecimalField, ExpressionWrapper
+    from django.http import HttpResponse
+    from openpyxl.styles import Alignment, Font, PatternFill
+    from openpyxl.utils import get_column_letter
+    from ventes.models import LigneProduitVente, StatutVente
+
+    u = request.user
+    if not (u.is_superuser or u.profil == Profil.DG):
+        return redirect("rapport_journalier")
+
+    today = timezone.localdate()
+    debut_str  = request.GET.get("debut", "")
+    fin_str    = request.GET.get("fin", "")
+    site_id    = request.GET.get("site", "")
+    produit_id = request.GET.get("produit", "")
+
+    try:
+        debut = date_type.fromisoformat(debut_str) if debut_str else today
+    except ValueError:
+        debut = today
+    try:
+        fin = date_type.fromisoformat(fin_str) if fin_str else today
+    except ValueError:
+        fin = today
+    if fin < debut:
+        fin = debut
+
+    lignes, meta = _construire_rapport(u, site_id, "", debut, fin, produit_id)
+    lignes.sort(key=lambda r: (r["site"].nom, r["produit"].designation))
+
+    sites_qs = meta["sites_base"]
+    if site_id:
+        sites_qs = sites_qs.filter(pk=site_id)
+    site_ids = list(sites_qs.values_list("pk", flat=True))
+
+    vendue_val_map = _vendue_val_par_site_produit(site_ids, debut, fin, produit_id or None)
+    _prix_avoir_expr = ExpressionWrapper(
+        (F("quantite_due") - F("quantite_servie")) * F("prix_unitaire_avoir"),
+        output_field=DecimalField(max_digits=14, decimal_places=2),
+    )
+    avoir_map = {
+        (r["vente__ecole_id"], r["produit_id"]): {"qte": r["qte"] or 0, "val": r["val"] or Decimal(0)}
+        for r in LigneProduitVente.objects.filter(
+            vente__ecole_id__in=site_ids,
+            vente__horodatage__date__gte=debut,
+            vente__horodatage__date__lte=fin,
+            avoir_annule=False, quantite_servie__lt=F("quantite_due"),
+        ).values("vente__ecole_id", "produit_id").annotate(
+            qte=Sum(F("quantite_due") - F("quantite_servie")), val=Sum(_prix_avoir_expr)
+        )
+    }
+
+    for l in lignes:
+        pk_s, pk_p = l["site"].pk, l["produit"].pk
+        cout = l["produit"].cout_achat or Decimal(0)
+        l["initiale_val"]  = l["initiale"] * cout
+        l["recue_val"]     = l["recue"] * cout
+        l["transfert_val"] = l["transfert"] * cout
+        l["vendue_val"]    = vendue_val_map.get((pk_s, pk_p), Decimal(0))
+        l["livree_val"]    = l["livree"] * cout
+        l["ajuste_val"]    = l["ajuste"] * cout
+        l["don_val"]       = l["don"] * cout
+        l["surplus_val"]   = l["surplus"] * cout
+        l["cloture_val"]   = l["cloture"] * cout
+        avoir = avoir_map.get((pk_s, pk_p), {"qte": 0, "val": Decimal(0)})
+        l["avoir_qte"] = avoir["qte"]
+        l["avoir_val"] = avoir["val"]
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Rapport poussé"
+
+    hdr_fill = PatternFill("solid", fgColor="16233F")
+    hdr_font = Font(bold=True, color="FFFFFF", size=10)
+    sub_fill = PatternFill("solid", fgColor="2D3F6E")
+    sub_font = Font(bold=True, color="DDDDDD", size=9)
+
+    col_groups = ["Initial", "Reçu", "Transféré"]
+    if meta["afficher_vendue"]: col_groups.append("Vendu")
+    if meta["afficher_livree"]: col_groups.append("Livré")
+    col_groups += ["Ajusté", "Don", "Err. saisie", "Final"]
+    if meta["afficher_reservee"]: col_groups.append("Réservé")
+    col_groups.append("Avoir dû")
+
+    header_row1 = (["Site"] if meta["afficher_site"] else []) + ["Produit"]
+    header_row2 = ([""] if meta["afficher_site"] else []) + [""]
+    for g in col_groups:
+        header_row1 += [g, ""]
+        header_row2 += ["Qté", "Val F"]
+
+    for col, val in enumerate(header_row1, 1):
+        c = ws.cell(row=1, column=col, value=val)
+        c.font = hdr_font; c.fill = hdr_fill
+        c.alignment = Alignment(horizontal="center", vertical="center")
+    for col, val in enumerate(header_row2, 1):
+        c = ws.cell(row=2, column=col, value=val)
+        c.font = sub_font; c.fill = sub_fill
+        c.alignment = Alignment(horizontal="center", vertical="center")
+
+    _data_keys = ["initiale", "recue", "transfert"]
+    if meta["afficher_vendue"]: _data_keys.append("vendue")
+    if meta["afficher_livree"]: _data_keys.append("livree")
+    _data_keys += ["ajuste", "don", "surplus", "cloture"]
+    if meta["afficher_reservee"]: _data_keys.append("reservee")
+    _data_keys.append("avoir_qte")
+
+    _val_keys = ["initiale_val", "recue_val", "transfert_val"]
+    if meta["afficher_vendue"]: _val_keys.append("vendue_val")
+    if meta["afficher_livree"]: _val_keys.append("livree_val")
+    _val_keys += ["ajuste_val", "don_val", "surplus_val", "cloture_val"]
+    if meta["afficher_reservee"]: _val_keys.append(None)
+    _val_keys.append("avoir_val")
+
+    for row_idx, l in enumerate(lignes, 3):
+        col = 1
+        if meta["afficher_site"]:
+            ws.cell(row=row_idx, column=col, value=l["site"].nom); col += 1
+        ws.cell(row=row_idx, column=col, value=l["produit"].designation); col += 1
+        for dk, vk in zip(_data_keys, _val_keys):
+            ws.cell(row=row_idx, column=col, value=l[dk] or None); col += 1
+            ws.cell(row=row_idx, column=col, value=float(l[vk]) if vk and l[vk] else None); col += 1
+
+    for col in ws.columns:
+        ws.column_dimensions[get_column_letter(col[0].column)].width = min(
+            max(len(str(c.value or "")) for c in col) + 4, 50
+        )
+
+    nom = f"rapport_pousse_{debut}_{fin}.xlsx"
+    buf = io.BytesIO()
+    wb.save(buf); buf.seek(0)
+    response = HttpResponse(buf, content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    response["Content-Disposition"] = f'attachment; filename="{nom}"'
+    return response
