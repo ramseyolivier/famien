@@ -7,11 +7,17 @@
   <h1>Finances</h1>
 </div>
 
-<div class="hub-stats">
+<div class="hub-stats" style="flex-wrap:wrap;gap:12px">
   <div class="indicateur valide">
     <div class="valeur chiffre">{{ entrees_total|floatformat:0 }}</div>
-    <div class="libelle">Entrées totales</div>
+    <div class="libelle">Entrées encaissées</div>
   </div>
+  {% if credit_restant %}
+  <div class="indicateur" style="border-top-color:#e07020">
+    <div class="valeur chiffre" style="color:#e07020">{{ credit_restant|floatformat:0 }}</div>
+    <div class="libelle">Crédit restant à encaisser</div>
+  </div>
+  {% endif %}
   <div class="indicateur">
     <div class="valeur chiffre">{{ sorties_total|floatformat:0 }}</div>
     <div class="libelle">Sorties totales</div>

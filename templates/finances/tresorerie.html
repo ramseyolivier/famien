@@ -55,8 +55,21 @@
     <div class="libelle">Valeur des ventes</div>
   </div>
 
+  <div class="indicateur" style="border-top-color:#f59e0b">
+    <div class="valeur chiffre" style="color:#f59e0b">{{ tot.avoirs|floatformat:0 }}</div>
+    {% if nb.avoirs %}<div style="font-size:.95rem;font-weight:700;margin:-2px 0 3px;color:#f59e0b">({{ nb.avoirs }})</div>{% endif %}
+    <div class="libelle">Avoirs en attente</div>
+  </div>
+
+  <div class="indicateur" style="border-top-color:#e07020">
+    <div class="valeur chiffre" style="color:#e07020">{{ tot.credit_restant|floatformat:0 }}</div>
+    {% if nb.credit_restant %}<div style="font-size:.95rem;font-weight:700;margin:-2px 0 3px;color:#e07020">({{ nb.credit_restant }} vente{{ nb.credit_restant|pluralize }})</div>{% endif %}
+    <div class="libelle">Crédit restant à encaisser</div>
+  </div>
+
   <div class="indicateur" style="border-top-color:#1a6fc4">
     <div class="valeur chiffre" style="color:#1a6fc4">{{ tot.cogs|floatformat:0 }}</div>
+    {% if nb.recettes %}<div style="font-size:.95rem;font-weight:700;margin:-2px 0 3px;color:#1a6fc4">({{ nb.recettes }})</div>{% endif %}
     <div class="libelle">Coût marchandises vendues</div>
   </div>
 
@@ -72,6 +85,7 @@
     <div class="libelle">Ajustements négatifs</div>
   </div>
 
+  {% if filtres.site %}
   <div class="indicateur" style="border-top-color:#9333ea">
     <div class="valeur chiffre" style="color:#9333ea">{{ tot.trf_emis|floatformat:0 }}</div>
     {% if nb.trf_emis %}<div style="font-size:.95rem;font-weight:700;margin:-2px 0 3px;color:#9333ea">({{ nb.trf_emis }})</div>{% endif %}
@@ -83,6 +97,7 @@
     {% if nb.trf_recu %}<div style="font-size:.95rem;font-weight:700;margin:-2px 0 3px;color:#9333ea">({{ nb.trf_recu }})</div>{% endif %}
     <div class="libelle">Transferts reçus</div>
   </div>
+  {% endif %}
 
   <div class="indicateur alerte">
     <div class="valeur chiffre">{{ tot.dons|floatformat:0 }}</div>
@@ -104,7 +119,7 @@
 
 </div>
 
-<!-- Bénéfice net -->
+<!-- Résultat net -->
 <div style="margin-top:12px;padding:14px 18px;background:var(--papier);border:1.5px solid var(--reglure);border-radius:var(--rayon);display:flex;align-items:center;gap:20px;flex-wrap:wrap">
   <span style="font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--encre-clair);flex:1;min-width:120px">Résultat net</span>
   <span style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
@@ -132,10 +147,11 @@
       <th class="nombre">COGS</th>
       <th class="nombre">Adj. +</th>
       <th class="nombre">Adj. −</th>
-      <th class="nombre">Trf. émis</th>
-      <th class="nombre">Trf. reçus</th>
+      {% if filtres.site %}<th class="nombre">Trf. émis</th><th class="nombre">Trf. reçus</th>{% endif %}
       <th class="nombre">Dons</th>
       <th class="nombre">Dépenses</th>
+      <th class="nombre">Avoirs</th>
+      <th class="nombre">Crédit restant</th>
       <th class="nombre">Stock actuel</th>
       <th class="nombre">Bénéfice net</th>
       <th class="nombre">Marge</th>
@@ -160,17 +176,25 @@
       <td class="nombre chiffre" style="color:{% if l.adj_neg %}var(--marge){% else %}var(--encre-pale){% endif %}">
         {% if l.adj_neg %}−{{ l.adj_neg|floatformat:0 }}{% else %}—{% endif %}
       </td>
+      {% if filtres.site %}
       <td class="nombre chiffre" style="color:{% if l.trf_emis %}#9333ea{% else %}var(--encre-pale){% endif %}">
         {% if l.trf_emis %}{{ l.trf_emis|floatformat:0 }}{% else %}—{% endif %}
       </td>
       <td class="nombre chiffre" style="color:{% if l.trf_recu %}#9333ea{% else %}var(--encre-pale){% endif %}">
         {% if l.trf_recu %}{{ l.trf_recu|floatformat:0 }}{% else %}—{% endif %}
       </td>
+      {% endif %}
       <td class="nombre chiffre" style="color:{% if l.dons %}var(--marge){% else %}var(--encre-pale){% endif %}">
         {% if l.dons %}{{ l.dons|floatformat:0 }}{% else %}—{% endif %}
       </td>
       <td class="nombre chiffre" style="color:{% if l.depenses %}var(--marge){% else %}var(--encre-pale){% endif %}">
         {% if l.depenses %}{{ l.depenses|floatformat:0 }}{% else %}—{% endif %}
+      </td>
+      <td class="nombre chiffre" style="color:{% if l.avoirs %}#f59e0b{% else %}var(--encre-pale){% endif %}">
+        {% if l.avoirs %}{{ l.avoirs|floatformat:0 }}{% else %}—{% endif %}
+      </td>
+      <td class="nombre chiffre" style="color:{% if l.credit_restant %}#e07020{% else %}var(--encre-pale){% endif %}">
+        {% if l.credit_restant %}{{ l.credit_restant|floatformat:0 }}{% else %}—{% endif %}
       </td>
       <td class="nombre chiffre" style="color:{% if l.stock %}#1a6fc4{% else %}var(--encre-pale){% endif %}">
         {% if l.stock %}{{ l.stock|floatformat:0 }}{% else %}—{% endif %}
@@ -192,10 +216,11 @@
       <td class="nombre chiffre" style="font-weight:700;color:#1a6fc4">{{ tot.cogs|floatformat:0 }}</td>
       <td class="nombre chiffre" style="font-weight:700;color:var(--valide)">+{{ tot.adj_pos|floatformat:0 }}</td>
       <td class="nombre chiffre" style="font-weight:700;color:var(--marge)">−{{ tot.adj_neg|floatformat:0 }}</td>
-      <td class="nombre chiffre" style="font-weight:700;color:#9333ea">{{ tot.trf_emis|floatformat:0 }}</td>
-      <td class="nombre chiffre" style="font-weight:700;color:#9333ea">{{ tot.trf_recu|floatformat:0 }}</td>
+      {% if filtres.site %}<td class="nombre chiffre" style="font-weight:700;color:#9333ea">{{ tot.trf_emis|floatformat:0 }}</td><td class="nombre chiffre" style="font-weight:700;color:#9333ea">{{ tot.trf_recu|floatformat:0 }}</td>{% endif %}
       <td class="nombre chiffre" style="font-weight:700;color:var(--marge)">{{ tot.dons|floatformat:0 }}</td>
       <td class="nombre chiffre" style="font-weight:700;color:var(--marge)">{{ tot.depenses|floatformat:0 }}</td>
+      <td class="nombre chiffre" style="font-weight:700;color:#f59e0b">{{ tot.avoirs|floatformat:0 }}</td>
+      <td class="nombre chiffre" style="font-weight:700;color:#e07020">{{ tot.credit_restant|floatformat:0 }}</td>
       <td class="nombre chiffre" style="font-weight:700;color:#1a6fc4">{{ tot.stock|floatformat:0 }}</td>
       <td class="nombre chiffre" style="font-weight:800;color:{% if tot.benefice < 0 %}#e00000{% elif tot.benefice > 0 %}var(--valide){% else %}var(--encre-pale){% endif %}">{{ tot.benefice|floatformat:0 }}</td>
       <td class="nombre chiffre" style="font-weight:700;color:var(--encre-clair)">{% if tot.marge is not None %}{{ tot.marge }}%{% else %}—{% endif %}</td>

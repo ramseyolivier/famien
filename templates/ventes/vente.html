@@ -71,10 +71,12 @@
   <label for="remise" id="label-remise" class="bouton-secondaire" style="cursor:pointer;display:inline-flex;align-items:center;gap:8px;user-select:none;background:#fff;color:#6b7280;border-color:#d1d5db">
     <span id="remise-icone">☐</span> Réduction personnel administratif ({{ ecole.remise_convention|floatformat:0 }} %)
   </label>
+  {% if peut_credit %}
   <input type="checkbox" id="credit-cb" style="display:none">
   <label for="credit-cb" id="label-credit" class="bouton-secondaire" style="cursor:pointer;display:inline-flex;align-items:center;gap:8px;user-select:none;background:#fff;color:#6b7280;border-color:#d1d5db">
     <span id="credit-icone">☐</span> Vente à crédit (paiement différé)
   </label>
+  {% endif %}
 </div>
 
 <!-- Bloc client : affiché si crédit coché OU si avoir détecté par rafraichir() -->
@@ -115,7 +117,8 @@ document.getElementById("remise").addEventListener("change", function() {
     label.style.borderColor = "";
   }
 });
-document.getElementById("credit-cb").addEventListener("change", function() {
+var _creditCb = document.getElementById("credit-cb");
+if (_creditCb) _creditCb.addEventListener("change", function() {
   var icone = document.getElementById("credit-icone");
   var label = document.getElementById("label-credit");
   var recu  = document.getElementById("montant-donne");
@@ -842,6 +845,8 @@ document.getElementById("credit-cb").addEventListener("change", function() {
     elProformaDate.value = new Date().toISOString().slice(0, 10);
     elFormProforma.submit();
   });
+
+  window.rafraichir = rafraichir;
 }());
 </script>
 

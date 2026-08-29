@@ -19,12 +19,18 @@
 {% endif %}
 
 <!-- Indicateurs -->
-<div class="indicateurs" style="margin-bottom:28px">
+<div class="indicateurs" style="margin-bottom:28px;flex-wrap:wrap;gap:12px">
   {% if est_chef %}
   <div class="indicateur valide">
     <div class="valeur chiffre">{{ collecte_total|floatformat:0 }}</div>
     <div class="libelle">F encaissés (ventes)</div>
   </div>
+  {% if credit_restant_ventes %}
+  <div class="indicateur" style="border-top-color:#e07020">
+    <div class="valeur chiffre" style="color:#e07020">{{ credit_restant_ventes|floatformat:0 }}</div>
+    <div class="libelle">Crédit restant à encaisser</div>
+  </div>
+  {% endif %}
   <div class="indicateur alerte">
     <div class="valeur chiffre">{{ depenses_total|floatformat:0 }}</div>
     <div class="libelle">F dépensés</div>
@@ -59,6 +65,12 @@
     <div class="valeur chiffre">{{ collecte_dg|floatformat:0 }}</div>
     <div class="libelle">F encaissés (ventes)</div>
   </div>
+  {% if credit_restant_ventes %}
+  <div class="indicateur" style="border-top-color:#e07020">
+    <div class="valeur chiffre" style="color:#e07020">{{ credit_restant_ventes|floatformat:0 }}</div>
+    <div class="libelle">Crédit restant à encaisser</div>
+  </div>
+  {% endif %}
   <div class="indicateur valide">
     <div class="valeur chiffre">{{ recu_confirme|floatformat:0 }}</div>
     <div class="libelle">F reçus (versements)</div>

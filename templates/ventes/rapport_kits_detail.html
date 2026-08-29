@@ -7,10 +7,34 @@
   <h1>Détail physique des kits</h1>
 </div>
 
+<form method="get" class="finance-filtres" style="margin-bottom:20px">
+  <div class="filtre-champ filtre-champ--large">
+    <label class="filtre-label">Site</label>
+    <select name="ecole" onchange="this.form.submit()">
+      <option value="">— Tous les sites —</option>
+      {% for e in ecoles %}
+      <option value="{{ e.pk }}" {% if filtres.ecole == e.pk|stringformat:"s" %}selected{% endif %}>{{ e.nom }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="filtre-champ" style="flex:0 0 118px">
+    <label class="filtre-label">Du</label>
+    <input type="date" name="debut" value="{{ filtres.debut }}" onchange="this.form.submit()">
+  </div>
+  <div class="filtre-champ" style="flex:0 0 118px">
+    <label class="filtre-label">Au</label>
+    <input type="date" name="fin" value="{{ filtres.fin }}" onchange="this.form.submit()">
+  </div>
+  {% if filtres.debut or filtres.fin or filtres.ecole %}
+  <a href="{% url 'rapport_kits_detail' %}" class="bouton-secondaire" style="align-self:flex-end">✕ Réinitialiser</a>
+  {% endif %}
+</form>
+
 <p style="font-size:.85rem;color:var(--encre-clair);margin-bottom:16px">
   Produits issus des kits vendus — quantités dues au client.
   {% if filtres.debut %}Du <strong>{{ filtres.debut }}</strong>{% endif %}
   {% if filtres.fin %} au <strong>{{ filtres.fin }}</strong>{% endif %}
+  {% if filtres.ecole %}· <strong>{% for e in ecoles %}{% if e.pk|stringformat:"s" == filtres.ecole %}{{ e.nom }}{% endif %}{% endfor %}</strong>{% endif %}
 </p>
 
 {% if lignes %}

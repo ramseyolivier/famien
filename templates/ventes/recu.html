@@ -12,6 +12,12 @@
 <div class="fiche{% if v.statut == 'ANNULEE' %} manque{% endif %}">
   {% if v.statut == 'ANNULEE' %}
   <div style="text-align:center;background:var(--marge);color:#fff;font-weight:800;font-size:1rem;letter-spacing:.1em;padding:8px;margin:-0px -0px 12px;border-radius:var(--rayon) var(--rayon) 0 0">ANNULÉE</div>
+  {% elif v.a_credit %}
+  {% if v.credit_solde %}
+  <div style="text-align:center;background:var(--valide);color:#fff;font-weight:800;font-size:1rem;letter-spacing:.1em;padding:8px;margin:-0px -0px 12px;border-radius:var(--rayon) var(--rayon) 0 0">CRÉDIT SOLDÉ ✓</div>
+  {% else %}
+  <div style="text-align:center;background:var(--marge);color:#fff;font-weight:800;font-size:1rem;letter-spacing:.1em;padding:8px;margin:-0px -0px 12px;border-radius:var(--rayon) var(--rayon) 0 0">VENTE À CRÉDIT</div>
+  {% endif %}
   {% endif %}
   <div class="tete" style="display:flex;align-items:center;justify-content:space-between">
     <span class="num">Reçu N° : {{ v.numero }}</span>
@@ -19,8 +25,32 @@
   </div>
   <p style="font-size:.85rem;color:var(--encre-clair);margin:4px 0 12px">
     {{ v.ecole.nom }} · vendu par {{ v.vendeuse.get_full_name|default:v.vendeuse.username }} · {{ v.modes_paiement_display }}
+    {% if v.a_credit %} · Client : <strong style="color:var(--marge)">{{ v.client_prenom }} {{ v.client_nom }}</strong>{% endif %}
     {% if v.telephone_client %} · Tél. : <strong style="color:var(--encre)">{{ v.telephone_client }}</strong>{% endif %}
   </p>
+  {% if v.a_credit %}
+  {% if v.credit_solde %}
+  <div style="display:flex;align-items:center;gap:8px;background:#e6f4ea;border-left:3px solid var(--valide);border-radius:4px;padding:8px 12px;margin-bottom:12px;font-size:.88rem">
+    <span style="color:var(--valide);font-weight:700">✓ Crédit entièrement payé</span>
+  </div>
+  {% else %}
+  {% with deja_paye=v.paiements_credit.all %}
+  <div style="background:var(--marge-clair);border-left:3px solid var(--marge);border-radius:4px;padding:8px 12px;margin-bottom:12px;font-size:.88rem">
+    <div style="display:flex;align-items:center;justify-content:space-between">
+      <span style="color:var(--marge);font-weight:600">Solde restant dû</span>
+      <span style="color:var(--marge);font-weight:800;font-size:1rem">{{ v.solde_credit|floatformat:0 }} F CFA</span>
+    </div>
+    {% if deja_paye %}
+    <div style="margin-top:6px;padding-top:6px;border-top:1px solid var(--marge);font-size:.82rem;color:var(--encre-clair)">
+      {% for p in deja_paye %}
+      <div>{{ p.date|date:"d/m/Y" }} — {{ p.montant|floatformat:0 }} F versés{% if p.note %} ({{ p.note }}){% endif %}</div>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+  {% endwith %}
+  {% endif %}
+  {% endif %}
 
   <table class="registre">
     <thead><tr><th>Article</th><th class="nombre">Qté</th><th class="nombre">P.U.</th><th class="nombre">Montant</th></tr></thead>
@@ -46,7 +76,11 @@
       <tr><td colspan="3">Remise conventionnelle</td><td class="nombre">−{{ v.remise|floatformat:0 }}</td></tr>
     {% endif %}
       {% if v.a_credit %}
+        {% if v.credit_solde %}
+      <tr style="color:var(--valide)"><td colspan="3"><b>Total soldé ✓</b></td><td class="nombre"><b>{{ v.montant_total|floatformat:0 }} F CFA</b></td></tr>
+        {% else %}
       <tr style="color:var(--marge)"><td colspan="3"><b>Total dû (à crédit)</b></td><td class="nombre"><b>{{ v.montant_total|floatformat:0 }} F CFA</b></td></tr>
+        {% endif %}
       {% else %}
       <tr><td colspan="3"><b>Total payé</b></td><td class="nombre"><b>{{ v.montant_total|floatformat:0 }} F CFA</b></td></tr>
       {% endif %}

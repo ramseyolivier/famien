@@ -111,6 +111,10 @@ class Utilisateur(AbstractUser):
         """DG et chef d'équipe peuvent vendre, à condition d'avoir un site."""
         return self.site_id is not None
 
+    def peut_vendre_a_credit(self):
+        """Seul le DG est autorisé à enregistrer une vente à crédit."""
+        return self.is_superuser or self.profil == Profil.DG
+
     def peut_voir_ventes(self):
         """Les deux rôles voient les ventes de leur périmètre."""
         return True

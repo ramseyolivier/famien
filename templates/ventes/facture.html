@@ -20,7 +20,10 @@
         <div style="font-size:1.6rem;font-weight:800;color:var(--encre)">{{ v.montant_total|floatformat:0 }} <span style="font-size:.9rem;font-weight:400">F CFA</span></div>
         {% if v.remise %}<div style="font-size:.85rem;color:var(--encre-clair)">dont remise −{{ v.remise|floatformat:0 }} F</div>{% endif %}
         <div style="margin-top:8px">
-          {% if v.statut == 'LIVREE' %}<span class="badge badge-actif" style="font-size:.9rem;padding:4px 12px">Payée</span>
+          {% if v.a_credit %}
+            {% if v.credit_solde %}<span class="badge badge-actif" style="font-size:.9rem;padding:4px 12px">Crédit soldé</span>
+            {% else %}<span class="badge" style="background:var(--marge-clair);color:var(--marge);font-size:.9rem;padding:4px 12px">À crédit — {{ v.solde_credit|floatformat:0 }} F dus</span>{% endif %}
+          {% elif v.statut == 'LIVREE' %}<span class="badge badge-actif" style="font-size:.9rem;padding:4px 12px">Payée</span>
           {% elif v.statut == 'EN_ATTENTE' %}<span class="badge" style="background:var(--or-clair);color:var(--or);font-size:.9rem;padding:4px 12px">À remettre</span>
           {% elif v.statut == 'PARTIELLE' %}<span class="badge" style="background:var(--marge-clair);color:var(--marge);font-size:.9rem;padding:4px 12px">Partielle</span>
           {% else %}<span class="badge badge-inactif" style="font-size:.9rem;padding:4px 12px">Annulée</span>{% endif %}
@@ -33,13 +36,16 @@
       <span><strong style="color:var(--encre)">Heure</strong> {{ v.horodatage|time:"H:i:s" }}</span>
       <span><strong style="color:var(--encre)">Vendeuse</strong> {{ v.vendeuse.get_full_name|default:v.vendeuse.username }}</span>
       <span><strong style="color:var(--encre)">Paiement</strong> {{ v.modes_paiement_display }}</span>
+      {% if v.a_credit %}
+      <span><strong style="color:var(--marge)">Client</strong> {{ v.client_prenom }} {{ v.client_nom }}</span>
+      {% endif %}
       {% if v.telephone_client %}<span><strong style="color:var(--encre)">Tél. client</strong> {{ v.telephone_client }}</span>{% endif %}
       {% if v.montant_recu %}<span><strong style="color:var(--encre)">Reçu</strong> {{ v.montant_recu|floatformat:0 }} F</span>{% endif %}
       {% if v.monnaie_rendue %}<span><strong style="color:var(--encre)">Monnaie rendue</strong> {{ v.monnaie_rendue|floatformat:0 }} F</span>{% endif %}
     </div>
   </div>
 
-  <div class="etiquette" style="margin-top:24px">Vendu et payé</div>
+  <div class="etiquette" style="margin-top:24px">{% if v.a_credit %}Vendu à crédit{% else %}Vendu et payé{% endif %}</div>
   <table class="registre">
     <thead>
       <tr>
@@ -74,9 +80,24 @@
       </tr>
       {% endif %}
       <tr style="background:var(--accent-clair)">
-        <td colspan="3"><strong>Total encaissé</strong></td>
-        <td class="nombre chiffre"><strong style="color:var(--accent)">{{ v.montant_total|floatformat:0 }} F</strong></td>
+        <td colspan="3"><strong>{% if v.a_credit %}{% if v.credit_solde %}Total soldé ✓{% else %}Total dû (à crédit){% endif %}{% else %}Total encaissé{% endif %}</strong></td>
+        <td class="nombre chiffre"><strong style="color:{% if v.a_credit %}{% if v.credit_solde %}var(--valide){% else %}var(--marge){% endif %}{% else %}var(--accent){% endif %}">{{ v.montant_total|floatformat:0 }} F</strong></td>
       </tr>
+      {% if v.a_credit %}
+      {% for p in v.paiements_credit.all %}
+      <tr style="font-size:.85rem;color:var(--encre-clair)">
+        <td colspan="2">Versement du {{ p.date|date:"d/m/Y" }}{% if p.note %} — {{ p.note }}{% endif %}</td>
+        <td></td>
+        <td class="nombre" style="color:var(--valide)">+{{ p.montant|floatformat:0 }} F</td>
+      </tr>
+      {% endfor %}
+      {% if not v.credit_solde %}
+      <tr style="background:#fff0f0">
+        <td colspan="3"><strong style="color:var(--marge)">Reste à payer</strong></td>
+        <td class="nombre chiffre"><strong style="color:var(--marge)">{{ v.solde_credit|floatformat:0 }} F</strong></td>
+      </tr>
+      {% endif %}
+      {% endif %}
     </tbody>
   </table>
 

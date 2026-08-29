@@ -141,6 +141,7 @@ def vente(request):
         "encaisse_du_jour": Vente.objects.filter(
             ecole=ecole, vendeuse=u, horodatage__date=timezone.localdate(), a_credit=False,
         ).exclude(statut=StatutVente.ANNULEE).aggregate(t=Sum("montant_total"))["t"] or 0,
+        "peut_credit": u.peut_vendre_a_credit(),
     }
     return render(request, "ventes/vente.html", contexte)
 
@@ -242,6 +243,8 @@ def _enregistrer(request, ecole):
     mode_dominant = Counter(tous_modes).most_common(1)[0][0] if tous_modes else ModePaiement.ESPECES
 
     a_credit   = bool(charge.get("a_credit"))
+    if a_credit and not request.user.peut_vendre_a_credit():
+        return JsonResponse({"ok": False, "erreur": "Vous n'êtes pas autorisé à enregistrer une vente à crédit."}, status=403)
     client_nom = (charge.get("client_nom") or "").strip()
     client_prenom = (charge.get("client_prenom") or "").strip()
 
@@ -677,12 +680,14 @@ def rapport_kits_detail(request):
     total_qte = sum(l["total"] for l in lignes)
 
     retour_get = request.GET.urlencode()
+    ecoles_list = _ecoles_perimetre(u).order_by("nom")
 
     return render(request, "ventes/rapport_kits_detail.html", {
         "lignes": lignes,
         "total_qte": total_qte,
         "filtres": {"debut": debut_str, "fin": fin_str, "ecole": ecole_id, "commune": commune_id},
         "retour_get": retour_get,
+        "ecoles": ecoles_list,
         "perimetre": _perimetre_label(u),
     })
 
@@ -1159,16 +1164,17 @@ def creance_detail(request, pk):
             erreur = "Montant invalide."
         else:
             if montant > solde_restant:
-                montant = solde_restant
-            try:
-                date_paiement = date_cls.fromisoformat(date_str) if date_str else timezone.localdate()
-            except ValueError:
-                date_paiement = timezone.localdate()
-            PaiementCredit.objects.create(
-                vente=v, montant=montant, date=date_paiement, auteur=u, note=note,
-            )
-            messages.success(request, f"Paiement de {montant:,.0f} F enregistré.")
-            return redirect("creance_detail", pk=v.pk)
+                erreur = f"Le montant saisi ({montant:,.0f} F) dépasse le solde restant ({solde_restant:,.0f} F)."
+            else:
+                try:
+                    date_paiement = date_cls.fromisoformat(date_str) if date_str else timezone.localdate()
+                except ValueError:
+                    date_paiement = timezone.localdate()
+                PaiementCredit.objects.create(
+                    vente=v, montant=montant, date=date_paiement, auteur=u, note=note,
+                )
+                messages.success(request, f"Paiement de {montant:,.0f} F enregistré.")
+                return redirect("creance_detail", pk=v.pk)
 
     return render(request, "ventes/creance_detail.html", {
         "v":            v,
@@ -1352,18 +1358,69 @@ def finances_entrees_sorties(request):
     total_sorties_val += total_dons
     total_sorties_aff += total_dons
 
-    total_entrees = totaux["total"]
+    total_entrees_brut = totaux["total"]
+    total_entrees      = total_entrees_brut  # sera ajusté après calcul crédit
+
+    # ── Créances (ventes à crédit non soldées) ──────────────────────────
+    from django.db.models.functions import Coalesce as _Coalesce
+    from .models import PaiementCredit
+    _cr_qs = (
+        Vente.objects.filter(ecole__in=ecoles, a_credit=True)
+        .exclude(statut=StatutVente.ANNULEE)
+        .annotate(total_paye=_Coalesce(
+            Sum("paiements_credit__montant"),
+            Value(Decimal("0")),
+            output_field=DecimalField(max_digits=14, decimal_places=2),
+        ))
+        .annotate(solde_cr=ExpressionWrapper(
+            F("montant_total") - F("total_paye"),
+            output_field=DecimalField(max_digits=14, decimal_places=2),
+        ))
+        .filter(solde_cr__gt=0)
+    )
+    if debut:
+        _cr_qs = _cr_qs.filter(horodatage__date__gte=date_cls.fromisoformat(debut))
+    if fin:
+        _cr_qs = _cr_qs.filter(horodatage__date__lte=date_cls.fromisoformat(fin))
+    total_credit_restant = _cr_qs.aggregate(t=Sum("solde_cr"))["t"] or Decimal("0")
+    nb_credits_restants  = _cr_qs.count()
+
+    # Annoter chaque vente de la liste avec son solde crédit
+    _ids_credit = [v.pk for v in finances if v.a_credit]
+    if _ids_credit:
+        _payes_map = dict(
+            PaiementCredit.objects.filter(vente_id__in=_ids_credit)
+            .values("vente_id")
+            .annotate(t=Sum("montant"))
+            .values_list("vente_id", "t")
+        )
+    else:
+        _payes_map = {}
+    for v in finances:
+        if v.a_credit:
+            paye = _payes_map.get(v.pk) or Decimal("0")
+            v.solde_credit_es  = v.montant_total - paye
+            v.montant_encaisse = paye
+        else:
+            v.solde_credit_es  = None
+            v.montant_encaisse = v.montant_total
+    totaux["credit"]   = sum(v.solde_credit_es or Decimal("0") for v in finances)
+    totaux["encaisse"] = sum(v.montant_encaisse for v in finances)
+
+    total_entrees = total_entrees_brut - total_credit_restant
     solde         = total_entrees - total_sorties_val
 
     return render(request, "finances/entrees_sorties.html", {
-        "finances":          finances,
-        "totaux":            totaux,
-        "depenses":          depenses,
-        "dons_transfert":    dons_transfert,
-        "total_entrees":     total_entrees,
-        "total_sorties":     total_sorties_aff,
-        "total_sorties_val": total_sorties_val,
-        "solde":             solde,
+        "finances":             finances,
+        "totaux":               totaux,
+        "depenses":             depenses,
+        "dons_transfert":       dons_transfert,
+        "total_entrees":        total_entrees,
+        "total_sorties":        total_sorties_aff,
+        "total_sorties_val":    total_sorties_val,
+        "solde":                solde,
+        "total_credit_restant": total_credit_restant,
+        "nb_credits_restants":  nb_credits_restants,
         "filtres":           {"debut": debut, "fin": fin, "commune": "", "site": site_id, "mode": mode_f},
         "modes_paiement":    ModePaiement.choices,
         "sites_dispo":       sites_dispo,
@@ -1658,6 +1715,19 @@ def hub_finances(request):
         )))["t"] or 0
     )
     sorties_total = depenses_total + dons_total
+
+    from django.db.models.functions import Coalesce as _Coalesce
+    _cr_hub = (
+        Vente.objects.filter(ecole__in=ecoles, a_credit=True)
+        .exclude(statut=StatutVente.ANNULEE)
+        .annotate(_tp=_Coalesce(Sum("paiements_credit__montant"), Value(Decimal("0")), output_field=DecimalField(max_digits=14, decimal_places=2)))
+        .annotate(_sl=ExpressionWrapper(F("montant_total") - F("_tp"), output_field=DecimalField(max_digits=14, decimal_places=2)))
+        .filter(_sl__gt=0)
+        .aggregate(t=Sum("_sl"))["t"] or Decimal("0")
+    )
+    credit_restant = _cr_hub
+    entrees_total  = Decimal(str(entrees_total)) - credit_restant
+
     nb_depenses = Depense.objects.filter(_dep_q, statut=StatutDepense.SOUMIS).count()
     nb_depenses_confirmer = Depense.objects.filter(_dep_q, statut=StatutDepense.VALIDE, cree_par=u).count()
     nb_versements_attente = Versement.objects.filter(destinataire=u, statut=StatutVersement.EN_ATTENTE).count()
@@ -1670,8 +1740,9 @@ def hub_finances(request):
         .order_by("-ca")
     )
     return render(request, "finances/hub.html", {
-        "entrees_total": entrees_total,
-        "sorties_total": sorties_total,
+        "entrees_total":  entrees_total,
+        "credit_restant": credit_restant,
+        "sorties_total":  sorties_total,
         "nb_depenses": nb_depenses,
         "nb_depenses_confirmer": nb_depenses_confirmer,
         "nb_versements_attente": nb_versements_attente,
@@ -1747,24 +1818,45 @@ def versements_liste(request):
     collecte_total = 0
     collecte_dg    = 0
     depenses_total = 0
+    credit_restant_ventes = Decimal("0")
     if u.profil == Profil.CHEF_EQUIPE:
+        from django.db.models.functions import Coalesce as _Coalesce
         ecoles = u.sites_autorises()
         collecte_total = (
             Vente.objects.filter(ecole__in=ecoles)
             .exclude(statut=StatutVente.ANNULEE)
             .aggregate(t=Sum("montant_total"))["t"] or 0
         )
+        _cr_chef = (
+            Vente.objects.filter(ecole__in=ecoles, a_credit=True)
+            .exclude(statut=StatutVente.ANNULEE)
+            .annotate(_tp=_Coalesce(Sum("paiements_credit__montant"), Value(Decimal("0")), output_field=DecimalField(max_digits=14, decimal_places=2)))
+            .annotate(_sl=ExpressionWrapper(F("montant_total") - F("_tp"), output_field=DecimalField(max_digits=14, decimal_places=2)))
+            .filter(_sl__gt=0)
+        )
+        credit_restant_ventes = _cr_chef.aggregate(t=Sum("_sl"))["t"] or Decimal("0")
+        collecte_total = Decimal(str(collecte_total)) - credit_restant_ventes
         depenses_total = (
             Depense.objects.filter(site__in=ecoles, statut=StatutDepense.CONFIRME)
             .aggregate(t=Sum("montant_confirme"))["t"] or 0
         )
     elif est_dg_manager:
+        from django.db.models.functions import Coalesce as _Coalesce
         # Le DG vend directement : ses propres ventes alimentent sa caisse
         collecte_dg = (
             Vente.objects.filter(vendeuse__in=dg_managers)
             .exclude(statut=StatutVente.ANNULEE)
             .aggregate(t=Sum("montant_total"))["t"] or 0
         )
+        _cr_dg = (
+            Vente.objects.filter(vendeuse__in=dg_managers, a_credit=True)
+            .exclude(statut=StatutVente.ANNULEE)
+            .annotate(_tp=_Coalesce(Sum("paiements_credit__montant"), Value(Decimal("0")), output_field=DecimalField(max_digits=14, decimal_places=2)))
+            .annotate(_sl=ExpressionWrapper(F("montant_total") - F("_tp"), output_field=DecimalField(max_digits=14, decimal_places=2)))
+            .filter(_sl__gt=0)
+        )
+        credit_restant_ventes = _cr_dg.aggregate(t=Sum("_sl"))["t"] or Decimal("0")
+        collecte_dg = Decimal(str(collecte_dg)) - credit_restant_ventes
         depenses_total = (
             Depense.objects.filter(cree_par__in=dg_managers, statut=StatutDepense.CONFIRME)
             .aggregate(t=Sum("montant_confirme"))["t"] or 0
@@ -1784,9 +1876,10 @@ def versements_liste(request):
         "envoye_confirme": envoye_confirme,
         "recu_confirme": recu_confirme,
         "en_attente_recus": en_attente_recus,
-        "collecte_total": collecte_total,
-        "collecte_dg":    collecte_dg,
-        "depenses_total": depenses_total,
+        "collecte_total":        collecte_total,
+        "collecte_dg":           collecte_dg,
+        "credit_restant_ventes": credit_restant_ventes,
+        "depenses_total":        depenses_total,
         "verse_banque": verse_banque,
         "solde_en_main": solde_en_main,
         "est_chef": u.profil == Profil.CHEF_EQUIPE,
@@ -1810,17 +1903,27 @@ def versement_nouveau(request):
     statuts_engages = [StatutVersement.CONFIRME, StatutVersement.EN_ATTENTE]
     est_dg_manager = u.profil == Profil.DG or u.is_superuser
 
+    from django.db.models.functions import Coalesce as _Coalesce
     if u.profil == Profil.CHEF_EQUIPE:
         verse_engage = (
             Versement.objects.filter(verseur=u, statut__in=statuts_engages)
             .aggregate(t=Sum("montant"))["t"] or 0
         )
         ecoles = u.sites_autorises()
-        collecte = (
+        collecte = Decimal(str(
             Vente.objects.filter(ecole__in=ecoles)
             .exclude(statut=StatutVente.ANNULEE)
             .aggregate(t=Sum("montant_total"))["t"] or 0
+        ))
+        _cr = (
+            Vente.objects.filter(ecole__in=ecoles, a_credit=True)
+            .exclude(statut=StatutVente.ANNULEE)
+            .annotate(_tp=_Coalesce(Sum("paiements_credit__montant"), Value(Decimal("0")), output_field=DecimalField(max_digits=14, decimal_places=2)))
+            .annotate(_sl=ExpressionWrapper(F("montant_total") - F("_tp"), output_field=DecimalField(max_digits=14, decimal_places=2)))
+            .filter(_sl__gt=0)
+            .aggregate(t=Sum("_sl"))["t"] or Decimal("0")
         )
+        collecte -= _cr
         depenses = (
             Depense.objects.filter(site__in=ecoles, statut=StatutDepense.CONFIRME)
             .aggregate(t=Sum("montant_confirme"))["t"] or 0
@@ -1837,11 +1940,25 @@ def versement_nouveau(request):
             Versement.objects.filter(destinataire__in=dg_managers, statut=StatutVersement.CONFIRME)
             .aggregate(t=Sum("montant"))["t"] or 0
         )
+        collecte_dg = Decimal(str(
+            Vente.objects.filter(vendeuse__in=dg_managers)
+            .exclude(statut=StatutVente.ANNULEE)
+            .aggregate(t=Sum("montant_total"))["t"] or 0
+        ))
+        _cr_dg = (
+            Vente.objects.filter(vendeuse__in=dg_managers, a_credit=True)
+            .exclude(statut=StatutVente.ANNULEE)
+            .annotate(_tp=_Coalesce(Sum("paiements_credit__montant"), Value(Decimal("0")), output_field=DecimalField(max_digits=14, decimal_places=2)))
+            .annotate(_sl=ExpressionWrapper(F("montant_total") - F("_tp"), output_field=DecimalField(max_digits=14, decimal_places=2)))
+            .filter(_sl__gt=0)
+            .aggregate(t=Sum("_sl"))["t"] or Decimal("0")
+        )
+        collecte_dg -= _cr_dg
         depenses = (
             Depense.objects.filter(cree_par__in=dg_managers, statut=StatutDepense.CONFIRME)
             .aggregate(t=Sum("montant_confirme"))["t"] or 0
         )
-        solde_disponible = recu_confirme - verse_engage - depenses
+        solde_disponible = recu_confirme + collecte_dg - verse_engage - depenses
 
     # Destinataires selon le profil
     # CHEF_EQUIPE → DG ; DG → banque uniquement (sortie sans destinataire humain)
@@ -2307,8 +2424,6 @@ def rapport_financier_export(request):
 
 
 @login_required
-
-@login_required
 def tresorerie_globale(request):
     from datetime import date as date_type
     from django.db.models import Q
@@ -2319,8 +2434,9 @@ def tresorerie_globale(request):
     from achats.models import ReceptionLigne, StatutReception
     from .models import LigneProduitVente
 
-    u     = request.user
-    today = timezone.localdate()
+    u = request.user
+    if not (u.is_superuser or u.profil == Profil.DG):
+        return redirect("hub_finances")
 
     debut_str    = request.GET.get("debut", "")
     fin_str      = request.GET.get("fin", "")
@@ -2347,20 +2463,19 @@ def tresorerie_globale(request):
     ecoles = tous_sites
 
     produits_filtre = Produit.objects.filter(actif=True).order_by("code")
-    pq = {}  # filtre produit appliqué à chaque queryset si renseigné
+    pq = {}
     if produit_id_f.isdigit():
         pq = {"produit_id": int(produit_id_f)}
     else:
         produit_id_f = ""
 
     def _dkw(gte_key, lte_key):
-        """Construit les kwargs de filtre date uniquement si les dates sont renseignées."""
         d = {}
         if debut: d[gte_key] = debut
         if fin:   d[lte_key] = fin
         return d
 
-    # ── 1. Valeur des achats (réceptions validées sur la période) ─────────────
+    # ── 1. Valeur des achats (réceptions validées) ────────────────────────────
     achats_map = {
         r["site_effectif_id"]: r["total"] or 0
         for r in ReceptionLigne.objects.filter(
@@ -2375,44 +2490,69 @@ def tresorerie_globale(request):
         ))
         .values("site_effectif_id")
         .annotate(total=Sum(ExpressionWrapper(
-            F("quantite_recue") * F("prix_unitaire"),
+            F("quantite_recue") * F("produit__cout_achat"),
             output_field=DecimalField(max_digits=14, decimal_places=2)
         )))
     }
 
     # ── 2. Recettes ───────────────────────────────────────────────────────────
-    # Avec filtre produit : on calcule en Python pour distribuer la remise proportionnellement.
+    # Avec filtre produit : deux passes séparées.
+    #   - Lignes kit : revenu réparti entre composants au prorata de cout_achat × quantite.
+    #   - Lignes article direct : prix_unitaire × quantite × _fac().
     # Sans filtre : montant_total de la vente (déjà net de remise).
     from .models import LigneVente
     from decimal import Decimal as _Dec
     if pq:
         prod_id = pq["produit_id"]
-        lignes_prod = (
-            LigneVente.objects
-            .filter(
-                vente__ecole__in=ecoles,
-                produit_id=prod_id,
-                **_dkw("vente__horodatage__date__gte", "vente__horodatage__date__lte"),
-            )
+        _dkw_v = _dkw("vente__horodatage__date__gte", "vente__horodatage__date__lte")
+        _base_v = dict(vente__ecole__in=ecoles, **_dkw_v)
+        _vids = list(
+            LigneVente.objects.filter(**_base_v)
             .exclude(vente__statut=StatutVente.ANNULEE)
-            .select_related("vente")
+            .values_list("vente_id", flat=True).distinct()
         )
-        vente_ids_prod = list(lignes_prod.values_list("vente_id", flat=True).distinct())
-        gross_par_vente_prod = {
-            r["vente_id"]: r["total"] or _Dec(0)
-            for r in LigneVente.objects.filter(vente_id__in=vente_ids_prod)
-            .values("vente_id")
-            .annotate(total=Sum(ExpressionWrapper(
-                F("quantite") * F("prix_unitaire"),
-                output_field=DecimalField(max_digits=14, decimal_places=2),
-            )))
-        }
-        recettes_map = {}
-        for _l in lignes_prod:
-            _brut  = _l.quantite * _l.prix_unitaire
-            _gross = gross_par_vente_prod.get(_l.vente_id, _brut)
-            _eff   = _brut * _l.vente.montant_total / _gross if _gross else _brut
-            recettes_map[_l.vente.ecole_id] = recettes_map.get(_l.vente.ecole_id, _Dec(0)) + _eff
+        if not _vids:
+            recettes_map = {}
+        else:
+            _val_expr_v = ExpressionWrapper(F("quantite") * F("prix_unitaire"), output_field=DecimalField(max_digits=14, decimal_places=2))
+            _gross_v = {r["vente_id"]: r["brut"] or _Dec(0) for r in LigneVente.objects.filter(vente_id__in=_vids).annotate(val=_val_expr_v).values("vente_id").annotate(brut=Sum("val"))}
+            _remise_v = {v["id"]: v["remise"] or _Dec(0) for v in Vente.objects.filter(id__in=_vids).values("id", "remise")}
+
+            def _fac(vente_id):
+                r = _remise_v.get(vente_id, _Dec(0))
+                g = _gross_v.get(vente_id, _Dec(0))
+                return (g - r) / g if r and g else _Dec(1)
+
+            recettes_map = {}
+            # Passe 1 : lignes kit contenant le produit filtré
+            for lv in (
+                LigneVente.objects
+                .filter(kit__isnull=False, kit__lignes__produit_id=prod_id, **_base_v)
+                .exclude(vente__statut=StatutVente.ANNULEE)
+                .distinct()
+                .select_related("vente", "kit")
+                .prefetch_related("kit__lignes__produit")
+            ):
+                composants = list(lv.kit.lignes.all())
+                cout_total = sum(kl.produit.cout_achat * kl.quantite for kl in composants)
+                if not cout_total:
+                    continue
+                revenu = lv.prix_unitaire * lv.quantite * _fac(lv.vente_id)
+                for kl in composants:
+                    if kl.produit_id != prod_id:
+                        continue
+                    part = (kl.produit.cout_achat * kl.quantite) / cout_total
+                    sid = lv.vente.ecole_id
+                    recettes_map[sid] = recettes_map.get(sid, _Dec(0)) + revenu * part
+            # Passe 2 : lignes article direct
+            for lv in (
+                LigneVente.objects.filter(produit_id=prod_id, **_base_v)
+                .exclude(vente__statut=StatutVente.ANNULEE)
+                .select_related("vente")
+            ):
+                val = lv.prix_unitaire * lv.quantite * _fac(lv.vente_id)
+                sid = lv.vente.ecole_id
+                recettes_map[sid] = recettes_map.get(sid, _Dec(0)) + val
     else:
         recettes_map = {
             r["ecole_id"]: r["total"] or 0
@@ -2423,7 +2563,7 @@ def tresorerie_globale(request):
             .values("ecole_id").annotate(total=Sum("montant_total"))
         }
 
-    # ── 3. Coût des marchandises vendues ──────────────────────────────────────
+    # ── 3. Coût des marchandises vendues (COGS) ───────────────────────────────
     cogs_map = {
         r["vente__ecole_id"]: r["total"] or 0
         for r in LigneProduitVente.objects.filter(
@@ -2438,7 +2578,78 @@ def tresorerie_globale(request):
         )))
     }
 
-    # ── 4. Ajustements (MouvementStock type AJUSTEMENT, toutes sources : manuelle + inventaire)
+    # ── 3b. Avoirs en attente (argent encaissé, articles non encore livrés) ──
+    # Deux chemins :
+    #   - Avec filtre produit : valeur proportionnelle (revenu vendu / qté due × qté en avoir).
+    #   - Sans filtre : prix_unitaire_avoir × (quantite_due − quantite_servie).
+    if pq:
+        _dkw_lpv = _dkw("vente__horodatage__date__gte", "vente__horodatage__date__lte")
+        _qdue_by_site = {
+            r["vente__ecole_id"]: r["t"] or 0
+            for r in LigneProduitVente.objects.filter(
+                vente__ecole__in=ecoles, **_dkw_lpv, **pq,
+            ).exclude(vente__statut=StatutVente.ANNULEE)
+            .values("vente__ecole_id").annotate(t=Sum("quantite_due"))
+        }
+        _qav_by_site = {
+            r["vente__ecole_id"]: r["t"] or 0
+            for r in LigneProduitVente.objects.filter(
+                vente__ecole__in=ecoles, avoir_annule=False,
+                quantite_servie__lt=F("quantite_due"),
+                **_dkw_lpv, **pq,
+            ).exclude(vente__statut=StatutVente.ANNULEE)
+            .values("vente__ecole_id")
+            .annotate(t=Sum(F("quantite_due") - F("quantite_servie")))
+        }
+        avoir_map = {}
+        for sid, av_qty in _qav_by_site.items():
+            qdue = _qdue_by_site.get(sid, 0)
+            vendu = recettes_map.get(sid, _Dec(0))
+            if qdue and vendu:
+                avoir_map[sid] = vendu / _Dec(str(qdue)) * _Dec(str(av_qty))
+    else:
+        _avoir_expr = ExpressionWrapper(
+            F("prix_unitaire_avoir") * (F("quantite_due") - F("quantite_servie")),
+            output_field=DecimalField(max_digits=14, decimal_places=2)
+        )
+        avoir_map = {
+            r["vente__ecole_id"]: r["total"] or 0
+            for r in LigneProduitVente.objects.filter(
+                vente__ecole__in=ecoles,
+                avoir_annule=False,
+                quantite_servie__lt=F("quantite_due"),
+                **_dkw("vente__horodatage__date__gte", "vente__horodatage__date__lte"),
+            ).exclude(vente__statut=StatutVente.ANNULEE)
+            .values("vente__ecole_id")
+            .annotate(total=Sum(_avoir_expr))
+        }
+
+    # ── 3c. Créances : ventes à crédit dont le solde n'est pas encore encaissé ─
+    _credit_qs = (
+        Vente.objects.filter(
+            ecole__in=ecoles,
+            a_credit=True,
+            **_dkw("horodatage__date__gte", "horodatage__date__lte"),
+        )
+        .exclude(statut=StatutVente.ANNULEE)
+        .annotate(total_paye=Coalesce(
+            Sum("paiements_credit__montant"),
+            Value(Decimal("0")),
+            output_field=DecimalField(max_digits=14, decimal_places=2),
+        ))
+        .annotate(solde=ExpressionWrapper(
+            F("montant_total") - F("total_paye"),
+            output_field=DecimalField(max_digits=14, decimal_places=2),
+        ))
+        .filter(solde__gt=0)
+    )
+    credit_restant_map = {}
+    for row in _credit_qs.values("ecole_id", "solde"):
+        pk = row["ecole_id"]
+        credit_restant_map[pk] = credit_restant_map.get(pk, Decimal("0")) + (row["solde"] or Decimal("0"))
+    nb_credits_ouverts = _credit_qs.count()
+
+    # ── 4. Ajustements d'inventaire ───────────────────────────────────────────
     _adj_expr = ExpressionWrapper(
         F("quantite") * F("produit__cout_achat"),
         output_field=DecimalField(max_digits=14, decimal_places=2)
@@ -2462,7 +2673,8 @@ def tresorerie_globale(request):
         .annotate(total=Sum(_adj_expr))
     }
 
-    # ── 5. Dépenses diverses (pas de dimension produit) ───────────────────────
+    # ── 5. Dépenses diverses ──────────────────────────────────────────────────
+    # Exclut les dépenses générées automatiquement par les dons de stock.
     dep_map = {}
     if not pq:
         dep_map = {
@@ -2471,38 +2683,96 @@ def tresorerie_globale(request):
                 site__in=ecoles,
                 statut=StatutDepense.CONFIRME,
                 **_dkw("date_depense__gte", "date_depense__lte"),
-            ).values("site_id").annotate(total=Sum("montant_confirme"))
+            ).exclude(motif__startswith="Don de stock — TRF-")
+            .values("site_id").annotate(total=Sum("montant_confirme"))
         }
 
-    # ── 6. Transferts normaux (valorisés au coût d'achat, DON/SURPLUS exclus) ──
+    # ── 6. Flux entre sites ───────────────────────────────────────────────────
+    # Deux sources pour les transferts normaux :
+    #   - TransfertLigne NORMAL ACCEPTE (transferts ad-hoc)
+    #   - MouvementStock types M16/M17 (appro magasin ↔ école)
+    # Élimination des flux internes dans les deux sources.
     from transferts.models import TypeTransfert
-    _trf_filtre = dict(
+    _flux_expr = ExpressionWrapper(
+        F("quantite") * F("produit__cout_achat"),
+        output_field=DecimalField(max_digits=14, decimal_places=2)
+    )
+    _dkw_mv = _dkw("horodatage__date__gte", "horodatage__date__lte")
+    _trf_filtre_normal = dict(
         transfert__statut=StatutTransfert.ACCEPTE,
         transfert__type_transfert=TypeTransfert.NORMAL,
         **_dkw("transfert__traite_le__date__gte", "transfert__traite_le__date__lte"),
     )
-    _trf_expr = ExpressionWrapper(
+
+    _adhoc_emis = {
+        r["transfert__site_origine_id"]: r["total"] or 0
+        for r in TransfertLigne.objects.filter(
+            transfert__site_origine__in=ecoles, **_trf_filtre_normal, **pq
+        ).exclude(
+            transfert__site_destination__in=ecoles
+        ).values("transfert__site_origine_id").annotate(total=Sum(_flux_expr))
+    }
+    _adhoc_recu = {
+        r["transfert__site_destination_id"]: r["total"] or 0
+        for r in TransfertLigne.objects.filter(
+            transfert__site_destination__in=ecoles, **_trf_filtre_normal, **pq
+        ).exclude(
+            transfert__site_origine__in=ecoles
+        ).values("transfert__site_destination_id").annotate(total=Sum(_flux_expr))
+    }
+
+    TYPES_EMISSION_MV = [
+        TypeMouvement.SORTIE_APPRO_MAGASIN,
+        TypeMouvement.SORTIE_LIVRAISON_ECOLE,
+        TypeMouvement.RETOUR_LIVRAISON_ECOLE,
+    ]
+    TYPES_RECEPTION_MV = [
+        TypeMouvement.ENTREE_APPRO_MAGASIN,
+        TypeMouvement.ENTREE_LIVRAISON_ECOLE,
+    ]
+    _refs_emis = set(
+        MouvementStock.objects
+        .filter(site__in=ecoles, type__in=TYPES_EMISSION_MV, **_dkw_mv)
+        .values_list("reference_document", flat=True)
+        .distinct()
+    )
+    _refs_recu = set(
+        MouvementStock.objects
+        .filter(site__in=ecoles, type__in=TYPES_RECEPTION_MV, **_dkw_mv)
+        .values_list("reference_document", flat=True)
+        .distinct()
+    )
+    _refs_internes_mv = _refs_emis & _refs_recu
+
+    _mv_emis_base = MouvementStock.objects.filter(
+        site__in=ecoles, type__in=TYPES_EMISSION_MV, **_dkw_mv
+    )
+    _mv_recu_base = MouvementStock.objects.filter(
+        site__in=ecoles, type__in=TYPES_RECEPTION_MV, **_dkw_mv
+    )
+    if _refs_internes_mv:
+        _mv_emis_base = _mv_emis_base.exclude(reference_document__in=_refs_internes_mv)
+        _mv_recu_base = _mv_recu_base.exclude(reference_document__in=_refs_internes_mv)
+
+    _mv_emis = {
+        r["site_id"]: abs(r["total"] or 0)
+        for r in _mv_emis_base.filter(**pq).values("site_id").annotate(total=Sum(_flux_expr))
+    }
+    _mv_recu = {
+        r["site_id"]: r["total"] or 0
+        for r in _mv_recu_base.filter(**pq).values("site_id").annotate(total=Sum(_flux_expr))
+    }
+
+    all_emis_pks = set(_adhoc_emis) | set(_mv_emis)
+    all_recu_pks = set(_adhoc_recu) | set(_mv_recu)
+    trf_emis_map = {pk: _adhoc_emis.get(pk, 0) + _mv_emis.get(pk, 0) for pk in all_emis_pks}
+    trf_recu_map = {pk: _adhoc_recu.get(pk, 0) + _mv_recu.get(pk, 0) for pk in all_recu_pks}
+
+    # ── 6b. Dons (valorisés au coût d'achat) ─────────────────────────────────
+    _don_expr = ExpressionWrapper(
         F("quantite") * F("produit__cout_achat"),
         output_field=DecimalField(max_digits=14, decimal_places=2)
     )
-    trf_emis_map = {
-        r["transfert__site_origine_id"]: r["total"] or 0
-        for r in TransfertLigne.objects.filter(
-            transfert__site_origine__in=ecoles, **_trf_filtre, **pq
-        )
-        .values("transfert__site_origine_id")
-        .annotate(total=Sum(_trf_expr))
-    }
-    trf_recu_map = {
-        r["transfert__site_destination_id"]: r["total"] or 0
-        for r in TransfertLigne.objects.filter(
-            transfert__site_destination__in=ecoles, **_trf_filtre, **pq
-        )
-        .values("transfert__site_destination_id")
-        .annotate(total=Sum(_trf_expr))
-    }
-
-    # ── 6b. Transferts DON (valorisés au coût d'achat, dissociés des dépenses) ──
     don_map = {
         r["transfert__site_origine_id"]: r["total"] or 0
         for r in TransfertLigne.objects.filter(
@@ -2513,11 +2783,10 @@ def tresorerie_globale(request):
             **pq,
         )
         .values("transfert__site_origine_id")
-        .annotate(total=Sum(_trf_expr))
+        .annotate(total=Sum(_don_expr))
     }
 
-    # ── 6c. Erreurs de saisie (SURPLUS acceptés) → déduites des achats ─────────
-    # Le stock retiré n'a jamais été vraiment reçu, donc l'achat correspondant est fictif.
+    # ── 6c. Surplus (déduit des transferts reçus pour tous les sites) ─────────
     surplus_map = {}
     for r in (
         TransfertLigne.objects.filter(
@@ -2528,11 +2797,11 @@ def tresorerie_globale(request):
             **pq,
         )
         .values("transfert__site_origine_id")
-        .annotate(total=Sum(_trf_expr))
+        .annotate(total=Sum(_don_expr))
     ):
         surplus_map[r["transfert__site_origine_id"]] = r["total"] or 0
 
-    # ── 7. Stock actuel restant (snapshot temps réel, pas filtré par date) ────
+    # ── 7. Stock actuel (snapshot temps réel, non filtré par date) ────────────
     stock_map = {
         r["site_id"]: r["total"] or 0
         for r in SoldeStock.objects.filter(site__in=ecoles, **pq)
@@ -2543,82 +2812,123 @@ def tresorerie_globale(request):
         )))
     }
 
-    # ── Quantités globales pour les encarts ──────────────────────────────────
+    # ── Quantités globales (pour les encarts) ─────────────────────────────────
+    # nb.avoirs = somme des quantités non livrées (pas un count).
     def _agg(qs, field="quantite"):
         return qs.aggregate(t=Sum(field))["t"] or 0
 
+    _surplus_qs_base = dict(
+        transfert__statut=StatutTransfert.ACCEPTE,
+        transfert__type_transfert=TypeTransfert.SURPLUS,
+        **_dkw("transfert__traite_le__date__gte", "transfert__traite_le__date__lte"),
+        **pq,
+    )
+    _surplus_qte_non_depot = _agg(TransfertLigne.objects.filter(
+        transfert__site_origine__in=ecoles, **_surplus_qs_base
+    ))
+
     nb = {
-        "achats":    _agg(ReceptionLigne.objects.filter(
+        "achats":   _agg(ReceptionLigne.objects.filter(
             Q(reception__site_destination__in=ecoles) | Q(reception__commande__site_destination__in=ecoles),
             reception__statut__in=[StatutReception.VALIDE, StatutReception.CLOTURE],
             **_dkw("reception__valide_le__date__gte", "reception__valide_le__date__lte"),
             **pq,
         ), "quantite_recue"),
-        "recettes":  _agg(LigneProduitVente.objects.filter(
+        "recettes": _agg(LigneProduitVente.objects.filter(
             vente__ecole__in=ecoles,
             **_dkw("vente__horodatage__date__gte", "vente__horodatage__date__lte"),
             **pq,
         ).exclude(vente__statut=StatutVente.ANNULEE), "quantite_servie"),
-        "adj_pos":   _agg(adj_base.filter(quantite__gt=0)),
-        "adj_neg":   abs(_agg(adj_base.filter(quantite__lt=0))),
-        "trf_emis":  _agg(TransfertLigne.objects.filter(
-            transfert__site_origine__in=ecoles, **_trf_filtre, **pq
-        )),
-        "trf_recu":  _agg(TransfertLigne.objects.filter(
-            transfert__site_destination__in=ecoles, **_trf_filtre, **pq
-        )),
-        "dons":      _agg(TransfertLigne.objects.filter(
+        "adj_pos":  _agg(adj_base.filter(quantite__gt=0)),
+        "adj_neg":  abs(_agg(adj_base.filter(quantite__lt=0))),
+        "trf_emis": (
+            _agg(TransfertLigne.objects.filter(
+                transfert__site_origine__in=ecoles, **_trf_filtre_normal, **pq
+            ).exclude(transfert__site_destination__in=ecoles))
+            + abs(_agg(_mv_emis_base.filter(**pq)))
+        ),
+        "trf_recu": max(0,
+            _agg(TransfertLigne.objects.filter(
+                transfert__site_destination__in=ecoles, **_trf_filtre_normal, **pq
+            ).exclude(transfert__site_origine__in=ecoles))
+            + _agg(_mv_recu_base.filter(**pq))
+            - _surplus_qte_non_depot
+        ),
+        "dons":     _agg(TransfertLigne.objects.filter(
             transfert__site_origine__in=ecoles,
             transfert__statut=StatutTransfert.ACCEPTE,
             transfert__type_transfert=TypeTransfert.DON,
             **_dkw("transfert__traite_le__date__gte", "transfert__traite_le__date__lte"),
             **pq,
         )),
-        "depenses":  Depense.objects.filter(
+        "depenses": Depense.objects.filter(
             site__in=ecoles, statut=StatutDepense.CONFIRME,
             **_dkw("date_depense__gte", "date_depense__lte"),
-        ).count() if not pq else 0,
-        "stock":     _agg(SoldeStock.objects.filter(site__in=ecoles, quantite__gt=0, **pq)),
+        ).exclude(motif__startswith="Don de stock — TRF-").count() if not pq else 0,
+        "stock":    _agg(SoldeStock.objects.filter(site__in=ecoles, quantite__gt=0, **pq)),
+        "avoirs":   _agg(LigneProduitVente.objects.filter(
+            vente__ecole__in=ecoles,
+            avoir_annule=False,
+            quantite_servie__lt=F("quantite_due"),
+            **_dkw("vente__horodatage__date__gte", "vente__horodatage__date__lte"),
+            **pq,
+        ).exclude(vente__statut=StatutVente.ANNULEE).annotate(
+            qte_due=F("quantite_due") - F("quantite_servie")
+        ), "qte_due"),
+        "credit_restant": nb_credits_ouverts,
     }
 
     # ── Tableau par site ──────────────────────────────────────────────────────
+    # FAMIEN n'a pas de dépôt : le surplus est toujours déduit des transferts reçus.
     lignes = []
     for site in ecoles.order_by("nom"):
-        pk  = site.pk
-        rec = recettes_map.get(pk, 0)
+        pk      = site.pk
+        surplus = surplus_map.get(pk, 0)
+        rec_brut = recettes_map.get(pk, 0)
+        cr  = credit_restant_map.get(pk, Decimal("0"))
+        rec = rec_brut - cr
         cog = cogs_map.get(pk, 0)
         dep = dep_map.get(pk, 0)
         don = don_map.get(pk, 0)
         ben = rec - cog - don - dep
+        achats   = achats_map.get(pk, 0)
+        trf_recu = max(0, trf_recu_map.get(pk, 0) - surplus)
         lignes.append({
             "nom":      site.nom,
-            "achats":   achats_map.get(pk, 0) - surplus_map.get(pk, 0),
+            "achats":   achats,
             "recettes": rec,
             "cogs":     cog,
+            "avoirs":   avoir_map.get(pk, 0),
             "adj_pos":  adj_pos_map.get(pk, 0),
             "adj_neg":  adj_neg_map.get(pk, 0),
             "trf_emis": trf_emis_map.get(pk, 0),
-            "trf_recu": trf_recu_map.get(pk, 0),
-            "dons":     don_map.get(pk, 0),
-            "depenses": dep,
-            "stock":    stock_map.get(pk, 0),
+            "trf_recu": trf_recu,
+            "dons":           don,
+            "depenses":       dep,
+            "stock":          stock_map.get(pk, 0),
+            "credit_restant": cr,
             "benefice": ben,
             "marge":    round(float(ben) / float(rec) * 100, 1) if rec else None,
         })
 
     # ── Totaux ────────────────────────────────────────────────────────────────
     def _s(key): return sum(l[key] for l in lignes)
-    tot = {k: _s(k) for k in ("achats","recettes","cogs","adj_pos","adj_neg","trf_emis","trf_recu","dons","depenses","stock")}
+    tot = {k: _s(k) for k in ("achats","recettes","cogs","avoirs","adj_pos","adj_neg","trf_emis","trf_recu","dons","depenses","stock","credit_restant")}
     tot["benefice"] = tot["recettes"] - tot["cogs"] - tot["dons"] - tot["depenses"]
     tot["marge"]    = round(float(tot["benefice"]) / float(tot["recettes"]) * 100, 1) if tot["recettes"] else None
 
     return render(request, "finances/tresorerie.html", {
-        "lignes": lignes,
-        "tot":    tot,
-        "nb":     nb,
-        "sites_dispo":    sites_dispo,
+        "lignes":          lignes,
+        "tot":             tot,
+        "nb":              nb,
+        "sites_dispo":     sites_dispo,
         "produits_filtre": produits_filtre,
-        "filtres": {"debut": str(debut) if debut else "", "fin": str(fin) if fin else "", "site": site_id_f, "produit": produit_id_f},
+        "filtres": {
+            "debut":   str(debut) if debut else "",
+            "fin":     str(fin) if fin else "",
+            "site":    site_id_f,
+            "produit": produit_id_f,
+        },
     })
 
 

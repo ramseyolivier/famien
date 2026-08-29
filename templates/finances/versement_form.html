@@ -70,9 +70,9 @@
 {% endif %}
 
 <div class="etiquette">Montant et mode</div>
-<div style="display:flex;gap:16px;margin-bottom:20px;max-width:420px">
+<div style="display:flex;gap:16px;margin-bottom:4px;max-width:420px">
   <div style="flex:1">
-    <input type="number" name="montant" id="montant" min="1" max="{{ solde_disponible|floatformat:0 }}" required
+    <input type="number" name="montant" id="montant" min="1" required
            placeholder="Montant (F CFA)"
            style="width:100%;height:44px;padding:0 12px;border:1.5px solid var(--reglure);border-radius:var(--rayon);font:inherit;font-size:1rem">
   </div>
@@ -84,6 +84,7 @@
     </select>
   </div>
 </div>
+<p id="erreur-montant" style="display:none;color:#e00000;font-size:.85rem;margin:0 0 16px"></p>
 
 <div class="etiquette">Référence <span style="font-weight:400;font-size:.8rem;letter-spacing:0;text-transform:none;color:var(--encre-clair)">(n° transaction / référence — facultatif)</span></div>
 <div style="margin-bottom:20px;max-width:420px">
@@ -100,7 +101,6 @@
 <div id="bloc-recu" style="margin-bottom:28px;max-width:420px;{% if not vers_banque_seulement %}display:none;{% endif %}">
   <div class="etiquette">Bordereau / reçu <span style="font-weight:400;font-size:.8rem;letter-spacing:0;text-transform:none;color:var(--encre-clair)">(photo)</span></div>
   <input type="file" name="recu_banque" id="recu_banque" accept="image/*" capture="environment"
-         {% if vers_banque_seulement %}required{% endif %}
          style="display:block;width:100%;padding:10px 0;font:inherit;font-size:.9rem">
 </div>
 
@@ -120,18 +120,31 @@
 {% block scripts %}
 <script>
 document.addEventListener("DOMContentLoaded", function () {
-  var max = {{ solde_disponible|floatformat:0 }};
+  var max   = parseInt("{{ solde_disponible|floatformat:0 }}".replace(/[\s ]/g, ""), 10);
   var input = document.getElementById("montant");
+  var erreur = document.getElementById("erreur-montant");
+  var btn   = document.getElementById("btn-envoyer");
 
-  input.addEventListener("input", function () {
-    var v = parseFloat(this.value);
-    if (!isNaN(v) && v > max) this.value = max;
-  });
+  function validerMontant() {
+    var v = parseFloat(input.value);
+    if (!isNaN(v) && v > max) {
+      erreur.textContent = "Le montant saisi (" + v.toLocaleString("fr-FR") + " F) dépasse votre solde disponible (" + max.toLocaleString("fr-FR") + " F).";
+      erreur.style.display = "";
+      input.style.borderColor = "#e00000";
+      btn.disabled = true;
+    } else {
+      erreur.style.display = "none";
+      input.style.borderColor = "";
+      btn.disabled = {% if solde_disponible <= 0 %}true{% else %}false{% endif %};
+    }
+  }
+
+  input.addEventListener("input", validerMontant);
 
   document.getElementById("btn-envoyer").addEventListener("click", function (e) {
     var v = parseFloat(input.value);
-    if (!v || v <= 0) { e.preventDefault(); alert("Saisissez un montant valide."); return; }
-    if (v > max) { e.preventDefault(); alert("Le montant dépasse votre solde disponible (" + max.toLocaleString("fr-FR") + " F CFA)."); return; }
+    if (!v || v <= 0) { e.preventDefault(); return; }
+    if (v > max) { e.preventDefault(); return; }
     {% if vers_banque_seulement %}
     if (!confirm("Confirmer la sortie de " + v.toLocaleString("fr-FR") + " F CFA vers la banque ?")) e.preventDefault();
     {% else %}
@@ -150,7 +163,6 @@ function toggleDest(val) {
     bloc.style.display = "none";
     sel.removeAttribute("required");
     blocRecu.style.display = "";
-    recu.setAttribute("required", "");
   } else {
     bloc.style.display = "";
     sel.setAttribute("required", "");

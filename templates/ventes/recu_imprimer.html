@@ -113,6 +113,12 @@
 
   {% if v.statut == 'ANNULEE' %}
   <div class="statut-annule">★ VENTE ANNULÉE ★</div>
+  {% elif v.a_credit %}
+  {% if v.credit_solde %}
+  <div class="statut-annule" style="color:#1a7a3c;border-color:#1a7a3c">✓ CRÉDIT SOLDÉ ✓</div>
+  {% else %}
+  <div class="statut-annule" style="color:#c0392b;border-color:#c0392b">★ VENTE À CRÉDIT ★</div>
+  {% endif %}
   {% endif %}
 
   <div class="ticket-entete">
@@ -146,7 +152,7 @@
       </tr>
     {% endif %}
       <tr class="total">
-        <td colspan="3">TOTAL</td>
+        <td colspan="3">{% if v.a_credit %}{% if v.credit_solde %}SOLDÉ ✓{% else %}TOTAL DÛ{% endif %}{% else %}TOTAL{% endif %}</td>
         <td class="col-mt">{{ v.montant_total|floatformat:0 }}&nbsp;F</td>
       </tr>
     </tbody>
@@ -169,6 +175,21 @@
     <div style="font-size:9px;font-style:italic;margin-top:5px;border-top:1px dashed #ccc;padding-top:4px">
       La somme des articles en reste dû ne peut être remboursée.
     </div>
+  </div>
+  {% endif %}
+
+  {% if v.a_credit %}
+  <div style="border-top:1px dashed #999;margin-top:8px;padding-top:6px;font-size:10px;font-weight:bold;text-align:center">
+    <div>CLIENT : {{ v.client_prenom|upper }} {{ v.client_nom|upper }}</div>
+    {% if v.telephone_client %}<div style="font-weight:normal;margin-top:2px">Tél. : {{ v.telephone_client }}</div>{% endif %}
+    {% if v.credit_solde %}
+    <div style="margin-top:4px;font-size:11px;color:#1a7a3c">CRÉDIT SOLDÉ ✓</div>
+    {% else %}
+    <div style="margin-top:4px;font-size:11px;color:#c0392b">SOLDE DÛ : {{ v.solde_credit|floatformat:0 }} F</div>
+    {% for p in v.paiements_credit.all %}
+    <div style="font-size:9px;font-weight:normal;color:#555">{{ p.date|date:"d/m/Y" }} — {{ p.montant|floatformat:0 }} F versés</div>
+    {% endfor %}
+    {% endif %}
   </div>
   {% endif %}
 
