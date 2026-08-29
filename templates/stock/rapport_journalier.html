@@ -3,8 +3,12 @@
 {% block lieu %}Stock — Rapport journalier{% endblock %}
 
 {% block contenu %}
-<div class="admin-entete">
+<div class="admin-entete" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
   <h1>Rapport journalier d'activités</h1>
+  {% if est_dg_manager %}
+  <a href="{% url 'rapport_journalier_pousse' %}?debut={{ filtres.debut }}&fin={{ filtres.fin }}&site={{ filtres.site }}&produit={{ filtres.produit }}"
+     class="bouton-secondaire" style="min-width:0;white-space:nowrap">Rapport Approfondi →</a>
+  {% endif %}
 </div>
 
 {# ── Filtres ── #}
@@ -130,9 +134,5 @@
 
 <div class="pied">
   <a href="{% url 'hub_stock' %}" class="bouton-secondaire" style="min-width:180px;text-align:center">← Retour stock</a>
-  {% if est_dg_manager %}
-  <a href="{% url 'rapport_journalier_pousse' %}?debut={{ filtres.debut }}&fin={{ filtres.fin }}&site={{ filtres.site }}&produit={{ filtres.produit }}"
-     class="bouton-secondaire" style="min-width:180px;text-align:center">Rapport poussé →</a>
-  {% endif %}
 </div>
 {% endblock %}

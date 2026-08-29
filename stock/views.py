@@ -870,7 +870,7 @@ def rapport_journalier_pousse_export(request):
 
     wb = openpyxl.Workbook()
     ws = wb.active
-    ws.title = "Rapport poussé"
+    ws.title = "Rapport Approfondi"
 
     hdr_fill = PatternFill("solid", fgColor="16233F")
     hdr_font = Font(bold=True, color="FFFFFF", size=10)
