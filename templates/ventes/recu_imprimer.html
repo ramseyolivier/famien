@@ -43,7 +43,9 @@
     background: #fff;
     padding: 10px;
     box-shadow: 0 2px 12px rgba(0,0,0,.12);
+    font-weight: bold;
   }
+  .ticket * { font-weight: bold; }
 
   .ticket-entete { text-align: center; padding-bottom: 8px; border-bottom: 1px dashed #999; margin-bottom: 8px; }
   .ticket-entete .enseigne { font-size: 13px; font-weight: bold; letter-spacing: .5px; }
@@ -78,27 +80,36 @@
     margin-bottom: 8px;
   }
 
+  /* Styles appliqués temporairement pour mesurer la hauteur réelle avant impression */
+  body.mesure { display: block !important; width: 76mm !important; padding: 0 !important; background: none !important; overflow: visible !important; }
+  body.mesure .barre-outils { display: none !important; }
+  body.mesure .ticket { box-shadow: none !important; width: 76mm !important; max-width: 76mm !important; }
+  body.mesure .ticket * { font-size: 4mm !important; font-weight: bold !important; word-break: break-word !important; }
+  body.mesure .ticket-entete .enseigne { font-size: 7mm !important; }
+  body.mesure .ticket-entete .info { font-size: 3mm !important; }
+  body.mesure td { font-size: 3mm !important; padding: 1mm 0.5mm !important; }
+  body.mesure tr.total td { font-size: 5mm !important; }
+  body.mesure .sous-detail { font-size: 2mm !important; }
+  body.mesure .ticket-pied { font-size: 3mm !important; }
+  body.mesure .ticket-pied .merci { font-size: 4mm !important; }
+  body.mesure .statut-annule { font-size: 4mm !important; }
+
   @media print {
-    @page {
-      size: 58mm auto;
-      margin: 0;
-    }
-    body { background: none; padding: 0; font-size: 10px; }
+    @page { size: 80mm auto; margin: 2mm; }
+    body  { background: none; padding: 0; margin: 0; display: block; width: 76mm; }
     .barre-outils { display: none; }
-    .ticket {
-      box-shadow: none;
-      padding: 2mm;
-      max-width: 100%;
-      width: 54mm;
-    }
-    .ticket-entete .enseigne { font-size: 12px; }
-    .ticket-entete .ecole,
-    .ticket-entete .info { font-size: 9px; }
-    td { font-size: 9px; padding: 1px 1px; }
-    tr.total td { font-size: 10px; }
-    .sous-detail { font-size: 8px; }
-    .ticket-pied { font-size: 9px; }
-    .ticket-pied .merci { font-size: 10px; }
+    .ticket       { box-shadow: none; width: 76mm; }
+    .ticket, .ticket * { page-break-inside: avoid !important; break-inside: avoid !important; }
+    .ticket *     { font-size: 6mm !important; font-weight: bold !important; word-break: break-word; }
+    .ticket-entete .enseigne { font-size: 9mm !important; }
+    .ticket-entete .info     { font-size: 5mm !important; }
+    td             { font-size: 5mm !important; padding: 1mm 0.5mm; }
+    tr.total td    { font-size: 7mm !important; }
+    .sous-detail   { font-size: 4mm !important; }
+    .ticket-pied   { font-size: 5mm !important; }
+    .ticket-pied .merci { font-size: 6mm !important; }
+    .statut-annule { font-size: 6mm !important; }
+    table { width: 100%; }
   }
 </style>
 </head>
@@ -208,6 +219,50 @@
 
 </div>
 
-<script>window.print();</script>
+<script>
+  window.addEventListener('load', function () {
+    var ticket = document.querySelector('.ticket');
+    var clone  = ticket.cloneNode(true);
+
+    // Appliquer exactement les polices du CSS d'impression sur chaque élément
+    Array.prototype.forEach.call(clone.querySelectorAll('*'), function (el) {
+      el.style.fontSize   = '6mm';
+      el.style.fontWeight = 'bold';
+      el.style.wordBreak  = 'break-word';
+    });
+    var ens = clone.querySelector('.enseigne');
+    if (ens) ens.style.fontSize = '9mm';
+
+    Array.prototype.forEach.call(clone.querySelectorAll('td'), function (el) {
+      el.style.fontSize    = '6mm';
+      el.style.padding     = '1mm 0.5mm';
+      el.style.verticalAlign = 'top';
+    });
+    Array.prototype.forEach.call(clone.querySelectorAll('tr.total td'), function (el) {
+      el.style.fontSize = '7mm';
+    });
+    Array.prototype.forEach.call(clone.querySelectorAll('.sous-detail'), function (el) {
+      el.style.fontSize = '4mm';
+    });
+    var merci = clone.querySelector('.merci');
+    if (merci) merci.style.fontSize = '6mm';
+
+    clone.style.cssText = 'width:76mm;max-width:76mm;box-shadow:none;padding:2mm;';
+    var cadre = document.createElement('div');
+    cadre.style.cssText = 'position:fixed;top:-99999px;left:0;width:76mm;overflow:visible;background:white;';
+    cadre.appendChild(clone);
+    document.body.appendChild(cadre);
+
+    setTimeout(function () {
+      var h = clone.getBoundingClientRect().height;
+      var hauteurMm = Math.ceil(h * 0.2646) + 20;
+      document.body.removeChild(cadre);
+
+      var s = document.createElement('style');
+      s.textContent = '@page { size: 80mm ' + hauteurMm + 'mm; margin: 2mm; }';
+      document.head.appendChild(s);
+    }, 400);
+  });
+</script>
 </body>
 </html>
