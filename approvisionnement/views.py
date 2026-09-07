@@ -990,6 +990,12 @@ def _est_dg_manager(user):
     return user.profil == Profil.DG or user.is_superuser
 
 
+def _peut_valider_livraison_directe(user, commande):
+    if _est_dg_manager(user):
+        return True
+    return user.profil == Profil.CHEF_EQUIPE and user.site_id == commande.magasin_id
+
+
 def _est_gestionnaire(user):
     """Dans FAMIEN, le DG joue le rôle de gestionnaire central."""
     return user.profil == Profil.DG or user.is_superuser
@@ -1879,29 +1885,21 @@ def livraison_directe_magasin(request):
 def livraison_directe_detail(request, pk):
     u = request.user
     est_dg = _est_dg_manager(u)
-    est_sup = _est_superviseur(u) and not est_dg
-    est_gest = _est_gestionnaire(u)
+    est_chef = u.profil == Profil.CHEF_EQUIPE
 
-    if not (est_dg or est_sup or est_gest):
+    if not (est_dg or est_chef):
         messages.error(request, "Accès non autorisé.")
         return redirect("accueil")
 
     qs = CommandeMagasin.objects.select_related("magasin", "cree_par", "livree_par", "recue_par")
     commande = get_object_or_404(qs, pk=pk, observations__startswith="[LD]")
 
-    # Superviseur et gestionnaire : uniquement les [LD] déjà réceptionnées, sur leur périmètre
-    if not est_dg:
-        if commande.statut != StatutCommandeMagasin.RECUE:
-            messages.error(request, "Cette livraison directe n'est pas encore disponible.")
-            return redirect("receptions_magasin_liste")
-        if est_gest and u.site and commande.magasin_id != u.site_id:
+    if est_chef and not est_dg:
+        if not u.site_id or commande.magasin_id != u.site_id:
             messages.error(request, "Accès non autorisé.")
-            return redirect("receptions_magasin_liste")
-        if est_sup and not u.acces_national:
-            if not u.sites_autorises().filter(pk=commande.magasin_id).exists():
-                messages.error(request, "Accès non autorisé.")
-                return redirect("receptions_magasin_liste")
+            return redirect("accueil")
 
+    peut_valider = _peut_valider_livraison_directe(u, commande) and commande.statut == StatutCommandeMagasin.BROUILLON
     lignes = commande.lignes.select_related("produit").order_by("produit__code")
     obs = commande.observations[4:].strip() if commande.observations.startswith("[LD] ") else commande.observations[4:]
     return render(request, "approvisionnement/livraison_directe_detail.html", {
@@ -1909,7 +1907,7 @@ def livraison_directe_detail(request, pk):
         "lignes": lignes,
         "observations": obs,
         "est_dg_manager": est_dg,
-        "peut_valider": est_dg and commande.statut == StatutCommandeMagasin.BROUILLON,
+        "peut_valider": peut_valider,
         "peut_modifier": est_dg and commande.statut == StatutCommandeMagasin.BROUILLON,
         "peut_supprimer": est_dg and commande.statut == StatutCommandeMagasin.BROUILLON,
     })
@@ -1918,10 +1916,10 @@ def livraison_directe_detail(request, pk):
 @login_required
 def livraison_directe_valider(request, pk):
     u = request.user
-    if not _est_dg_manager(u):
+    commande = get_object_or_404(CommandeMagasin, pk=pk, observations__startswith="[LD]")
+    if not _peut_valider_livraison_directe(u, commande):
         messages.error(request, "Accès réservé.")
         return redirect("livraisons_magasin_liste")
-    commande = get_object_or_404(CommandeMagasin, pk=pk, observations__startswith="[LD]")
     if request.method == "POST":
         try:
             valider_livraison_directe(commande, par=u)
