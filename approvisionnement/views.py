@@ -1714,7 +1714,8 @@ def commande_magasin_refuser_livraison(request, pk):
 def receptions_magasin_liste(request):
     """Liste des commandes livrées et reçues pour le périmètre de l'utilisateur."""
     u = request.user
-    if not _peut_voir_appro_magasin(u):
+    est_chef = u.profil == Profil.CHEF_EQUIPE
+    if not (_peut_voir_appro_magasin(u) or est_chef):
         messages.error(request, "Accès non autorisé.")
         return redirect("accueil")
 
@@ -1745,7 +1746,9 @@ def receptions_magasin_liste(request):
         .select_related("magasin", "cree_par", "livree_par")
     )
 
-    if _est_gestionnaire(u) and u.site:
+    if est_chef and not _est_dg_manager(u):
+        qs_base = qs_base.filter(magasin=u.site)
+    elif _est_gestionnaire(u) and u.site:
         qs_base = qs_base.filter(magasin=u.site)
     elif _est_superviseur(u) and not _est_dg_manager(u):
         qs_base = qs_base.filter(magasin__in=u.sites_autorises())
@@ -1787,10 +1790,10 @@ def receptions_magasin_liste(request):
 
 @login_required
 def commande_magasin_reception(request, pk):
-    """GEST_MAGASIN confirme la réception physique au magasin (LIVREE → RECUE)."""
+    """GEST_MAGASIN ou CHEF_EQUIPE confirme la réception physique au magasin (LIVREE → RECUE)."""
     u = request.user
-    if not _est_gestionnaire(u):
-        messages.error(request, "Accès réservé aux gestionnaires de magasin.")
+    if not (_est_gestionnaire(u) or u.profil == Profil.CHEF_EQUIPE):
+        messages.error(request, "Accès non autorisé.")
         return redirect("accueil")
 
     qs_filter = {"pk": pk}
