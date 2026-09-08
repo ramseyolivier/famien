@@ -1502,8 +1502,11 @@ def commande_magasin_rejeter(request, pk):
 
 @login_required
 def livraisons_magasin_liste(request):
-    """DG/MANAGER : commandes validées à livrer + livraisons directes en brouillon.
-    CHEF_EQUIPE : uniquement les livraisons directes en brouillon pour son propre site."""
+    return redirect("livraisons_liste")
+
+
+def _livraisons_magasin_liste_ancien(request):
+    """Conservé pour référence — remplacé par le flux école."""
     u = request.user
     est_dg = _est_dg_manager(u)
     est_chef = u.profil == Profil.CHEF_EQUIPE
@@ -1843,11 +1846,7 @@ def commande_magasin_reception(request, pk):
 
 @login_required
 def livraison_directe_magasin(request):
-    """DG/MANAGER envoie directement des articles du dépôt vers un magasin, sans commande."""
-    u = request.user
-    if not _est_dg_manager(u):
-        messages.error(request, "Accès réservé au DG et au manager.")
-        return redirect("livraisons_magasin_liste")
+    return redirect("livraison_directe_ecole")
 
     magasins = Site.objects.filter(actif=True).order_by("nom")
     produits = Produit.objects.filter(actif=True).order_by("code")
