@@ -1502,10 +1502,14 @@ def commande_magasin_rejeter(request, pk):
 
 @login_required
 def livraisons_magasin_liste(request):
-    """DG/MANAGER/SUPERVISEUR : commandes validées à livrer + livraisons directes en brouillon."""
+    """DG/MANAGER : commandes validées à livrer + livraisons directes en brouillon.
+    CHEF_EQUIPE : uniquement les livraisons directes en brouillon pour son propre site."""
     u = request.user
-    if not (_est_dg_manager(u) or _est_superviseur(u)):
-        messages.error(request, "Accès réservé au DG, au manager et au superviseur.")
+    est_dg = _est_dg_manager(u)
+    est_chef = u.profil == Profil.CHEF_EQUIPE
+
+    if not (est_dg or _est_superviseur(u) or est_chef):
+        messages.error(request, "Accès non autorisé.")
         return redirect("accueil")
 
     magasin_id = request.GET.get("magasin") or ""
@@ -1513,18 +1517,23 @@ def livraisons_magasin_liste(request):
     debut = request.GET.get("debut") or ""
     fin = request.GET.get("fin") or ""
 
-    # Commandes régulières VALIDEE + LIVREE (en transit, multi-tournées) + livraisons directes BROUILLON
-    # validee_par__isnull=False identifie les commandes régulières (pas les livraisons directes)
     _reguliere_validee = Q(statut=StatutCommandeMagasin.VALIDEE) & ~Q(observations__startswith="[LD]")
     _reguliere_livree  = Q(statut=StatutCommandeMagasin.LIVREE, validee_par__isnull=False)
     _ld_brouillon      = Q(observations__startswith="[LD]", statut=StatutCommandeMagasin.BROUILLON)
-    qs_base = _reguliere_validee | _reguliere_livree | _ld_brouillon
-    if filtre_statut == "VALIDEE":
-        qs_base = _reguliere_validee
-    elif filtre_statut == "LIVREE":
-        qs_base = _reguliere_livree
-    elif filtre_statut == "BROUILLON":
+
+    if est_chef and not est_dg:
+        # Le chef d'équipe ne voit que les livraisons directes en attente pour son site
         qs_base = _ld_brouillon
+        if u.site_id:
+            qs_base = _ld_brouillon & Q(magasin_id=u.site_id)
+    else:
+        qs_base = _reguliere_validee | _reguliere_livree | _ld_brouillon
+        if filtre_statut == "VALIDEE":
+            qs_base = _reguliere_validee
+        elif filtre_statut == "LIVREE":
+            qs_base = _reguliere_livree
+        elif filtre_statut == "BROUILLON":
+            qs_base = _ld_brouillon
 
     commandes = (
         CommandeMagasin.objects
@@ -1534,8 +1543,9 @@ def livraisons_magasin_liste(request):
     )
     magasins = Site.objects.filter(actif=True).order_by("nom")
 
-    if magasin_id:
-        commandes = commandes.filter(magasin_id=magasin_id)
+    if est_dg or _est_superviseur(u):
+        if magasin_id:
+            commandes = commandes.filter(magasin_id=magasin_id)
     if debut:
         commandes = commandes.filter(cree_le__date__gte=debut)
     if fin:
@@ -1543,8 +1553,8 @@ def livraisons_magasin_liste(request):
 
     return render(request, "approvisionnement/livraisons_magasin_liste.html", {
         "commandes": commandes[:200],
-        "est_dg_manager": _est_dg_manager(u),
-        "peut_livrer": _est_dg_manager(u),
+        "est_dg_manager": est_dg,
+        "peut_livrer": est_dg,
         "magasins": magasins,
         "filtre_magasin": magasin_id,
         "filtre_statut": filtre_statut,
