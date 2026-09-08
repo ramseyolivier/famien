@@ -691,8 +691,18 @@ def receptions_liste(request):
         qs = qs.filter(derniere_maj__date__gte=filtre_debut)
     if filtre_fin:
         qs = qs.filter(derniere_maj__date__lte=filtre_fin)
+
+    # Inclure aussi les livraisons directes magasin ([LD]) en attente pour ce site
+    ld_magasin = (
+        CommandeMagasin.objects
+        .filter(observations__startswith="[LD]", statut=StatutCommandeMagasin.LIVREE, magasin=ecole)
+        .select_related("magasin", "cree_par")
+        .order_by("-cree_le")
+    )
+
     return render(request, "approvisionnement/receptions_liste.html", {
         "commandes": qs[:200],
+        "ld_magasin": ld_magasin,
         "receptions_filtre": receptions_filtre,
         "filtre_reception": filtre_reception,
         "filtre_statut": filtre_statut,

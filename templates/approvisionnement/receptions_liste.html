@@ -84,7 +84,7 @@ document.addEventListener('DOMContentLoaded', function () {
 </script>
 {% endif %}
 
-{% if commandes %}
+{% if commandes or ld_magasin %}
 <table class="registre">
   <thead>
     <tr>
@@ -97,6 +97,19 @@ document.addEventListener('DOMContentLoaded', function () {
     </tr>
   </thead>
   <tbody>
+  {% for c in ld_magasin %}
+    <tr>
+      <td><span style="font-weight:600">Livraison directe #{{ c.pk }}</span></td>
+      {% if supervision %}<td style="font-size:.85rem">{{ c.magasin.nom }}</td>{% endif %}
+      <td style="font-size:.85rem;color:var(--encre-clair)">Directe</td>
+      <td><span class="badge" style="background:var(--encre);color:#fff">En cours</span></td>
+      <td style="white-space:nowrap;font-size:.85rem;color:var(--encre-clair)">{{ c.cree_le|date:"d/m/Y H:i"|default:"—" }}</td>
+      <td>
+        <a href="{% url 'commande_magasin_reception' c.pk %}" class="bouton-secondaire bouton-detail"
+           style="font-size:.8rem;padding:5px 10px;background:var(--encre)!important;color:#fff!important;border-color:var(--encre)!important">Réceptionner</a>
+      </td>
+    </tr>
+  {% endfor %}
   {% for c in commandes %}
     {% with est_directe=c.observations|slice:":5" %}
     <tr data-statut="{{ c.statut }}" data-date="{{ c.derniere_maj|date:'Y-m-d'|default:'' }}">
@@ -137,6 +150,7 @@ document.addEventListener('DOMContentLoaded', function () {
 {% else %}
 <p class="vide-liste">Aucune livraison en cours ou réceptionnée.</p>
 {% endif %}
+
 
 <div class="pied">
   <a href="{% url 'hub_approvisionnement' %}#ecole" class="bouton-secondaire" style="min-width:180px;text-align:center">← Retour approvisionnement</a>
